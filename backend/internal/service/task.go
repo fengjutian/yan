@@ -155,15 +155,24 @@ func (p *ImageTaskProcessor) Process(ctx context.Context, taskID string) error {
 	for _, generatedImage := range generated.Images {
 		asset, err := p.assets.StoreGenerated(ctx, task.UserID, task.ID, generatedImage.Data)
 		if err != nil {
+			p.cleanupAssets(ctx, task.UserID, assetIDs)
 			_ = p.tasks.FailAndRefund(ctx, task.ID, "RESULT_STORAGE_FAILED", safeErrorMessage(err))
 			return fmt.Errorf("store generated result: %w", err)
 		}
 		assetIDs = append(assetIDs, asset.ID)
 	}
 	if err := p.tasks.Succeed(ctx, task.ID, generated.ProviderRequestID, assetIDs); err != nil {
+		p.cleanupAssets(ctx, task.UserID, assetIDs)
+		_ = p.tasks.FailAndRefund(ctx, task.ID, "TASK_FINALIZE_FAILED", safeErrorMessage(err))
 		return fmt.Errorf("complete task: %w", err)
 	}
 	return nil
+}
+
+func (p *ImageTaskProcessor) cleanupAssets(ctx context.Context, userID string, assetIDs []string) {
+	for _, assetID := range assetIDs {
+		_ = p.assets.Delete(ctx, userID, assetID)
+	}
 }
 
 func validAspectRatio(value string) bool {
