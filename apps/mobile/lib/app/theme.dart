@@ -8,4 +8,3 @@ ThemeData buildAppTheme() {
     scaffoldBackgroundColor: const Color(0xFFF8F7FC),
   );
 }
-

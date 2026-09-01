@@ -3,13 +3,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 abstract interface class TokenStorage {
   Future<String?> readAccessToken();
   Future<String?> readRefreshToken();
-  Future<void> write({required String accessToken, required String refreshToken});
+  Future<void> write(
+      {required String accessToken, required String refreshToken});
   Future<void> clear();
 }
 
 class SecureTokenStorage implements TokenStorage {
   SecureTokenStorage({FlutterSecureStorage? storage})
-    : _storage = storage ?? const FlutterSecureStorage();
+      : _storage = storage ?? const FlutterSecureStorage();
 
   static const _accessTokenKey = 'auth.access_token';
   static const _refreshTokenKey = 'auth.refresh_token';

@@ -61,9 +61,10 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                           labelText: '昵称',
                           border: OutlineInputBorder(),
                         ),
-                        validator: (value) => value == null || value.trim().isEmpty
-                            ? '请输入昵称'
-                            : null,
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                                ? '请输入昵称'
+                                : null,
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -75,9 +76,10 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         labelText: '邮箱',
                         border: OutlineInputBorder(),
                       ),
-                      validator: (value) => value == null || !value.contains('@')
-                          ? '请输入有效邮箱'
-                          : null,
+                      validator: (value) =>
+                          value == null || !value.contains('@')
+                              ? '请输入有效邮箱'
+                              : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -119,7 +121,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         child: state.submitting
                             ? const SizedBox.square(
                                 dimension: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : Text(_isRegister ? '注册并开始创作' : '登录'),
                       ),
@@ -157,4 +160,3 @@ class _AuthPageState extends ConsumerState<AuthPage> {
     if (success && mounted) context.go('/home');
   }
 }
-

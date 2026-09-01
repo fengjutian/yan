@@ -12,11 +12,11 @@ class AuthUser {
   final int creditsBalance;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
-    id: json['id'] as String,
-    email: json['email'] as String,
-    nickname: json['nickname'] as String,
-    creditsBalance: json['credits_balance'] as int,
-  );
+        id: json['id'] as String,
+        email: json['email'] as String,
+        nickname: json['nickname'] as String,
+        creditsBalance: json['credits_balance'] as int,
+      );
 }
 
 class AuthTokens {
@@ -26,9 +26,9 @@ class AuthTokens {
   final String refreshToken;
 
   factory AuthTokens.fromJson(Map<String, dynamic> json) => AuthTokens(
-    accessToken: json['access_token'] as String,
-    refreshToken: json['refresh_token'] as String,
-  );
+        accessToken: json['access_token'] as String,
+        refreshToken: json['refresh_token'] as String,
+      );
 }
 
 class AuthSession {
@@ -38,8 +38,7 @@ class AuthSession {
   final AuthTokens tokens;
 
   factory AuthSession.fromJson(Map<String, dynamic> json) => AuthSession(
-    user: AuthUser.fromJson(json['user'] as Map<String, dynamic>),
-    tokens: AuthTokens.fromJson(json['tokens'] as Map<String, dynamic>),
-  );
+        user: AuthUser.fromJson(json['user'] as Map<String, dynamic>),
+        tokens: AuthTokens.fromJson(json['tokens'] as Map<String, dynamic>),
+      );
 }
-

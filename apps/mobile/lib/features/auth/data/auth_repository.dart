@@ -5,9 +5,10 @@ import 'package:ai_image_studio/features/auth/data/auth_models.dart';
 import 'package:dio/dio.dart';
 
 class AuthRepository {
-  AuthRepository({required ApiClient apiClient, required TokenStorage tokenStorage})
-    : _apiClient = apiClient,
-      _tokenStorage = tokenStorage;
+  AuthRepository(
+      {required ApiClient apiClient, required TokenStorage tokenStorage})
+      : _apiClient = apiClient,
+        _tokenStorage = tokenStorage;
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;
@@ -47,6 +48,21 @@ class AuthRepository {
     }
   }
 
+  Future<AuthUser?> restoreSession() async {
+    final refreshToken = await _tokenStorage.readRefreshToken();
+    if (refreshToken == null) return null;
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>('/me');
+      return AuthUser.fromJson(response.data!);
+    } on DioException catch (error) {
+      if (error.response?.statusCode == 401) {
+        await _tokenStorage.clear();
+        return null;
+      }
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<AuthSession> _authenticate(
     String path,
     Map<String, dynamic> payload,
@@ -67,4 +83,3 @@ class AuthRepository {
     }
   }
 }
-
