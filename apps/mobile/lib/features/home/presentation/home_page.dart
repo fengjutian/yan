@@ -46,7 +46,7 @@ class HomePage extends ConsumerWidget {
             icon: Icons.person_outline,
             title: '人物参考创作',
             description: '上传人物参考图，在新场景中保持主体特征。',
-            onTap: () => context.push('/assets/upload'),
+            onTap: () => context.push('/create/reference'),
           ),
         ],
       ),

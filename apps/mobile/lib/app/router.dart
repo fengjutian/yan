@@ -3,6 +3,7 @@ import 'package:ai_image_studio/features/auth/presentation/splash_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
 import 'package:ai_image_studio/features/home/presentation/home_page.dart';
+import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
 import 'package:go_router/go_router.dart';
 
 final appRouter = GoRouter(
@@ -30,6 +31,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/create/text-to-image',
       builder: (context, state) => const GeneratePage(),
+    ),
+    GoRoute(
+      path: '/create/reference',
+      builder: (context, state) => const ReferencePage(),
     ),
   ],
 );

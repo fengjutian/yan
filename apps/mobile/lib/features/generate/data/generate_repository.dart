@@ -32,6 +32,32 @@ class GenerateRepository {
     }
   }
 
+  Future<ImageTask> createCharacterReference({
+    required String prompt,
+    required String sourceAssetId,
+    required String styleId,
+    required String aspectRatio,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        '/image-tasks',
+        options: Options(headers: {'Idempotency-Key': _uuid.v4()}),
+        data: {
+          'type': 'CHARACTER_REFERENCE',
+          'prompt': prompt,
+          'source_asset_id': sourceAssetId,
+          'style_id': styleId,
+          'aspect_ratio': aspectRatio,
+          'count': 1,
+          'prompt_optimizer': true,
+        },
+      );
+      return ImageTask.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<ImageTask> get(String taskId) async {
     try {
       final response = await _apiClient.dio

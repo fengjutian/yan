@@ -58,6 +58,23 @@ func TestQueueFailureRefundsTask(t *testing.T) {
 	}
 }
 
+func TestCreateTaskBuildsEffectiveStylePrompt(t *testing.T) {
+	t.Parallel()
+	repo := &fakeTaskRepository{}
+	styleID := "style-1"
+	service := NewTaskService(repo, &fakeImageQueue{}, nil, fakeStyles{})
+	task, err := service.Create(context.Background(), CreateImageTaskInput{
+		UserID: "user-1", IdempotencyKey: "request-style", Type: "TEXT_TO_IMAGE",
+		Prompt: "portrait", StyleID: &styleID, AspectRatio: "1:1", Count: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.EffectivePrompt == nil || *task.EffectivePrompt == task.Prompt {
+		t.Fatalf("style template was not applied: %+v", task.EffectivePrompt)
+	}
+}
+
 type fakeImageQueue struct {
 	taskID string
 	err    error
@@ -69,6 +86,13 @@ func (q *fakeImageQueue) Enqueue(_ context.Context, taskID string) error {
 }
 
 type fakeTaskRepository struct{ refunded bool }
+
+type fakeStyles struct{}
+
+func (fakeStyles) ListEnabled(context.Context) ([]model.Style, error) { return nil, nil }
+func (fakeStyles) FindEnabledByID(_ context.Context, styleID string) (*model.Style, error) {
+	return &model.Style{ID: styleID, PromptTemplate: "cinematic lighting"}, nil
+}
 
 func (r *fakeTaskRepository) CreatePending(
 	_ context.Context,
