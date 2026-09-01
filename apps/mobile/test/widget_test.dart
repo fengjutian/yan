@@ -1,4 +1,5 @@
 import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
+import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -14,5 +15,15 @@ void main() {
     expect(find.text('欢迎回来'), findsOneWidget);
     expect(find.text('登录'), findsOneWidget);
     expect(find.text('没有账号？注册'), findsOneWidget);
+  });
+
+  testWidgets('shows reference image upload controls', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AssetUploadPage())),
+    );
+
+    expect(find.text('上传参考图片'), findsOneWidget);
+    expect(find.text('从相册选择'), findsOneWidget);
+    expect(find.text('上传图片'), findsOneWidget);
   });
 }

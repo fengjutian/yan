@@ -1,5 +1,6 @@
 import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
 import 'package:ai_image_studio/features/auth/presentation/splash_page.dart';
+import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:ai_image_studio/features/home/presentation/home_page.dart';
 import 'package:go_router/go_router.dart';
 
@@ -22,5 +23,8 @@ final appRouter = GoRouter(
       path: '/home',
       builder: (context, state) => const HomePage(),
     ),
+    GoRoute(
+        path: '/assets/upload',
+        builder: (context, state) => const AssetUploadPage()),
   ],
 );

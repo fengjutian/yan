@@ -1,7 +1,7 @@
+import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 
 class HomePage extends ConsumerWidget {
   const HomePage({super.key});
@@ -41,10 +41,11 @@ class HomePage extends ConsumerWidget {
             description: '输入画面描述，生成你的作品。',
           ),
           const SizedBox(height: 16),
-          const _CreateCard(
+          _CreateCard(
             icon: Icons.person_outline,
             title: '人物参考创作',
             description: '上传人物参考图，在新场景中保持主体特征。',
+            onTap: () => context.push('/assets/upload'),
           ),
         ],
       ),
@@ -57,16 +58,19 @@ class _CreateCard extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.description,
+    this.onTap,
   });
 
   final IconData icon;
   final String title;
   final String description;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: ListTile(
+        onTap: onTap,
         contentPadding: const EdgeInsets.all(20),
         leading: Icon(icon, size: 32),
         title: Text(title),
