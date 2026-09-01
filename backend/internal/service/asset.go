@@ -171,6 +171,66 @@ func (s *AssetService) Get(ctx context.Context, userID, assetID string) (*AssetR
 	return s.result(ctx, asset)
 }
 
+func (s *AssetService) StoreGenerated(
+	ctx context.Context,
+	userID, taskID string,
+	data []byte,
+) (*model.ImageAsset, error) {
+	if int64(len(data)) > s.maxUploadBytes {
+		return nil, ErrImageTooLarge
+	}
+	mimeType := http.DetectContentType(data)
+	extension, supported := imageExtension(mimeType)
+	if !supported {
+		return nil, ErrUnsupportedImage
+	}
+	configuration, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrInvalidImage
+	}
+	if configuration.Width < 1 || configuration.Height < 1 ||
+		int64(configuration.Width)*int64(configuration.Height) > s.maxPixels {
+		return nil, ErrImageDimensions
+	}
+	decoded, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, ErrInvalidImage
+	}
+	thumbnail := imaging.Fit(decoded, s.thumbnailSize, s.thumbnailSize, imaging.Lanczos)
+	var thumbnailData bytes.Buffer
+	if err := jpeg.Encode(&thumbnailData, thumbnail, &jpeg.Options{Quality: 82}); err != nil {
+		return nil, fmt.Errorf("encode generated thumbnail: %w", err)
+	}
+
+	now := s.now().UTC()
+	assetID := ulid.Make().String()
+	prefix := fmt.Sprintf("%s/%04d/%02d", userID, now.Year(), int(now.Month()))
+	originalKey := path.Join("generated", prefix, assetID+extension)
+	thumbnailKey := path.Join("thumbnail", prefix, assetID+".jpg")
+	if err := s.storage.Put(ctx, originalKey, mimeType, int64(len(data)), bytes.NewReader(data)); err != nil {
+		return nil, fmt.Errorf("store generated image: %w", err)
+	}
+	if err := s.storage.Put(ctx, thumbnailKey, "image/jpeg", int64(thumbnailData.Len()), bytes.NewReader(thumbnailData.Bytes())); err != nil {
+		_ = s.storage.Delete(ctx, originalKey)
+		return nil, fmt.Errorf("store generated thumbnail: %w", err)
+	}
+	digest := sha256.Sum256(data)
+	asset := &model.ImageAsset{
+		ID: assetID, UserID: userID, TaskID: &taskID, Kind: "GENERATED",
+		StorageProvider: "minio", Bucket: s.bucket, StorageKey: originalKey,
+		ThumbnailKey: &thumbnailKey, MIMEType: mimeType,
+		Width: uint(configuration.Width), Height: uint(configuration.Height),
+		ByteSize: uint64(len(data)), SHA256: hex.EncodeToString(digest[:]),
+		AIGenerated: true, CreatedAt: now,
+	}
+	if err := s.assets.Create(ctx, asset); err != nil {
+		_ = s.storage.Delete(ctx, originalKey)
+		_ = s.storage.Delete(ctx, thumbnailKey)
+		return nil, fmt.Errorf("create generated asset: %w", err)
+	}
+	return asset, nil
+}
+
 func (s *AssetService) Delete(ctx context.Context, userID, assetID string) error {
 	asset, err := s.assets.FindByID(ctx, userID, assetID)
 	if errors.Is(err, repository.ErrNotFound) {

@@ -16,7 +16,7 @@ func TestLiveness(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
-	NewRouter("test", time.Now(), nil, nil, 0).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil, nil, nil, 0).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -42,7 +42,7 @@ func TestMeRequiresAuthentication(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-	NewRouter("test", time.Now(), auth, nil, 0).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), auth, nil, nil, 0).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
@@ -82,7 +82,7 @@ func TestRegisterRejectsInvalidPayload(t *testing.T) {
 		strings.NewReader(`{"email":"missing-fields@example.com"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
-	NewRouter("test", time.Now(), auth, nil, 0).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), auth, nil, nil, 0).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected %d, got %d", http.StatusBadRequest, recorder.Code)
@@ -94,7 +94,7 @@ func TestUnknownRoute(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/missing", nil)
-	NewRouter("test", time.Now(), nil, nil, 0).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil, nil, nil, 0).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected %d, got %d", http.StatusNotFound, recorder.Code)

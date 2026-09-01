@@ -44,6 +44,7 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ../backend/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
+      - ../backend/migrations/000002_task_options.up.sql:/docker-entrypoint-initdb.d/000002_task_options.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s
@@ -100,4 +101,3 @@ volumes:
   mysql-data:
   redis-data:
   minio-data:
-

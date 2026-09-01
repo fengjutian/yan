@@ -12,6 +12,7 @@ import (
 
 	"github.com/yan/ai-image-studio/backend/internal/config"
 	"github.com/yan/ai-image-studio/backend/internal/database"
+	"github.com/yan/ai-image-studio/backend/internal/queue"
 	"github.com/yan/ai-image-studio/backend/internal/repository/gorm"
 	"github.com/yan/ai-image-studio/backend/internal/service"
 	objectstorage "github.com/yan/ai-image-studio/backend/internal/storage"
@@ -69,6 +70,10 @@ func main() {
 		logger.Error("initialize asset service", "error", err)
 		os.Exit(1)
 	}
+	taskRepository := gormrepo.NewTaskRepository(db)
+	imageQueue := queue.NewAsynqImageQueue(cfg.RedisAddr)
+	defer imageQueue.Close()
+	taskService := service.NewTaskService(taskRepository, imageQueue, assetService)
 
 	server := &http.Server{
 		Addr: cfg.HTTP.Address,
@@ -77,6 +82,7 @@ func main() {
 			time.Now(),
 			authService,
 			assetService,
+			taskService,
 			cfg.Image.MaxUploadBytes,
 		),
 		ReadTimeout:  cfg.HTTP.ReadTimeout,

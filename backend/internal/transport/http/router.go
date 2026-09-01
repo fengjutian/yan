@@ -17,6 +17,7 @@ func NewRouter(
 	startedAt time.Time,
 	auth *service.AuthService,
 	assets *service.AssetService,
+	tasks *service.TaskService,
 	maxUploadBytes int64,
 ) *gin.Engine {
 	if environment == "production" {
@@ -61,6 +62,12 @@ func NewRouter(
 			assetRoutes.POST("", assetAPI.upload)
 			assetRoutes.GET("/:assetID", assetAPI.get)
 			assetRoutes.DELETE("/:assetID", assetAPI.delete)
+		}
+		if tasks != nil {
+			taskAPI := taskHandler{tasks: tasks}
+			taskRoutes := v1.Group("/image-tasks", authMiddleware(auth))
+			taskRoutes.POST("", taskAPI.create)
+			taskRoutes.GET("/:taskID", taskAPI.get)
 		}
 	}
 

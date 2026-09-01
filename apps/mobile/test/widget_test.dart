@@ -23,6 +23,8 @@ void main() {
     );
 
     expect(find.text('上传参考图片'), findsOneWidget);
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
+    await tester.pump();
     expect(find.text('从相册选择'), findsOneWidget);
     expect(find.text('上传图片'), findsOneWidget);
   });
