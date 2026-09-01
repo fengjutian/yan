@@ -5,11 +5,14 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/yan/ai-image-studio/backend/internal/service"
 )
 
 const serviceName = "ai-image-api"
+const userIDContextKey = "user_id"
+const timeFormat = "2006-01-02T15:04:05.000Z07:00"
 
-func NewRouter(environment string, startedAt time.Time) *gin.Engine {
+func NewRouter(environment string, startedAt time.Time, auth *service.AuthService) *gin.Engine {
 	if environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -38,6 +41,15 @@ func NewRouter(environment string, startedAt time.Time) *gin.Engine {
 			"version": "0.1.0-dev",
 		})
 	})
+	if auth != nil {
+		handler := authHandler{auth: auth}
+		authRoutes := v1.Group("/auth")
+		authRoutes.POST("/register", handler.register)
+		authRoutes.POST("/login", handler.login)
+		authRoutes.POST("/refresh", handler.refresh)
+		authRoutes.POST("/logout", handler.logout)
+		v1.GET("/me", authMiddleware(auth), handler.me)
+	}
 
 	return router
 }

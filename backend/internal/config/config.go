@@ -14,6 +14,7 @@ type Config struct {
 	RedisAddr   string
 	MinIO       MinIOConfig
 	MiniMax     MiniMaxConfig
+	Auth        AuthConfig
 }
 
 type HTTPConfig struct {
@@ -37,6 +38,13 @@ type MiniMaxConfig struct {
 	Model   string
 }
 
+type AuthConfig struct {
+	JWTSigningKey   string
+	AccessTokenTTL  time.Duration
+	RefreshTokenTTL time.Duration
+	InitialCredits  int64
+}
+
 func Load() (Config, error) {
 	readTimeout, err := duration("HTTP_READ_TIMEOUT", 15*time.Second)
 	if err != nil {
@@ -47,6 +55,18 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	idleTimeout, err := duration("HTTP_IDLE_TIMEOUT", 60*time.Second)
+	if err != nil {
+		return Config{}, err
+	}
+	accessTokenTTL, err := duration("ACCESS_TOKEN_TTL", 15*time.Minute)
+	if err != nil {
+		return Config{}, err
+	}
+	refreshTokenTTL, err := duration("REFRESH_TOKEN_TTL", 30*24*time.Hour)
+	if err != nil {
+		return Config{}, err
+	}
+	initialCredits, err := integer("INITIAL_CREDITS", 100)
 	if err != nil {
 		return Config{}, err
 	}
@@ -77,7 +97,25 @@ func Load() (Config, error) {
 			BaseURL: value("MINIMAX_BASE_URL", "https://api.minimaxi.com"),
 			Model:   value("MINIMAX_IMAGE_MODEL", "image-01"),
 		},
+		Auth: AuthConfig{
+			JWTSigningKey:   os.Getenv("JWT_SIGNING_KEY"),
+			AccessTokenTTL:  accessTokenTTL,
+			RefreshTokenTTL: refreshTokenTTL,
+			InitialCredits:  initialCredits,
+		},
 	}, nil
+}
+
+func integer(key string, fallback int64) (int64, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+	parsed, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse %s: %w", key, err)
+	}
+	return parsed, nil
 }
 
 func value(key, fallback string) string {

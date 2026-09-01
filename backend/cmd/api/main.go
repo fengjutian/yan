@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/yan/ai-image-studio/backend/internal/config"
+	"github.com/yan/ai-image-studio/backend/internal/database"
+	"github.com/yan/ai-image-studio/backend/internal/repository/gorm"
+	"github.com/yan/ai-image-studio/backend/internal/service"
 	httptransport "github.com/yan/ai-image-studio/backend/internal/transport/http"
 )
 
@@ -21,10 +24,29 @@ func main() {
 		logger.Error("load configuration", "error", err)
 		os.Exit(1)
 	}
+	db, err := database.OpenMySQL(cfg.DatabaseDSN, cfg.Environment)
+	if err != nil {
+		logger.Error("connect database", "error", err)
+		os.Exit(1)
+	}
+	userRepository := gormrepo.NewUserRepository(db)
+	refreshTokenRepository := gormrepo.NewRefreshTokenRepository(db)
+	authService, err := service.NewAuthService(
+		userRepository,
+		refreshTokenRepository,
+		cfg.Auth.JWTSigningKey,
+		cfg.Auth.AccessTokenTTL,
+		cfg.Auth.RefreshTokenTTL,
+		cfg.Auth.InitialCredits,
+	)
+	if err != nil {
+		logger.Error("initialize authentication", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
 		Addr:         cfg.HTTP.Address,
-		Handler:      httptransport.NewRouter(cfg.Environment, time.Now()),
+		Handler:      httptransport.NewRouter(cfg.Environment, time.Now(), authService),
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,
 		IdleTimeout:  cfg.HTTP.IdleTimeout,

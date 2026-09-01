@@ -12,7 +12,7 @@ func TestLiveness(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
-	NewRouter("test", time.Now()).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -27,7 +27,7 @@ func TestUnknownRoute(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/missing", nil)
-	NewRouter("test", time.Now()).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected %d, got %d", http.StatusNotFound, recorder.Code)
