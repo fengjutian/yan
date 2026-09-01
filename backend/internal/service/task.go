@@ -76,6 +76,9 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 	if input.Type == "CHARACTER_REFERENCE" && input.SourceAssetID == nil {
 		return nil, ErrInvalidTask
 	}
+	if input.Type == "TEXT_TO_IMAGE" && input.SourceAssetID != nil {
+		return nil, ErrInvalidTask
+	}
 	if input.SourceAssetID != nil {
 		if s.assets == nil {
 			return nil, ErrInvalidTask
@@ -100,6 +103,9 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 	}
 	if input.Type == "CHARACTER_REFERENCE" {
 		effectivePrompt += "\n\nPreserve the referenced character's identity and recognizable facial features."
+	}
+	if utf8.RuneCountInString(effectivePrompt) > 1500 {
+		return nil, ErrInvalidTask
 	}
 	requestJSON, _ := json.Marshal(input)
 	digest := sha256.Sum256(requestJSON)
