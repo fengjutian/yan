@@ -1,5 +1,6 @@
 import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
+import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -27,5 +28,15 @@ void main() {
     await tester.pump();
     expect(find.text('从相册选择'), findsOneWidget);
     expect(find.text('上传图片'), findsOneWidget);
+  });
+
+  testWidgets('shows text to image form', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: GeneratePage())),
+    );
+
+    expect(find.text('文生图'), findsOneWidget);
+    expect(find.text('画面描述'), findsOneWidget);
+    expect(find.text('自动优化 Prompt'), findsOneWidget);
   });
 }

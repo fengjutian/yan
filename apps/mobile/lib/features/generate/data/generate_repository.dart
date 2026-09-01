@@ -9,20 +9,36 @@ class GenerateRepository {
   final ApiClient _apiClient;
   static const _uuid = Uuid();
 
-  Future<ImageTask> create({required String prompt, required String aspectRatio, required int count, required bool promptOptimizer}) async {
+  Future<ImageTask> create(
+      {required String prompt,
+      required String aspectRatio,
+      required int count,
+      required bool promptOptimizer}) async {
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
-        '/image-tasks', options: Options(headers: {'Idempotency-Key': _uuid.v4()}),
-        data: {'type': 'TEXT_TO_IMAGE', 'prompt': prompt, 'aspect_ratio': aspectRatio, 'count': count, 'prompt_optimizer': promptOptimizer},
+        '/image-tasks',
+        options: Options(headers: {'Idempotency-Key': _uuid.v4()}),
+        data: {
+          'type': 'TEXT_TO_IMAGE',
+          'prompt': prompt,
+          'aspect_ratio': aspectRatio,
+          'count': count,
+          'prompt_optimizer': promptOptimizer
+        },
       );
       return ImageTask.fromJson(response.data!);
-    } on DioException catch (error) { throw ApiException.fromDio(error); }
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
   }
 
   Future<ImageTask> get(String taskId) async {
     try {
-      final response = await _apiClient.dio.get<Map<String, dynamic>>('/image-tasks/$taskId');
+      final response = await _apiClient.dio
+          .get<Map<String, dynamic>>('/image-tasks/$taskId');
       return ImageTask.fromJson(response.data!);
-    } on DioException catch (error) { throw ApiException.fromDio(error); }
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
   }
 }
