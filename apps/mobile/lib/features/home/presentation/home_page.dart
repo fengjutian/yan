@@ -35,10 +35,11 @@ class HomePage extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 24),
-          const _CreateCard(
+          _CreateCard(
             icon: Icons.auto_awesome,
             title: '文生图',
             description: '输入画面描述，生成你的作品。',
+            onTap: () => context.push('/create/text-to-image'),
           ),
           const SizedBox(height: 16),
           _CreateCard(
