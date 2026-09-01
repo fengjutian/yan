@@ -1,12 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends ConsumerWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text('AI Image Studio')),
+      appBar: AppBar(
+        title: const Text('AI Image Studio'),
+        actions: [
+          IconButton(
+            tooltip: '退出登录',
+            onPressed: () async {
+              await ref.read(authControllerProvider.notifier).logout();
+              if (context.mounted) context.go('/login');
+            },
+            icon: const Icon(Icons.logout),
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
@@ -64,4 +79,3 @@ class _CreateCard extends StatelessWidget {
     );
   }
 }
-
