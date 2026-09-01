@@ -14,6 +14,7 @@ import (
 	"github.com/yan/ai-image-studio/backend/internal/database"
 	"github.com/yan/ai-image-studio/backend/internal/repository/gorm"
 	"github.com/yan/ai-image-studio/backend/internal/service"
+	objectstorage "github.com/yan/ai-image-studio/backend/internal/storage"
 	httptransport "github.com/yan/ai-image-studio/backend/internal/transport/http"
 )
 
@@ -43,10 +44,41 @@ func main() {
 		logger.Error("initialize authentication", "error", err)
 		os.Exit(1)
 	}
+	minioStorage, err := objectstorage.NewMinIOStorage(
+		cfg.MinIO.Endpoint,
+		cfg.MinIO.AccessKey,
+		cfg.MinIO.SecretKey,
+		cfg.MinIO.Bucket,
+		cfg.MinIO.UseSSL,
+	)
+	if err != nil {
+		logger.Error("initialize object storage", "error", err)
+		os.Exit(1)
+	}
+	assetRepository := gormrepo.NewAssetRepository(db)
+	assetService, err := service.NewAssetService(
+		assetRepository,
+		minioStorage,
+		cfg.MinIO.Bucket,
+		cfg.Image.MaxUploadBytes,
+		cfg.Image.MaxPixels,
+		cfg.Image.ThumbnailSize,
+		cfg.Image.URLTTL,
+	)
+	if err != nil {
+		logger.Error("initialize asset service", "error", err)
+		os.Exit(1)
+	}
 
 	server := &http.Server{
-		Addr:         cfg.HTTP.Address,
-		Handler:      httptransport.NewRouter(cfg.Environment, time.Now(), authService),
+		Addr: cfg.HTTP.Address,
+		Handler: httptransport.NewRouter(
+			cfg.Environment,
+			time.Now(),
+			authService,
+			assetService,
+			cfg.Image.MaxUploadBytes,
+		),
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,
 		IdleTimeout:  cfg.HTTP.IdleTimeout,

@@ -12,7 +12,13 @@ const serviceName = "ai-image-api"
 const userIDContextKey = "user_id"
 const timeFormat = "2006-01-02T15:04:05.000Z07:00"
 
-func NewRouter(environment string, startedAt time.Time, auth *service.AuthService) *gin.Engine {
+func NewRouter(
+	environment string,
+	startedAt time.Time,
+	auth *service.AuthService,
+	assets *service.AssetService,
+	maxUploadBytes int64,
+) *gin.Engine {
 	if environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -49,6 +55,13 @@ func NewRouter(environment string, startedAt time.Time, auth *service.AuthServic
 		authRoutes.POST("/refresh", handler.refresh)
 		authRoutes.POST("/logout", handler.logout)
 		v1.GET("/me", authMiddleware(auth), handler.me)
+		if assets != nil {
+			assetAPI := assetHandler{assets: assets, maxUploadBytes: maxUploadBytes}
+			assetRoutes := v1.Group("/assets", authMiddleware(auth))
+			assetRoutes.POST("", assetAPI.upload)
+			assetRoutes.GET("/:assetID", assetAPI.get)
+			assetRoutes.DELETE("/:assetID", assetAPI.delete)
+		}
 	}
 
 	return router

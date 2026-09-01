@@ -15,6 +15,7 @@ type Config struct {
 	MinIO       MinIOConfig
 	MiniMax     MiniMaxConfig
 	Auth        AuthConfig
+	Image       ImageConfig
 }
 
 type HTTPConfig struct {
@@ -45,6 +46,13 @@ type AuthConfig struct {
 	InitialCredits  int64
 }
 
+type ImageConfig struct {
+	MaxUploadBytes int64
+	MaxPixels      int64
+	ThumbnailSize  int
+	URLTTL         time.Duration
+}
+
 func Load() (Config, error) {
 	readTimeout, err := duration("HTTP_READ_TIMEOUT", 15*time.Second)
 	if err != nil {
@@ -67,6 +75,22 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	initialCredits, err := integer("INITIAL_CREDITS", 100)
+	if err != nil {
+		return Config{}, err
+	}
+	maxUploadMB, err := integer("IMAGE_MAX_UPLOAD_MB", 10)
+	if err != nil {
+		return Config{}, err
+	}
+	maxPixels, err := integer("IMAGE_MAX_PIXELS", 16777216)
+	if err != nil {
+		return Config{}, err
+	}
+	thumbnailSize, err := integer("IMAGE_THUMBNAIL_SIZE", 512)
+	if err != nil {
+		return Config{}, err
+	}
+	assetURLTTL, err := duration("ASSET_URL_TTL", 15*time.Minute)
 	if err != nil {
 		return Config{}, err
 	}
@@ -102,6 +126,12 @@ func Load() (Config, error) {
 			AccessTokenTTL:  accessTokenTTL,
 			RefreshTokenTTL: refreshTokenTTL,
 			InitialCredits:  initialCredits,
+		},
+		Image: ImageConfig{
+			MaxUploadBytes: maxUploadMB * 1024 * 1024,
+			MaxPixels:      maxPixels,
+			ThumbnailSize:  int(thumbnailSize),
+			URLTTL:         assetURLTTL,
 		},
 	}, nil
 }
