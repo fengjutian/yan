@@ -71,9 +71,11 @@ func main() {
 		os.Exit(1)
 	}
 	taskRepository := gormrepo.NewTaskRepository(db)
+	styleRepository := gormrepo.NewStyleRepository(db)
+	styleService := service.NewStyleService(styleRepository)
 	imageQueue := queue.NewAsynqImageQueue(cfg.RedisAddr)
 	defer imageQueue.Close()
-	taskService := service.NewTaskService(taskRepository, imageQueue, assetService)
+	taskService := service.NewTaskService(taskRepository, imageQueue, assetService, styleRepository)
 
 	server := &http.Server{
 		Addr: cfg.HTTP.Address,
@@ -83,6 +85,7 @@ func main() {
 			authService,
 			assetService,
 			taskService,
+			styleService,
 			cfg.Image.MaxUploadBytes,
 		),
 		ReadTimeout:  cfg.HTTP.ReadTimeout,

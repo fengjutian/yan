@@ -14,6 +14,12 @@ type GenerateRequest struct {
 	Seed           *int64
 	OptimizePrompt bool
 	Watermark      bool
+	References     []ImageReference
+}
+
+type ImageReference struct {
+	Type string
+	URL  string
 }
 
 type GenerateResult struct {

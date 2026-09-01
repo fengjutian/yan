@@ -30,13 +30,17 @@ type TaskService struct {
 	tasks  repository.TaskRepository
 	queue  queue.ImageTaskQueue
 	assets *AssetService
+	styles repository.StyleRepository
 	now    func() time.Time
 }
 
 type CreateImageTaskInput struct {
 	UserID          string
 	IdempotencyKey  string
+	Type            string
 	Prompt          string
+	StyleID         *string
+	SourceAssetID   *string
 	AspectRatio     string
 	Count           int
 	Seed            *int64
@@ -49,28 +53,68 @@ type TaskResult struct {
 	Images []*AssetResult
 }
 
-func NewTaskService(tasks repository.TaskRepository, taskQueue queue.ImageTaskQueue, assets *AssetService) *TaskService {
-	return &TaskService{tasks: tasks, queue: taskQueue, assets: assets, now: time.Now}
+func NewTaskService(
+	tasks repository.TaskRepository,
+	taskQueue queue.ImageTaskQueue,
+	assets *AssetService,
+	styles repository.StyleRepository,
+) *TaskService {
+	return &TaskService{tasks: tasks, queue: taskQueue, assets: assets, styles: styles, now: time.Now}
 }
 
 func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*model.ImageTask, error) {
 	input.Prompt = strings.TrimSpace(input.Prompt)
+	if input.Type == "" {
+		input.Type = "TEXT_TO_IMAGE"
+	}
 	if input.UserID == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 255 ||
 		input.Prompt == "" || utf8.RuneCountInString(input.Prompt) > 1500 ||
-		input.Count < 1 || input.Count > 4 || !validAspectRatio(input.AspectRatio) {
+		input.Count < 1 || input.Count > 4 || !validAspectRatio(input.AspectRatio) ||
+		(input.Type != "TEXT_TO_IMAGE" && input.Type != "CHARACTER_REFERENCE") {
 		return nil, ErrInvalidTask
+	}
+	if input.Type == "CHARACTER_REFERENCE" && input.SourceAssetID == nil {
+		return nil, ErrInvalidTask
+	}
+	if input.SourceAssetID != nil {
+		if s.assets == nil {
+			return nil, ErrInvalidTask
+		}
+		if _, err := s.assets.Get(ctx, input.UserID, *input.SourceAssetID); err != nil {
+			return nil, ErrInvalidTask
+		}
+	}
+	effectivePrompt := input.Prompt
+	if input.StyleID != nil {
+		if s.styles == nil {
+			return nil, ErrInvalidTask
+		}
+		style, err := s.styles.FindEnabledByID(ctx, *input.StyleID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, ErrInvalidTask
+		}
+		if err != nil {
+			return nil, fmt.Errorf("load style: %w", err)
+		}
+		effectivePrompt += "\n\nStyle guidance: " + style.PromptTemplate
+	}
+	if input.Type == "CHARACTER_REFERENCE" {
+		effectivePrompt += "\n\nPreserve the referenced character's identity and recognizable facial features."
 	}
 	requestJSON, _ := json.Marshal(input)
 	digest := sha256.Sum256(requestJSON)
 	now := s.now().UTC()
 	task := &model.ImageTask{
-		ID: ulid.Make().String(), UserID: input.UserID, Type: "TEXT_TO_IMAGE",
+		ID: ulid.Make().String(), UserID: input.UserID, Type: input.Type,
 		Status: "PENDING", Prompt: input.Prompt, Provider: "minimax",
 		ProviderModel: "image-01", AspectRatio: input.AspectRatio,
 		ImageCount: uint8(input.Count), Seed: input.Seed,
 		PromptOptimizer: input.PromptOptimizer, AIGCWatermark: input.AIGCWatermark,
 		CreditsReserved: int64(input.Count * 10), CreatedAt: now, UpdatedAt: now,
 	}
+	task.EffectivePrompt = &effectivePrompt
+	task.StyleID = input.StyleID
+	task.SourceAssetID = input.SourceAssetID
 	created, existing, err := s.tasks.CreatePending(
 		ctx, task, input.IdempotencyKey, hex.EncodeToString(digest[:]),
 	)
@@ -139,10 +183,23 @@ func (p *ImageTaskProcessor) Process(ctx context.Context, taskID string) error {
 	if err != nil {
 		return fmt.Errorf("claim task: %w", err)
 	}
-	generated, err := p.provider.Generate(ctx, imageprovider.GenerateRequest{
-		Prompt: task.Prompt, AspectRatio: task.AspectRatio, Count: int(task.ImageCount),
+	prompt := task.Prompt
+	if task.EffectivePrompt != nil {
+		prompt = *task.EffectivePrompt
+	}
+	providerRequest := imageprovider.GenerateRequest{
+		Prompt: prompt, AspectRatio: task.AspectRatio, Count: int(task.ImageCount),
 		Seed: task.Seed, OptimizePrompt: task.PromptOptimizer, Watermark: task.AIGCWatermark,
-	})
+	}
+	if task.SourceAssetID != nil {
+		reference, err := p.assets.Get(ctx, task.UserID, *task.SourceAssetID)
+		if err != nil {
+			_ = p.tasks.FailAndRefund(ctx, task.ID, "REFERENCE_ASSET_UNAVAILABLE", safeErrorMessage(err))
+			return nil
+		}
+		providerRequest.References = []imageprovider.ImageReference{{Type: "character", URL: reference.URL}}
+	}
+	generated, err := p.provider.Generate(ctx, providerRequest)
 	if err != nil {
 		code := "PROVIDER_UNAVAILABLE"
 		if errors.Is(err, minimax.ErrContentRejected) {

@@ -29,14 +29,20 @@ type Provider struct {
 }
 
 type imageRequest struct {
-	Model           string `json:"model"`
-	Prompt          string `json:"prompt"`
-	ResponseFormat  string `json:"response_format"`
-	N               int    `json:"n"`
-	PromptOptimizer bool   `json:"prompt_optimizer"`
-	AspectRatio     string `json:"aspect_ratio"`
-	Seed            *int64 `json:"seed,omitempty"`
-	AIGCWatermark   bool   `json:"aigc_watermark"`
+	Model            string             `json:"model"`
+	Prompt           string             `json:"prompt"`
+	ResponseFormat   string             `json:"response_format"`
+	N                int                `json:"n"`
+	PromptOptimizer  bool               `json:"prompt_optimizer"`
+	AspectRatio      string             `json:"aspect_ratio"`
+	Seed             *int64             `json:"seed,omitempty"`
+	AIGCWatermark    bool               `json:"aigc_watermark"`
+	SubjectReference []subjectReference `json:"subject_reference,omitempty"`
+}
+
+type subjectReference struct {
+	Type      string `json:"type"`
+	ImageFile string `json:"image_file"`
 }
 
 type imageResponse struct {
@@ -83,7 +89,7 @@ func (p *Provider) Generate(
 	ctx context.Context,
 	request imageprovider.GenerateRequest,
 ) (*imageprovider.GenerateResult, error) {
-	payload, err := json.Marshal(imageRequest{
+	providerRequest := imageRequest{
 		Model:           p.model,
 		Prompt:          request.Prompt,
 		ResponseFormat:  "base64",
@@ -92,7 +98,13 @@ func (p *Provider) Generate(
 		AspectRatio:     request.AspectRatio,
 		Seed:            request.Seed,
 		AIGCWatermark:   request.Watermark,
-	})
+	}
+	for _, reference := range request.References {
+		providerRequest.SubjectReference = append(providerRequest.SubjectReference, subjectReference{
+			Type: reference.Type, ImageFile: reference.URL,
+		})
+	}
+	payload, err := json.Marshal(providerRequest)
 	if err != nil {
 		return nil, fmt.Errorf("encode minimax request: %w", err)
 	}

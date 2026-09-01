@@ -45,6 +45,7 @@ services:
       - mysql-data:/var/lib/mysql
       - ../backend/migrations/000001_init.up.sql:/docker-entrypoint-initdb.d/000001_init.sql:ro
       - ../backend/migrations/000002_task_options.up.sql:/docker-entrypoint-initdb.d/000002_task_options.sql:ro
+      - ../backend/migrations/000003_seed_styles.up.sql:/docker-entrypoint-initdb.d/000003_seed_styles.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 5s

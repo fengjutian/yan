@@ -18,6 +18,7 @@ func NewRouter(
 	auth *service.AuthService,
 	assets *service.AssetService,
 	tasks *service.TaskService,
+	styles *service.StyleService,
 	maxUploadBytes int64,
 ) *gin.Engine {
 	if environment == "production" {
@@ -48,6 +49,9 @@ func NewRouter(
 			"version": "0.1.0-dev",
 		})
 	})
+	if styles != nil {
+		v1.GET("/styles", styleHandler{styles: styles}.list)
+	}
 	if auth != nil {
 		handler := authHandler{auth: auth}
 		authRoutes := v1.Group("/auth")

@@ -26,6 +26,9 @@ func TestGenerate(t *testing.T) {
 		if !strings.Contains(string(body), `"response_format":"base64"`) {
 			t.Fatalf("unexpected request: %s", body)
 		}
+		if !strings.Contains(string(body), `"image_file":"https://example.test/reference.jpg"`) {
+			t.Fatalf("missing subject reference: %s", body)
+		}
 		writer.Header().Set("Content-Type", "application/json")
 		_, _ = writer.Write([]byte(`{"id":"provider-1","data":{"image_base64":["` +
 			base64.StdEncoding.EncodeToString(imageData) +
@@ -39,6 +42,7 @@ func TestGenerate(t *testing.T) {
 	}
 	result, err := provider.Generate(t.Context(), imageprovider.GenerateRequest{
 		Prompt: "moon cat", AspectRatio: "1:1", Count: 1,
+		References: []imageprovider.ImageReference{{Type: "character", URL: "https://example.test/reference.jpg"}},
 	})
 	if err != nil {
 		t.Fatal(err)

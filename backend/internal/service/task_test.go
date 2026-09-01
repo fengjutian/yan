@@ -14,7 +14,7 @@ func TestCreateImageTaskReservesCreditsAndEnqueues(t *testing.T) {
 	t.Parallel()
 	repo := &fakeTaskRepository{}
 	taskQueue := &fakeImageQueue{}
-	service := NewTaskService(repo, taskQueue, nil)
+	service := NewTaskService(repo, taskQueue, nil, nil)
 	service.now = func() time.Time { return time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC) }
 
 	task, err := service.Create(context.Background(), CreateImageTaskInput{
@@ -34,7 +34,7 @@ func TestCreateImageTaskReservesCreditsAndEnqueues(t *testing.T) {
 
 func TestCreateImageTaskRejectsInvalidRatio(t *testing.T) {
 	t.Parallel()
-	service := NewTaskService(&fakeTaskRepository{}, &fakeImageQueue{}, nil)
+	service := NewTaskService(&fakeTaskRepository{}, &fakeImageQueue{}, nil, nil)
 	_, err := service.Create(context.Background(), CreateImageTaskInput{
 		UserID: "user-1", IdempotencyKey: "request-1", Prompt: "cat",
 		AspectRatio: "5:7", Count: 1,
@@ -48,7 +48,7 @@ func TestQueueFailureRefundsTask(t *testing.T) {
 	t.Parallel()
 	repo := &fakeTaskRepository{}
 	taskQueue := &fakeImageQueue{err: errors.New("redis unavailable")}
-	service := NewTaskService(repo, taskQueue, nil)
+	service := NewTaskService(repo, taskQueue, nil, nil)
 	_, err := service.Create(context.Background(), CreateImageTaskInput{
 		UserID: "user-1", IdempotencyKey: "request-1", Prompt: "cat",
 		AspectRatio: "1:1", Count: 1,

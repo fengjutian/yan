@@ -12,12 +12,14 @@ import (
 type taskHandler struct{ tasks *service.TaskService }
 
 type createTaskRequest struct {
-	Type            string `json:"type" binding:"required"`
-	Prompt          string `json:"prompt" binding:"required"`
-	AspectRatio     string `json:"aspect_ratio" binding:"required"`
-	Count           int    `json:"count" binding:"required"`
-	Seed            *int64 `json:"seed"`
-	PromptOptimizer bool   `json:"prompt_optimizer"`
+	Type            string  `json:"type" binding:"required"`
+	Prompt          string  `json:"prompt" binding:"required"`
+	StyleID         *string `json:"style_id"`
+	SourceAssetID   *string `json:"source_asset_id"`
+	AspectRatio     string  `json:"aspect_ratio" binding:"required"`
+	Count           int     `json:"count" binding:"required"`
+	Seed            *int64  `json:"seed"`
+	PromptOptimizer bool    `json:"prompt_optimizer"`
 }
 
 type taskResponse struct {
@@ -38,13 +40,14 @@ type taskResponse struct {
 
 func (h taskHandler) create(c *gin.Context) {
 	var request createTaskRequest
-	if err := c.ShouldBindJSON(&request); err != nil || request.Type != "TEXT_TO_IMAGE" {
+	if err := c.ShouldBindJSON(&request); err != nil {
 		writeError(c, http.StatusBadRequest, "INVALID_TASK", "请检查生成参数")
 		return
 	}
 	task, err := h.tasks.Create(c.Request.Context(), service.CreateImageTaskInput{
 		UserID: c.GetString(userIDContextKey), IdempotencyKey: c.GetHeader("Idempotency-Key"),
-		Prompt: request.Prompt, AspectRatio: request.AspectRatio, Count: request.Count,
+		Type: request.Type, Prompt: request.Prompt, StyleID: request.StyleID,
+		SourceAssetID: request.SourceAssetID, AspectRatio: request.AspectRatio, Count: request.Count,
 		Seed: request.Seed, PromptOptimizer: request.PromptOptimizer, AIGCWatermark: true,
 	})
 	if err != nil {
