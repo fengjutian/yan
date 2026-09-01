@@ -1,0 +1,18 @@
+.env
+*.log
+.idea/
+.vscode/
+
+# Go
+backend/bin/
+backend/coverage.out
+
+# Flutter
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/.packages
+apps/mobile/build/
+
+# Local data
+.data/
