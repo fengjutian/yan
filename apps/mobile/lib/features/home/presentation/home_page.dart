@@ -8,6 +8,7 @@ class HomePage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(authControllerProvider).user;
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Image Studio'),
@@ -35,6 +36,17 @@ class HomePage extends ConsumerWidget {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: 24),
+          if (user != null) ...[
+            Card(
+              child: ListTile(
+                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                title: Text(user.nickname),
+                subtitle: Text(user.email),
+                trailing: Chip(label: Text('${user.creditsBalance} 积分')),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
           _CreateCard(
             icon: Icons.auto_awesome,
             title: '文生图',
@@ -47,6 +59,13 @@ class HomePage extends ConsumerWidget {
             title: '人物参考创作',
             description: '上传人物参考图，在新场景中保持主体特征。',
             onTap: () => context.push('/create/reference'),
+          ),
+          const SizedBox(height: 16),
+          _CreateCard(
+            icon: Icons.photo_library_outlined,
+            title: '我的作品',
+            description: '查看已经完成的 AI 图片作品。',
+            onTap: () => context.push('/history'),
           ),
         ],
       ),

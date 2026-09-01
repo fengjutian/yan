@@ -71,6 +71,7 @@ func NewRouter(
 			taskAPI := taskHandler{tasks: tasks}
 			taskRoutes := v1.Group("/image-tasks", authMiddleware(auth))
 			taskRoutes.POST("", taskAPI.create)
+			taskRoutes.GET("", taskAPI.list)
 			taskRoutes.GET("/:taskID", taskAPI.get)
 		}
 	}

@@ -67,4 +67,26 @@ class GenerateRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<ImageTaskPage> list({String cursor = '', int limit = 20}) async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/image-tasks',
+        queryParameters: {
+          'status': 'SUCCEEDED',
+          'limit': limit,
+          if (cursor.isNotEmpty) 'cursor': cursor,
+        },
+      );
+      final body = response.data!;
+      return ImageTaskPage(
+        tasks: (body['tasks'] as List<dynamic>)
+            .map((item) => ImageTask.fromJson(item as Map<String, dynamic>))
+            .toList(),
+        nextCursor: body['next_cursor'] as String? ?? '',
+      );
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
 }

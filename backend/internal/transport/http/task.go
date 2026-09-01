@@ -3,6 +3,7 @@ package httptransport
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -64,6 +65,31 @@ func (h taskHandler) get(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, publicTask(result))
+}
+
+func (h taskHandler) list(c *gin.Context) {
+	limit := 20
+	if rawLimit := c.Query("limit"); rawLimit != "" {
+		parsed, err := strconv.Atoi(rawLimit)
+		if err != nil {
+			writeError(c, http.StatusBadRequest, "INVALID_TASK", "分页参数无效")
+			return
+		}
+		limit = parsed
+	}
+	page, err := h.tasks.List(
+		c.Request.Context(), c.GetString(userIDContextKey),
+		c.Query("status"), c.Query("cursor"), limit,
+	)
+	if err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	items := make([]taskResponse, 0, len(page.Tasks))
+	for _, task := range page.Tasks {
+		items = append(items, publicTask(task))
+	}
+	c.JSON(http.StatusOK, gin.H{"tasks": items, "next_cursor": page.NextCursor})
 }
 
 func writeTaskError(c *gin.Context, err error) {

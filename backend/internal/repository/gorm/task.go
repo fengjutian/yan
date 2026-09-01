@@ -111,6 +111,28 @@ func (r *TaskRepository) ResultAssetIDs(ctx context.Context, taskID string) ([]s
 	return ids, err
 }
 
+func (r *TaskRepository) ListByUser(
+	ctx context.Context,
+	userID, status string,
+	before time.Time,
+	beforeID string,
+	limit int,
+) ([]model.ImageTask, error) {
+	query := r.db.WithContext(ctx).Where("user_id = ?", userID)
+	if status != "" {
+		query = query.Where("status = ?", status)
+	}
+	if !before.IsZero() {
+		query = query.Where(
+			"(created_at < ?) OR (created_at = ? AND id < ?)",
+			before, before, beforeID,
+		)
+	}
+	var tasks []model.ImageTask
+	err := query.Order("created_at DESC, id DESC").Limit(limit).Find(&tasks).Error
+	return tasks, err
+}
+
 func (r *TaskRepository) Claim(ctx context.Context, taskID string) (*model.ImageTask, error) {
 	now := time.Now().UTC()
 	result := r.db.WithContext(ctx).Model(&model.ImageTask{}).

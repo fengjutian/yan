@@ -2,6 +2,7 @@ import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
 import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
+import 'package:ai_image_studio/features/history/presentation/history_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -54,5 +55,16 @@ void main() {
     await tester.pump();
     expect(find.text('选择并上传参考图'), findsOneWidget);
     expect(find.text('场景描述'), findsOneWidget);
+  });
+
+  testWidgets('shows empty history state', (tester) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: HistoryPage(loadOnStart: false)),
+      ),
+    );
+
+    expect(find.text('我的作品'), findsOneWidget);
+    expect(find.text('还没有作品，开始第一次创作吧'), findsOneWidget);
   });
 }

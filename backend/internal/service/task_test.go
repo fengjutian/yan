@@ -75,6 +75,19 @@ func TestCreateTaskBuildsEffectiveStylePrompt(t *testing.T) {
 	}
 }
 
+func TestTaskCursorRoundTrip(t *testing.T) {
+	t.Parallel()
+	createdAt := time.Date(2026, 9, 2, 9, 30, 0, 123, time.UTC)
+	cursor := encodeTaskCursor(createdAt, "01J00000000000000000000099")
+	decodedTime, decodedID, err := decodeTaskCursor(cursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !decodedTime.Equal(createdAt) || decodedID != "01J00000000000000000000099" {
+		t.Fatalf("unexpected cursor result: %s %s", decodedTime, decodedID)
+	}
+}
+
 type fakeImageQueue struct {
 	taskID string
 	err    error
@@ -107,6 +120,12 @@ func (r *fakeTaskRepository) FindByID(_ context.Context, _, _ string) (*model.Im
 }
 
 func (r *fakeTaskRepository) ResultAssetIDs(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
+
+func (r *fakeTaskRepository) ListByUser(
+	_ context.Context, _, _ string, _ time.Time, _ string, _ int,
+) ([]model.ImageTask, error) {
 	return nil, nil
 }
 

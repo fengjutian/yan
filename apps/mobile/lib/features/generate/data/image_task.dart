@@ -19,7 +19,9 @@ class ImageTask {
       required this.prompt,
       required this.images,
       this.errorCode,
-      this.errorMessage});
+      this.errorMessage,
+      this.type = 'TEXT_TO_IMAGE',
+      this.createdAt});
   final String id;
   final String status;
   final int progress;
@@ -27,6 +29,8 @@ class ImageTask {
   final List<GeneratedImage> images;
   final String? errorCode;
   final String? errorMessage;
+  final String type;
+  final DateTime? createdAt;
   bool get isTerminal =>
       status == 'SUCCEEDED' || status == 'FAILED' || status == 'CANCELED';
   factory ImageTask.fromJson(Map<String, dynamic> json) => ImageTask(
@@ -40,5 +44,13 @@ class ImageTask {
             .toList(),
         errorCode: json['error_code'] as String?,
         errorMessage: json['error_message'] as String?,
+        type: json['type'] as String? ?? 'TEXT_TO_IMAGE',
+        createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
       );
+}
+
+class ImageTaskPage {
+  const ImageTaskPage({required this.tasks, required this.nextCursor});
+  final List<ImageTask> tasks;
+  final String nextCursor;
 }

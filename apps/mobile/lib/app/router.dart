@@ -3,6 +3,8 @@ import 'package:ai_image_studio/features/auth/presentation/splash_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
 import 'package:ai_image_studio/features/home/presentation/home_page.dart';
+import 'package:ai_image_studio/features/history/presentation/history_page.dart';
+import 'package:ai_image_studio/features/history/presentation/task_detail_page.dart';
 import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,6 +37,15 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/create/reference',
       builder: (context, state) => const ReferencePage(),
+    ),
+    GoRoute(
+      path: '/history',
+      builder: (context, state) => const HistoryPage(),
+    ),
+    GoRoute(
+      path: '/task/:taskId',
+      builder: (context, state) =>
+          TaskDetailPage(taskId: state.pathParameters['taskId']!),
     ),
   ],
 );

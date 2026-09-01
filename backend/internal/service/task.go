@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,11 @@ type CreateImageTaskInput struct {
 type TaskResult struct {
 	Task   *model.ImageTask
 	Images []*AssetResult
+}
+
+type TaskPage struct {
+	Tasks      []*TaskResult
+	NextCursor string
 }
 
 func NewTaskService(
@@ -165,6 +171,79 @@ func (s *TaskService) Get(ctx context.Context, userID, taskID string) (*TaskResu
 		}
 	}
 	return result, nil
+}
+
+func (s *TaskService) List(
+	ctx context.Context,
+	userID, status, cursor string,
+	limit int,
+) (*TaskPage, error) {
+	if userID == "" || limit < 1 || limit > 50 || !validTaskStatusFilter(status) {
+		return nil, ErrInvalidTask
+	}
+	before, beforeID, err := decodeTaskCursor(cursor)
+	if err != nil {
+		return nil, ErrInvalidTask
+	}
+	tasks, err := s.tasks.ListByUser(ctx, userID, status, before, beforeID, limit+1)
+	if err != nil {
+		return nil, fmt.Errorf("list image tasks: %w", err)
+	}
+	page := &TaskPage{}
+	if len(tasks) > limit {
+		last := tasks[limit-1]
+		page.NextCursor = encodeTaskCursor(last.CreatedAt, last.ID)
+		tasks = tasks[:limit]
+	}
+	for index := range tasks {
+		task := tasks[index]
+		result := &TaskResult{Task: &task}
+		if task.Status == "SUCCEEDED" {
+			assetIDs, err := s.tasks.ResultAssetIDs(ctx, task.ID)
+			if err != nil {
+				return nil, fmt.Errorf("list task assets: %w", err)
+			}
+			for _, assetID := range assetIDs {
+				asset, err := s.assets.Get(ctx, userID, assetID)
+				if err != nil {
+					return nil, fmt.Errorf("load history asset: %w", err)
+				}
+				result.Images = append(result.Images, asset)
+			}
+		}
+		page.Tasks = append(page.Tasks, result)
+	}
+	return page, nil
+}
+
+func encodeTaskCursor(createdAt time.Time, taskID string) string {
+	raw := createdAt.UTC().Format(time.RFC3339Nano) + "|" + taskID
+	return base64.RawURLEncoding.EncodeToString([]byte(raw))
+}
+
+func decodeTaskCursor(cursor string) (time.Time, string, error) {
+	if cursor == "" {
+		return time.Time{}, "", nil
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(cursor)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	timePart, taskID, ok := strings.Cut(string(raw), "|")
+	if !ok || taskID == "" {
+		return time.Time{}, "", ErrInvalidTask
+	}
+	createdAt, err := time.Parse(time.RFC3339Nano, timePart)
+	return createdAt, taskID, err
+}
+
+func validTaskStatusFilter(status string) bool {
+	switch status {
+	case "", "PENDING", "PROCESSING", "SUCCEEDED", "FAILED", "CANCELED":
+		return true
+	default:
+		return false
+	}
 }
 
 type ImageTaskProcessor struct {
