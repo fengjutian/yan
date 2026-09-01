@@ -18,6 +18,7 @@ dependencies:
   image_picker: ^1.1.2
   json_annotation: ^4.9.0
   photo_view: ^0.15.0
+  uuid: ^4.5.1
 
 dev_dependencies:
   flutter_test:
@@ -29,4 +30,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
