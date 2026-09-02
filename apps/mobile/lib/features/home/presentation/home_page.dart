@@ -25,16 +25,6 @@ class _HomePageState extends ConsumerState<HomePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('AI Image Studio'),
-        actions: [
-          IconButton(
-            tooltip: '退出登录',
-            onPressed: () async {
-              await ref.read(authControllerProvider.notifier).logout();
-              if (context.mounted) context.go('/login');
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(24),
