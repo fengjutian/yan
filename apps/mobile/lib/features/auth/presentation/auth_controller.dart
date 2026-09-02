@@ -66,6 +66,17 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> refreshProfile() async {
+    try {
+      final user = await _repository.restoreSession();
+      if (user != null) {
+        state = AuthState(user: user, initialized: true);
+      }
+    } catch (_) {
+      // Keep the existing profile during a transient refresh failure.
+    }
+  }
+
   Future<bool> login({required String email, required String password}) async {
     return _submit(() => _repository.login(email: email, password: password));
   }

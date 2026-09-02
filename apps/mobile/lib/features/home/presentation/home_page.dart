@@ -3,11 +3,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class HomePage extends ConsumerWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends ConsumerState<HomePage> {
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.microtask(
+      () => ref.read(authControllerProvider.notifier).refreshProfile(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(authControllerProvider).user;
     return Scaffold(
       appBar: AppBar(
