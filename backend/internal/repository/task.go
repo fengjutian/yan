@@ -25,4 +25,5 @@ type TaskRepository interface {
 	Claim(ctx context.Context, taskID string) (*model.ImageTask, error)
 	Succeed(ctx context.Context, taskID, providerRequestID string, assetIDs []string) error
 	FailAndRefund(ctx context.Context, taskID, errorCode, errorMessage string) error
+	CancelAndRefund(ctx context.Context, userID, taskID string) error
 }

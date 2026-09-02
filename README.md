@@ -30,5 +30,7 @@ Set-Location backend
 go run ./cmd/worker
 ```
 
-详细方案见 [技术设计与开发计划](docs/technical-design-and-development-plan.md)。
+详细资料：
 
+- [技术设计与开发计划](docs/technical-design-and-development-plan.md)
+- [OpenAPI 接口定义](docs/api.openapi.yaml)

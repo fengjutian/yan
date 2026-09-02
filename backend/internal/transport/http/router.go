@@ -1,6 +1,7 @@
 package httptransport
 
 import (
+	"context"
 	"net/http"
 	"time"
 
@@ -20,13 +21,18 @@ func NewRouter(
 	tasks *service.TaskService,
 	styles *service.StyleService,
 	maxUploadBytes int64,
+	allowedOrigins []string,
+	readiness func(context.Context) error,
 ) *gin.Engine {
 	if environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	router := gin.New()
-	router.Use(gin.Recovery(), requestID())
+	router.Use(
+		gin.Recovery(), requestID(), requestLogger(), securityHeaders(),
+		cors(allowedOrigins), newIPRateLimiter(10, 30).middleware(),
+	)
 
 	router.GET("/health/live", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
@@ -37,8 +43,12 @@ func NewRouter(
 	})
 
 	router.GET("/health/ready", func(c *gin.Context) {
-		// Dependency checks are added when the database, queue and storage
-		// adapters are wired in. Until then this endpoint confirms process readiness.
+		if readiness != nil {
+			if err := readiness(c.Request.Context()); err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready"})
+				return
+			}
+		}
 		c.JSON(http.StatusOK, gin.H{"status": "ready"})
 	})
 
@@ -73,6 +83,8 @@ func NewRouter(
 			taskRoutes.POST("", taskAPI.create)
 			taskRoutes.GET("", taskAPI.list)
 			taskRoutes.GET("/:taskID", taskAPI.get)
+			taskRoutes.POST("/:taskID/cancel", taskAPI.cancel)
+			taskRoutes.POST("/:taskID/retry", taskAPI.retry)
 		}
 	}
 

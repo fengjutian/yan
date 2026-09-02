@@ -71,7 +71,11 @@ class GeneratePage extends ConsumerWidget {
         ),
         if (state.task != null) ...[
           const SizedBox(height: 24),
-          _TaskResult(task: state.task!)
+          _TaskResult(
+            task: state.task!,
+            onCancel: controller.cancel,
+            onRetry: controller.retry,
+          )
         ],
       ]),
     );
@@ -79,8 +83,11 @@ class GeneratePage extends ConsumerWidget {
 }
 
 class _TaskResult extends StatelessWidget {
-  const _TaskResult({required this.task});
+  const _TaskResult(
+      {required this.task, required this.onCancel, required this.onRetry});
   final ImageTask task;
+  final VoidCallback onCancel;
+  final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
     if (!task.isTerminal) {
@@ -88,6 +95,8 @@ class _TaskResult extends StatelessWidget {
         Text('正在生成 · ${task.progress}%'),
         const SizedBox(height: 8),
         LinearProgressIndicator(value: task.progress / 100),
+        const SizedBox(height: 8),
+        TextButton(onPressed: onCancel, child: const Text('取消任务')),
       ]);
     }
     if (task.status == 'FAILED') {
@@ -97,6 +106,7 @@ class _TaskResult extends StatelessWidget {
             color: Theme.of(context).colorScheme.error),
         title: const Text('生成失败，积分已退回'),
         subtitle: Text(task.errorMessage ?? '请稍后重试'),
+        trailing: TextButton(onPressed: onRetry, child: const Text('重试')),
       ));
     }
     return GridView.builder(

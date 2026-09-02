@@ -25,6 +25,7 @@ var (
 	ErrInvalidTask         = errors.New("task: invalid request")
 	ErrInsufficientCredits = errors.New("task: insufficient credits")
 	ErrIdempotencyConflict = errors.New("task: idempotency conflict")
+	ErrTaskNotCancelable   = errors.New("task: not cancelable")
 )
 
 type TaskService struct {
@@ -42,6 +43,7 @@ type CreateImageTaskInput struct {
 	Prompt          string
 	StyleID         *string
 	SourceAssetID   *string
+	ParentTaskID    *string
 	AspectRatio     string
 	Count           int
 	Seed            *int64
@@ -124,6 +126,7 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 		PromptOptimizer: input.PromptOptimizer, AIGCWatermark: input.AIGCWatermark,
 		CreditsReserved: int64(input.Count * 10), CreatedAt: now, UpdatedAt: now,
 	}
+	task.ParentTaskID = input.ParentTaskID
 	task.EffectivePrompt = &effectivePrompt
 	task.StyleID = input.StyleID
 	task.SourceAssetID = input.SourceAssetID
@@ -171,6 +174,44 @@ func (s *TaskService) Get(ctx context.Context, userID, taskID string) (*TaskResu
 		}
 	}
 	return result, nil
+}
+
+func (s *TaskService) Cancel(ctx context.Context, userID, taskID string) error {
+	err := s.tasks.CancelAndRefund(ctx, userID, taskID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return ErrTaskNotFound
+	}
+	if errors.Is(err, repository.ErrTaskNotCancelable) {
+		return ErrTaskNotCancelable
+	}
+	if err != nil {
+		return fmt.Errorf("cancel image task: %w", err)
+	}
+	return nil
+}
+
+func (s *TaskService) Retry(
+	ctx context.Context,
+	userID, taskID, idempotencyKey string,
+) (*model.ImageTask, error) {
+	previous, err := s.tasks.FindByID(ctx, userID, taskID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, ErrTaskNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find retry task: %w", err)
+	}
+	if previous.Status != "FAILED" && previous.Status != "CANCELED" {
+		return nil, ErrTaskNotCancelable
+	}
+	return s.Create(ctx, CreateImageTaskInput{
+		UserID: userID, IdempotencyKey: idempotencyKey, Type: previous.Type,
+		Prompt: previous.Prompt, StyleID: previous.StyleID,
+		SourceAssetID: previous.SourceAssetID, ParentTaskID: &previous.ID,
+		AspectRatio: previous.AspectRatio, Count: int(previous.ImageCount),
+		Seed: previous.Seed, PromptOptimizer: previous.PromptOptimizer,
+		AIGCWatermark: previous.AIGCWatermark,
+	})
 }
 
 func (s *TaskService) List(

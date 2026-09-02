@@ -8,4 +8,5 @@ var (
 	ErrTokenInvalid        = errors.New("repository: refresh token invalid")
 	ErrInsufficientCredits = errors.New("repository: insufficient credits")
 	ErrIdempotencyConflict = errors.New("repository: idempotency conflict")
+	ErrTaskNotCancelable   = errors.New("repository: task not cancelable")
 )

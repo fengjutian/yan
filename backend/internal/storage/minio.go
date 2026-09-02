@@ -51,3 +51,14 @@ func (s *MinIOStorage) PresignedGetURL(ctx context.Context, key string, ttl time
 	}
 	return objectURL.String(), nil
 }
+
+func (s *MinIOStorage) Health(ctx context.Context) error {
+	exists, err := s.client.BucketExists(ctx, s.bucket)
+	if err != nil {
+		return fmt.Errorf("check bucket %s: %w", s.bucket, err)
+	}
+	if !exists {
+		return fmt.Errorf("bucket %s does not exist", s.bucket)
+	}
+	return nil
+}

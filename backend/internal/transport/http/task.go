@@ -92,6 +92,28 @@ func (h taskHandler) list(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"tasks": items, "next_cursor": page.NextCursor})
 }
 
+func (h taskHandler) cancel(c *gin.Context) {
+	if err := h.tasks.Cancel(
+		c.Request.Context(), c.GetString(userIDContextKey), c.Param("taskID"),
+	); err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
+}
+
+func (h taskHandler) retry(c *gin.Context) {
+	task, err := h.tasks.Retry(
+		c.Request.Context(), c.GetString(userIDContextKey), c.Param("taskID"),
+		c.GetHeader("Idempotency-Key"),
+	)
+	if err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusAccepted, publicTask(&service.TaskResult{Task: task}))
+}
+
 func writeTaskError(c *gin.Context, err error) {
 	switch {
 	case errors.Is(err, service.ErrInvalidTask):
@@ -102,6 +124,8 @@ func writeTaskError(c *gin.Context, err error) {
 		writeError(c, http.StatusConflict, "IDEMPOTENCY_CONFLICT", "该幂等键已用于其他请求")
 	case errors.Is(err, service.ErrTaskNotFound):
 		writeError(c, http.StatusNotFound, "TASK_NOT_FOUND", "生成任务不存在")
+	case errors.Is(err, service.ErrTaskNotCancelable):
+		writeError(c, http.StatusConflict, "TASK_NOT_ACTIONABLE", "当前任务状态不允许此操作")
 	default:
 		writeError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "生成服务暂时不可用")
 	}

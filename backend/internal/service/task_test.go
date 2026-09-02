@@ -141,3 +141,8 @@ func (r *fakeTaskRepository) FailAndRefund(_ context.Context, _, _, _ string) er
 	r.refunded = true
 	return nil
 }
+
+func (r *fakeTaskRepository) CancelAndRefund(_ context.Context, _, _ string) error {
+	r.refunded = true
+	return nil
+}

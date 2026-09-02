@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -19,10 +20,11 @@ type Config struct {
 }
 
 type HTTPConfig struct {
-	Address      string
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
+	Address        string
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
+	AllowedOrigins []string
 }
 
 type MinIOConfig struct {
@@ -102,10 +104,11 @@ func Load() (Config, error) {
 	return Config{
 		Environment: value("APP_ENV", "development"),
 		HTTP: HTTPConfig{
-			Address:      value("HTTP_ADDRESS", ":8080"),
-			ReadTimeout:  readTimeout,
-			WriteTimeout: writeTimeout,
-			IdleTimeout:  idleTimeout,
+			Address:        value("HTTP_ADDRESS", ":8080"),
+			ReadTimeout:    readTimeout,
+			WriteTimeout:   writeTimeout,
+			IdleTimeout:    idleTimeout,
+			AllowedOrigins: csv("CORS_ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080"),
 		},
 		DatabaseDSN: value("DATABASE_DSN", "app:app@tcp(localhost:3306)/ai_image_studio?parseTime=true"),
 		RedisAddr:   value("REDIS_ADDR", "localhost:6379"),
@@ -153,6 +156,17 @@ func value(key, fallback string) string {
 		return current
 	}
 	return fallback
+}
+
+func csv(key, fallback string) []string {
+	parts := strings.Split(value(key, fallback), ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
 }
 
 func duration(key string, fallback time.Duration) (time.Duration, error) {

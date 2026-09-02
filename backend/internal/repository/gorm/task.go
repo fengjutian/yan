@@ -227,3 +227,48 @@ func (r *TaskRepository) FailAndRefund(
 		return tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&ledger).Error
 	})
 }
+
+func (r *TaskRepository) CancelAndRefund(ctx context.Context, userID, taskID string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var task model.ImageTask
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where("id = ? AND user_id = ?", taskID, userID).
+			First(&task).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return repository.ErrNotFound
+			}
+			return err
+		}
+		if task.Status != "PENDING" && task.Status != "RETRYING" {
+			return repository.ErrTaskNotCancelable
+		}
+		now := time.Now().UTC()
+		result := tx.Model(&model.ImageTask{}).
+			Where("id = ? AND status IN ?", task.ID, []string{"PENDING", "RETRYING"}).
+			Updates(map[string]any{
+				"status": "CANCELED", "progress": 100,
+				"completed_at": now, "updated_at": now,
+			})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return repository.ErrTaskNotCancelable
+		}
+		var user model.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, "id = ?", userID).Error; err != nil {
+			return err
+		}
+		balance := user.CreditsBalance + task.CreditsReserved
+		if err := tx.Model(&user).Update("credits_balance", balance).Error; err != nil {
+			return err
+		}
+		ledger := model.CreditLedger{
+			ID: ulid.Make().String(), UserID: userID, TaskID: &task.ID,
+			Type: "REFUND", Amount: task.CreditsReserved, BalanceAfter: balance,
+			IdempotencyKey: "cancel-refund:" + task.ID,
+			Description:    "图片生成任务取消退款", CreatedAt: now,
+		}
+		return tx.Create(&ledger).Error
+	})
+}

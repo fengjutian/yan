@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/yan/ai-image-studio/backend/internal/config"
 	"github.com/yan/ai-image-studio/backend/internal/database"
 	"github.com/yan/ai-image-studio/backend/internal/queue"
@@ -21,6 +23,7 @@ import (
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
 	cfg, err := config.Load()
 	if err != nil {
 		logger.Error("load configuration", "error", err)
@@ -76,6 +79,25 @@ func main() {
 	imageQueue := queue.NewAsynqImageQueue(cfg.RedisAddr)
 	defer imageQueue.Close()
 	taskService := service.NewTaskService(taskRepository, imageQueue, assetService, styleRepository)
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	defer redisClient.Close()
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Error("get database pool", "error", err)
+		os.Exit(1)
+	}
+	readiness := func(ctx context.Context) error {
+		if err := sqlDB.PingContext(ctx); err != nil {
+			return fmt.Errorf("mysql: %w", err)
+		}
+		if err := redisClient.Ping(ctx).Err(); err != nil {
+			return fmt.Errorf("redis: %w", err)
+		}
+		if err := minioStorage.Health(ctx); err != nil {
+			return fmt.Errorf("minio: %w", err)
+		}
+		return nil
+	}
 
 	server := &http.Server{
 		Addr: cfg.HTTP.Address,
@@ -87,6 +109,8 @@ func main() {
 			taskService,
 			styleService,
 			cfg.Image.MaxUploadBytes,
+			cfg.HTTP.AllowedOrigins,
+			readiness,
 		),
 		ReadTimeout:  cfg.HTTP.ReadTimeout,
 		WriteTimeout: cfg.HTTP.WriteTimeout,

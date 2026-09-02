@@ -89,4 +89,24 @@ class GenerateRepository {
       throw ApiException.fromDio(error);
     }
   }
+
+  Future<void> cancel(String taskId) async {
+    try {
+      await _apiClient.dio.post<void>('/image-tasks/$taskId/cancel');
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
+  Future<ImageTask> retry(String taskId) async {
+    try {
+      final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        '/image-tasks/$taskId/retry',
+        options: Options(headers: {'Idempotency-Key': _uuid.v4()}),
+      );
+      return ImageTask.fromJson(response.data!);
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
 }

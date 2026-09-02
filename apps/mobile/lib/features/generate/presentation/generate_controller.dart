@@ -101,6 +101,34 @@ class GenerateController extends StateNotifier<GenerateState> {
     }
   }
 
+  Future<void> cancel() async {
+    final task = state.task;
+    if (task == null || task.isTerminal) return;
+    try {
+      await _repository.cancel(task.id);
+      _pollTimer?.cancel();
+      state = state.copyWith(
+          task: await _repository.get(task.id), clearError: true);
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
+  Future<void> retry() async {
+    final task = state.task;
+    if (task == null ||
+        (task.status != 'FAILED' && task.status != 'CANCELED')) {
+      return;
+    }
+    try {
+      final replacement = await _repository.retry(task.id);
+      state = state.copyWith(task: replacement, clearError: true);
+      _schedulePoll(replacement.id, const Duration(seconds: 2));
+    } catch (error) {
+      state = state.copyWith(errorMessage: error.toString());
+    }
+  }
+
   @override
   void dispose() {
     _pollTimer?.cancel();
