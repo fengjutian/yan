@@ -120,7 +120,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
       await controller.startImageStream((image) {
         final now = DateTime.now();
         if (now.difference(_lastFrameAt).inMilliseconds < 600 ||
-            image.planes.isEmpty) return;
+            image.planes.isEmpty) {
+          return;
+        }
         _lastFrameAt = now;
         final bytes = image.planes.first.bytes;
         var total = 0;
@@ -185,16 +187,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await Future<void>.delayed(const Duration(seconds: 1));
       }
       if (mounted) setState(() => _countdown = 0);
-      if (controller.value.isStreamingImages)
+      if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
+      }
       final values = <Uint8List>[];
       XFile? analysisFile;
       for (var index = 0; index < _burstCount; index++) {
         final file = await controller.takePicture();
         analysisFile ??= file;
         values.add(await file.readAsBytes());
-        if (index + 1 < _burstCount)
+        if (index + 1 < _burstCount) {
           await Future<void>.delayed(const Duration(milliseconds: 220));
+        }
       }
       await ref.read(cameraSessionProvider.notifier).setPhotos(values);
       final session = ref.read(cameraSessionProvider);

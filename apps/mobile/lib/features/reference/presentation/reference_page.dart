@@ -1,10 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:ai_image_studio/features/reference/presentation/reference_controller.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ReferencePage extends ConsumerStatefulWidget {
-  const ReferencePage({this.loadStylesOnStart = true, this.initialBytes, super.key});
+  const ReferencePage(
+      {this.loadStylesOnStart = true, this.initialBytes, super.key});
   final bool loadStylesOnStart;
   final Uint8List? initialBytes;
   @override
@@ -21,7 +24,9 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
       );
     }
     if (widget.initialBytes != null) {
-      Future<void>.microtask(() => ref.read(referenceControllerProvider.notifier).uploadBytes(widget.initialBytes!));
+      Future<void>.microtask(() => ref
+          .read(referenceControllerProvider.notifier)
+          .uploadBytes(widget.initialBytes!));
     }
   }
 
@@ -122,4 +127,3 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
     );
   }
 }
-import 'dart:typed_data';

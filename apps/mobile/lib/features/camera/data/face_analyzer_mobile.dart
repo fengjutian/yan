@@ -11,9 +11,10 @@ Future<FaceAnalysis> analyzeFaces(String path, int width, int height) async {
       options: FaceDetectorOptions(performanceMode: FaceDetectorMode.fast));
   try {
     final faces = await detector.processImage(InputImage.fromFilePath(path));
-    if (faces.isEmpty)
+    if (faces.isEmpty) {
       return const FaceAnalysis(
           faceCount: 0, suggestion: '未检测到人物，可尝试靠近镜头或面向光源');
+    }
     final face = faces
         .reduce((a, b) => a.boundingBox.width > b.boundingBox.width ? a : b);
     final center = face.boundingBox.center;
