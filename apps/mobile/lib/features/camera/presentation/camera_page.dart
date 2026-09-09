@@ -7,6 +7,7 @@ import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -275,6 +276,7 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _motionSubscription?.cancel();
     _controller?.dispose();
     super.dispose();
   }
@@ -288,11 +290,14 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
         child: Column(children: [
           _buildTopBar(),
           Expanded(
-              child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: ClipRRect(
-                      borderRadius: BorderRadius.circular(28),
-                      child: _buildPreview()))),
+              child: Center(
+                  child: AspectRatio(
+                      aspectRatio: _aspectRatio,
+                      child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          child: ClipRRect(
+                              borderRadius: BorderRadius.circular(28),
+                              child: _buildPreview()))))),
           _buildControls(),
         ]),
       ),
@@ -366,10 +371,30 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                               fontSize: 92,
                               fontWeight: FontWeight.w300))),
                 Positioned(
+                    top: 15,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: _LevelIndicator(angle: _levelAngle))),
+                Positioned(
+                    right: 4,
+                    top: 55,
+                    child: RotatedBox(
+                        quarterTurns: 3,
+                        child: SizedBox(
+                            width: 140,
+                            child: Slider(
+                                value: _exposure.clamp(_minExposure, _maxExposure),
+                                min: _minExposure,
+                                max: _maxExposure == _minExposure ? _minExposure + 1 : _maxExposure,
+                                onChanged: _setExposure)))),
+                Positioned(
                     bottom: 18,
                     left: 18,
                     right: 18,
-                    child: _CameraTip(zoom: _zoom)),
+                    child: _CameraTip(
+                        zoom: _zoom,
+                        brightness: _brightness,
+                        suggestion: _compositionSuggestion)),
               ]),
             ));
   }
@@ -377,6 +402,21 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
   Widget _buildControls() => Padding(
         padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
         child: Column(children: [
+          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
+            for (final ratio in const [('1:1', 1.0), ('3:4', .75), ('9:16', .5625)])
+              Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: ChoiceChip(
+                      label: Text(ratio.$1),
+                      selected: _aspectRatio == ratio.$2,
+                      onSelected: (_) => setState(() => _aspectRatio = ratio.$2))),
+            const SizedBox(width: 6),
+            ChoiceChip(
+                label: Text(_burstCount == 1 ? '单拍' : '连拍 5 张'),
+                selected: _burstCount == 5,
+                onSelected: (_) => setState(() => _burstCount = _burstCount == 1 ? 5 : 1)),
+          ]),
+          const SizedBox(height: 8),
           Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [0, 3, 10]
