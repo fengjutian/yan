@@ -4,32 +4,84 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class GeneratePage extends ConsumerWidget {
+class GeneratePage extends ConsumerStatefulWidget {
   const GeneratePage({super.key});
   static const ratios = ['1:1', '16:9', '9:16', '4:3'];
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<GeneratePage> createState() => _GeneratePageState();
+}
+
+class _GeneratePageState extends ConsumerState<GeneratePage> {
+  final _promptController = TextEditingController();
+
+  @override
+  void dispose() {
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openAiAssistant(GenerateController controller) async {
+    final prompt = _promptController.text.trim();
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _AiPromptSheet(currentPrompt: prompt),
+    );
+    if (result == null || !mounted) return;
+    _promptController.value = TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(offset: result.length),
+    );
+    controller.setPrompt(result);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(generateControllerProvider);
     final controller = ref.read(generateControllerProvider.notifier);
     return Scaffold(
       appBar: AppBar(title: const Text('文生图')),
       body: ListView(padding: const EdgeInsets.all(24), children: [
         TextField(
+          controller: _promptController,
           minLines: 4,
           maxLines: 8,
           maxLength: 1500,
           onChanged: controller.setPrompt,
-          decoration: const InputDecoration(
+          decoration: InputDecoration(
               labelText: '画面描述',
               hintText: '例如：一只坐在月球上的橘猫，电影感，柔和轮廓光',
               alignLabelWithHint: true,
+              suffixIcon: Padding(
+                padding: const EdgeInsets.only(right: 8, bottom: 78),
+                child: TextButton.icon(
+                  onPressed: () => _openAiAssistant(controller),
+                  icon: const Icon(Icons.auto_awesome, size: 19),
+                  label: const Text('AI 帮写'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: const Color(0xFF7B5152),
+                    backgroundColor: const Color(0xFFF1E8E1),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              suffixIconConstraints: const BoxConstraints(
+                minWidth: 104,
+                minHeight: 48,
+              ),
               border: OutlineInputBorder()),
         ),
         const SizedBox(height: 20),
         Text('画面比例', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Wrap(spacing: 8, children: [
-          for (final ratio in ratios)
+          for (final ratio in GeneratePage.ratios)
             ChoiceChip(
                 label: Text(ratio),
                 selected: state.aspectRatio == ratio,
@@ -78,6 +130,122 @@ class GeneratePage extends ConsumerWidget {
           )
         ],
       ]),
+    );
+  }
+}
+
+class _AiPromptSheet extends StatelessWidget {
+  const _AiPromptSheet({required this.currentPrompt});
+
+  final String currentPrompt;
+
+  static const _ideas = [
+    (
+      '氛围感人像',
+      Icons.face_retouching_natural,
+      '一位气质自然的年轻女性，松弛的姿态，干净妆容，柔和侧光，暖灰色背景，细腻胶片质感，时尚杂志摄影，克制而高级',
+    ),
+    (
+      '电影场景',
+      Icons.movie_filter_outlined,
+      '雨后的城市街道，人物撑伞缓慢走过，橱窗暖光映在湿润路面，低饱和色彩，电影宽银幕构图，真实光影，安静而有故事感',
+    ),
+    (
+      '高级产品',
+      Icons.diamond_outlined,
+      '极简香水产品静物，天然石材台面，清晨斜射光，柔和阴影，米白与深棕配色，大面积留白，高端品牌广告摄影，细节清晰',
+    ),
+    (
+      '治愈插画',
+      Icons.brush_outlined,
+      '春日午后的安静房间，窗边花瓶与摊开的书，奶油色阳光，手绘肌理，低饱和自然色，轻盈留白，温柔治愈的编辑插画',
+    ),
+  ];
+
+  String get _enhanced =>
+      '$currentPrompt，主体明确，构图简洁，光影自然，低饱和高级配色，细节丰富但不过度锐化，真实材质，画面具有编辑感与叙事氛围';
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        color: Color(0xFFF8F6F1),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4CEC7),
+                borderRadius: BorderRadius.circular(99),
+              ),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, size: 22),
+              const SizedBox(width: 10),
+              Text('AI 辅助生成', style: Theme.of(context).textTheme.titleLarge),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            currentPrompt.isEmpty ? '选择一个方向，快速获得完整画面描述。' : '完善当前描述，或换一个创作方向。',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          if (currentPrompt.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            ListTile(
+              onTap: () => Navigator.pop(context, _enhanced),
+              tileColor: const Color(0xFF292725),
+              textColor: Colors.white,
+              iconColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              leading: const Icon(Icons.auto_fix_high),
+              title: const Text('智能完善当前描述', style: TextStyle(fontWeight: FontWeight.w700)),
+              subtitle: const Text('补充构图、光线与质感', style: TextStyle(color: Color(0xFFD8D3CD))),
+              trailing: const Icon(Icons.arrow_forward_rounded),
+            ),
+          ],
+          const SizedBox(height: 16),
+          Flexible(
+            child: ListView.separated(
+              shrinkWrap: true,
+              itemCount: _ideas.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, index) {
+                final idea = _ideas[index];
+                return ListTile(
+                  onTap: () => Navigator.pop(context, idea.$3),
+                  tileColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                    side: const BorderSide(color: Color(0xFFE5DED6)),
+                  ),
+                  leading: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1E8E1),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(idea.$2, color: const Color(0xFF7B5152)),
+                  ),
+                  title: Text(idea.$1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  trailing: const Icon(Icons.north_west_rounded, size: 18),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
