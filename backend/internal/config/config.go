@@ -56,6 +56,10 @@ type ImageConfig struct {
 }
 
 func Load() (Config, error) {
+	if err := loadEnvFile(); err != nil {
+		return Config{}, err
+	}
+
 	readTimeout, err := duration("HTTP_READ_TIMEOUT", 15*time.Second)
 	if err != nil {
 		return Config{}, err

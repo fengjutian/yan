@@ -25,7 +25,7 @@ API 启动后可访问 `http://localhost:8080/health/live`。
 
 本机需要 Go 1.24，以及可访问的 MySQL 8、Redis 7 和兼容 S3 的对象存储（如 MinIO）。数据库需先执行 `backend/migrations` 中按编号排列的 `*.up.sql`。
 
-1. 参考 `deploy/env.local.example` 设置环境变量。该文件使用 `localhost`；如果依赖部署在其他机器，请改成对应地址。
+1. 将 `deploy/env.local.example` 复制为仓库根目录的 `.env.local`，填写密码和密钥。该文件使用 `localhost`；如果依赖部署在其他机器，请改成对应地址。后端启动时会自动读取该文件。
 2. 在两个终端中分别启动 API 和 Worker：
 
 ```powershell
@@ -36,6 +36,13 @@ go run ./cmd/api
 ```powershell
 Set-Location backend
 go run ./cmd/worker
+```
+
+也可以通过 `ENV_FILE` 指定其他配置文件；系统中已经设置的环境变量优先级最高：
+
+```powershell
+$env:ENV_FILE = "D:\config\ai-image-studio.env"
+go run ./cmd/api
 ```
 
 也可以先编译，再直接运行二进制：
