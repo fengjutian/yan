@@ -1,4 +1,3 @@
-import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
 import 'package:ai_image_studio/features/auth/presentation/splash_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
@@ -13,27 +12,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final session = ref.watch(
-    authControllerProvider.select(
-      (state) => (initialized: state.initialized, userId: state.user?.id),
-    ),
-  );
-
   final router = GoRouter(
     initialLocation: '/splash',
-    redirect: (context, state) {
-      final location = state.matchedLocation;
-      final isAuthRoute = location == '/login' || location == '/register';
-
-      if (!session.initialized) {
-        return location == '/splash' ? null : '/splash';
-      }
-      if (session.userId == null) {
-        return isAuthRoute ? null : '/login';
-      }
-      if (isAuthRoute || location == '/splash') return '/home';
-      return null;
-    },
     routes: [
       GoRoute(
         path: '/splash',
