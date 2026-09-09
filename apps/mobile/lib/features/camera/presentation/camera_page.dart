@@ -1,20 +1,25 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:ai_image_studio/features/camera/data/camera_session.dart';
+import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
 enum CompositionGuide { thirds, center, symmetry }
 
-class CameraPage extends StatefulWidget {
+class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({super.key});
 
   @override
-  State<CameraPage> createState() => _CameraPageState();
+  ConsumerState<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
+class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObserver {
   final _picker = ImagePicker();
   CameraController? _controller;
   List<CameraDescription> _cameras = const [];
@@ -31,12 +36,28 @@ class _CameraPageState extends State<CameraPage> with WidgetsBindingObserver {
   double _zoom = 1;
   double _minZoom = 1;
   double _maxZoom = 1;
+  double _exposure = 0;
+  double _minExposure = 0;
+  double _maxExposure = 0;
+  double _levelAngle = 0;
+  double _brightness = 128;
+  double _aspectRatio = 3 / 4;
+  int _burstCount = 1;
+  String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
   Offset? _focusPoint;
+  StreamSubscription<AccelerometerEvent>? _motionSubscription;
+  DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _motionSubscription = accelerometerEventStream(
+      samplingPeriod: const Duration(milliseconds: 120),
+    ).listen((event) {
+      final angle = math.atan2(event.x, event.y) * 180 / math.pi;
+      if (mounted) setState(() => _levelAngle = angle.clamp(-45, 45));
+    }, onError: (_) {});
     unawaited(_loadCameras());
   }
 
