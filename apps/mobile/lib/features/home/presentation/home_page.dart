@@ -66,7 +66,7 @@ class _BrandMark extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 34, height: 34,
     decoration: BoxDecoration(
-      gradient: const LinearGradient(colors: [Color(0xFFFF8CAB), AppColors.rose]),
+      color: AppColors.rose,
       borderRadius: BorderRadius.circular(12),
       boxShadow: const [BoxShadow(color: Color(0x33D95F87), blurRadius: 14, offset: Offset(0, 6))],
     ),
@@ -102,32 +102,75 @@ class _HeroCreateCard extends StatelessWidget {
         height: 226,
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius: BorderRadius.circular(30),
-          gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFFE5ED), Color(0xFFF2E9FF)]),
-          boxShadow: const [BoxShadow(color: Color(0x1FD95F87), blurRadius: 30, offset: Offset(0, 14))],
+          border: Border.all(color: AppColors.line),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0F3B2730),
+              blurRadius: 24,
+              offset: Offset(0, 10),
+            ),
+          ],
         ),
         child: Stack(children: [
-          Positioned(right: 3, top: 4, child: Transform.rotate(
-            angle: -.13,
+          Positioned(
+            right: -24,
+            top: -30,
             child: Container(
-              width: 82, height: 82,
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: .64), borderRadius: BorderRadius.circular(27), border: Border.all(color: Colors.white)),
-              child: const Icon(Icons.auto_awesome, size: 36, color: AppColors.rose),
+              width: 150,
+              height: 150,
+              decoration: const BoxDecoration(
+                color: AppColors.blush,
+                shape: BoxShape.circle,
+              ),
             ),
-          )),
-          const Positioned(right: 0, top: 0, child: Icon(Icons.star_rounded, color: Colors.white, size: 24)),
+          ),
+          Positioned(
+            right: 18,
+            top: 18,
+            child: Transform.rotate(
+              angle: -.10,
+              child: Container(
+                width: 74,
+                height: 74,
+                decoration: BoxDecoration(
+                  color: AppColors.ink,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: Colors.white70, borderRadius: BorderRadius.circular(99)),
-              child: const Text('AI 灵感画布', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+              decoration: BoxDecoration(
+                color: AppColors.blush,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: const Text(
+                'AI 灵感画布',
+                style: TextStyle(
+                  color: AppColors.rose,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
             const Spacer(),
             const Text('一句话，生成\n你的想象', style: TextStyle(fontSize: 25, height: 1.2, fontWeight: FontWeight.w800)),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(color: AppColors.ink, borderRadius: BorderRadius.circular(14)),
+              decoration: BoxDecoration(
+                color: AppColors.rose,
+                borderRadius: BorderRadius.circular(14),
+              ),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [
                 Text('开始创作', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
                 SizedBox(width: 8), Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18),
