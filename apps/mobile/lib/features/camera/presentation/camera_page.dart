@@ -96,9 +96,12 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
       await controller.initialize();
       _minZoom = await controller.getMinZoomLevel();
       _maxZoom = await controller.getMaxZoomLevel();
+      _minExposure = await controller.getMinExposureOffset();
+      _maxExposure = await controller.getMaxExposureOffset();
       _zoom = _minZoom;
       _flashMode = FlashMode.off;
       await controller.setFlashMode(_flashMode);
+      await _startLightMonitoring(controller);
       if (mounted) setState(() => _initializing = false);
     } on CameraException catch (error) {
       if (mounted) {
@@ -107,6 +110,26 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
           _initializing = false;
         });
       }
+    }
+  }
+
+  Future<void> _startLightMonitoring(CameraController controller) async {
+    try {
+      await controller.startImageStream((image) {
+        final now = DateTime.now();
+        if (now.difference(_lastFrameAt).inMilliseconds < 600 || image.planes.isEmpty) return;
+        _lastFrameAt = now;
+        final bytes = image.planes.first.bytes;
+        var total = 0;
+        var count = 0;
+        for (var index = 0; index < bytes.length; index += 80) {
+          total += bytes[index];
+          count++;
+        }
+        if (mounted && count > 0) setState(() => _brightness = total / count);
+      });
+    } on CameraException {
+      // Some web cameras do not expose an image stream.
     }
   }
 
@@ -159,9 +182,23 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
         await Future<void>.delayed(const Duration(seconds: 1));
       }
       if (mounted) setState(() => _countdown = 0);
-      final file = await controller.takePicture();
-      final bytes = await file.readAsBytes();
-      if (mounted) setState(() => _capturedImage = bytes);
+      if (controller.value.isStreamingImages) await controller.stopImageStream();
+      final values = <Uint8List>[];
+      XFile? analysisFile;
+      for (var index = 0; index < _burstCount; index++) {
+        final file = await controller.takePicture();
+        analysisFile ??= file;
+        values.add(await file.readAsBytes());
+        if (index + 1 < _burstCount) await Future<void>.delayed(const Duration(milliseconds: 220));
+      }
+      await ref.read(cameraSessionProvider.notifier).setPhotos(values);
+      final session = ref.read(cameraSessionProvider);
+      final size = controller.value.previewSize;
+      if (analysisFile != null && size != null) {
+        final analysis = await analyzeFaces(analysisFile.path, size.width.round(), size.height.round());
+        _compositionSuggestion = analysis.suggestion;
+      }
+      if (mounted) setState(() => _capturedImage = session.selected?.bytes);
     } on CameraException catch (error) {
       if (mounted) _showMessage(_cameraError(error));
     } finally {
@@ -174,6 +211,7 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
         await _picker.pickImage(source: ImageSource.gallery, imageQuality: 95);
     if (file == null) return;
     final bytes = await file.readAsBytes();
+    await ref.read(cameraSessionProvider.notifier).setPhotos([bytes]);
     if (mounted) setState(() => _capturedImage = bytes);
   }
 
@@ -200,6 +238,13 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
     final value = (_baseZoom * scale).clamp(_minZoom, _maxZoom).toDouble();
     await controller.setZoomLevel(value);
     if (mounted) setState(() => _zoom = value);
+  }
+
+  Future<void> _setExposure(double value) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final applied = await controller.setExposureOffset(value);
+    if (mounted) setState(() => _exposure = applied);
   }
 
   void _showMessage(String message) => ScaffoldMessenger.of(context)
