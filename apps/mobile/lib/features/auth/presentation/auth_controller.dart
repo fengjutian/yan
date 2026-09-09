@@ -61,10 +61,10 @@ class AuthController extends StateNotifier<AuthState> {
     try {
       var user = await _repository.restoreSession();
       if (user == null) {
-		final session = await _repository.guest();
-		user = session.user;
-	  }
-	  state = AuthState(user: user, initialized: true);
+        final session = await _repository.guest();
+        user = session.user;
+      }
+      state = AuthState(user: user, initialized: true);
     } catch (error) {
       state = AuthState(initialized: true, errorMessage: error.toString());
     }

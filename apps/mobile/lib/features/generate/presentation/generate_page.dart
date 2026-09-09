@@ -25,7 +25,7 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
   Future<void> _openAiAssistant(GenerateController controller) async {
     final prompt = _promptController.text.trim();
     if (prompt.isNotEmpty) {
-	  _previousPrompt = prompt;
+      _previousPrompt = prompt;
       final result = await controller.enhancePrompt();
       if (result == null || !mounted) return;
       _applyPrompt(result, controller);
@@ -54,11 +54,11 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
   }
 
   void _undoEnhancement() {
-	final previous = _previousPrompt;
-	if (previous == null) return;
-	final controller = ref.read(generateControllerProvider.notifier);
-	_applyPrompt(previous, controller);
-	_previousPrompt = null;
+    final previous = _previousPrompt;
+    if (previous == null) return;
+    final controller = ref.read(generateControllerProvider.notifier);
+    _applyPrompt(previous, controller);
+    _previousPrompt = null;
   }
 
   void _applyPrompt(String result, GenerateController controller) {
@@ -89,9 +89,14 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
               suffixIcon: Padding(
                 padding: const EdgeInsets.only(right: 8, bottom: 78),
                 child: TextButton.icon(
-                  onPressed: state.enhancing ? null : () => _openAiAssistant(controller),
+                  onPressed: state.enhancing
+                      ? null
+                      : () => _openAiAssistant(controller),
                   icon: state.enhancing
-                      ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(strokeWidth: 2))
                       : const Icon(Icons.auto_awesome, size: 19),
                   label: Text(state.enhancing ? '生成中' : 'AI 帮写'),
                   style: TextButton.styleFrom(
@@ -254,7 +259,8 @@ class _AiPromptSheet extends StatelessWidget {
                     ),
                     child: Icon(idea.$2, color: const Color(0xFF7B5152)),
                   ),
-                  title: Text(idea.$1, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  title: Text(idea.$1,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                   trailing: const Icon(Icons.north_west_rounded, size: 18),
                 );
               },

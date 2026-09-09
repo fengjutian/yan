@@ -25,19 +25,19 @@ class MainShell extends StatelessWidget {
             ),
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.home_outlined),
-                selectedIcon: Icon(Icons.home),
-                label: '首页',
+                icon: Icon(Icons.explore_outlined),
+                selectedIcon: Icon(Icons.explore),
+                label: '灵感',
               ),
               NavigationDestination(
-                icon: Icon(Icons.auto_awesome_outlined),
-                selectedIcon: Icon(Icons.auto_awesome),
-                label: '创作',
+                icon: Icon(Icons.camera_alt_outlined),
+                selectedIcon: Icon(Icons.camera_alt),
+                label: '相机',
               ),
               NavigationDestination(
-                icon: Icon(Icons.photo_library_outlined),
-                selectedIcon: Icon(Icons.photo_library),
-                label: '作品',
+                icon: Icon(Icons.auto_fix_high_outlined),
+                selectedIcon: Icon(Icons.auto_fix_high),
+                label: '工作室',
               ),
               NavigationDestination(
                 icon: Icon(Icons.person_outline),

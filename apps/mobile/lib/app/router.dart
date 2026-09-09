@@ -7,6 +7,8 @@ import 'package:ai_image_studio/features/history/presentation/history_page.dart'
 import 'package:ai_image_studio/features/history/presentation/task_detail_page.dart';
 import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/profile_page.dart';
+import 'package:ai_image_studio/features/camera/presentation/camera_page.dart';
+import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -36,13 +38,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/home', builder: (_, __) => const HomePage()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(
-              path: '/create/text-to-image',
-              builder: (_, __) => const GeneratePage(),
-            ),
+            GoRoute(path: '/camera', builder: (_, __) => const CameraPage()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/history', builder: (_, __) => const HistoryPage()),
+            GoRoute(path: '/studio', builder: (_, __) => const StudioPage()),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
@@ -52,6 +51,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
           path: '/assets/upload',
           builder: (context, state) => const AssetUploadPage()),
+      GoRoute(
+        path: '/create/text-to-image',
+        builder: (_, __) => const GeneratePage(),
+      ),
+      GoRoute(path: '/history', builder: (_, __) => const HistoryPage()),
       GoRoute(
         path: '/create/reference',
         builder: (context, state) => const ReferencePage(),
