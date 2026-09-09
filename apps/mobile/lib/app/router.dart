@@ -12,6 +12,7 @@ import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:typed_data';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
@@ -58,7 +59,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/history', builder: (_, __) => const HistoryPage()),
       GoRoute(
         path: '/create/reference',
-        builder: (context, state) => const ReferencePage(),
+        builder: (context, state) => ReferencePage(initialBytes: state.extra as Uint8List?),
       ),
       GoRoute(
         path: '/task/:taskId',

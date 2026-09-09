@@ -4,8 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class ReferencePage extends ConsumerStatefulWidget {
-  const ReferencePage({this.loadStylesOnStart = true, super.key});
+  const ReferencePage({this.loadStylesOnStart = true, this.initialBytes, super.key});
   final bool loadStylesOnStart;
+  final Uint8List? initialBytes;
   @override
   ConsumerState<ReferencePage> createState() => _ReferencePageState();
 }
@@ -18,6 +19,9 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
       Future<void>.microtask(
         () => ref.read(referenceControllerProvider.notifier).loadStyles(),
       );
+    }
+    if (widget.initialBytes != null) {
+      Future<void>.microtask(() => ref.read(referenceControllerProvider.notifier).uploadBytes(widget.initialBytes!));
     }
   }
 
@@ -118,3 +122,4 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
     );
   }
 }
+import 'dart:typed_data';

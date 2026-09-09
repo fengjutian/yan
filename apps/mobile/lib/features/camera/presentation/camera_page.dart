@@ -475,6 +475,44 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                       borderRadius: BorderRadius.circular(24),
                       child: Image.memory(_capturedImage!,
                           fit: BoxFit.contain, width: double.infinity)))),
+          if (ref.watch(cameraSessionProvider).photos.length > 1)
+            SizedBox(
+                height: 74,
+                child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    itemCount: ref.watch(cameraSessionProvider).photos.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, index) {
+                      final photo = ref.watch(cameraSessionProvider).photos[index];
+                      return GestureDetector(
+                          onTap: () {
+                            ref.read(cameraSessionProvider.notifier).select(index);
+                            setState(() => _capturedImage = photo.bytes);
+                          },
+                          child: Stack(children: [
+                            ClipRRect(
+                                borderRadius: BorderRadius.circular(9),
+                                child: Image.memory(photo.bytes,
+                                    width: 58, height: 58, fit: BoxFit.cover)),
+                            if (index == 0)
+                              const Positioned(
+                                  left: 3,
+                                  top: 3,
+                                  child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                          color: Colors.black54,
+                                          borderRadius: BorderRadius.all(Radius.circular(5))),
+                                      child: Padding(
+                                          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                                          child: Text('最佳', style: TextStyle(color: Colors.white, fontSize: 9)))))
+                          ]));
+                    })),
+          Padding(
+              padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+              child: Text(_compositionSuggestion,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 12))),
           Padding(
               padding: const EdgeInsets.all(22),
               child: Row(children: [
@@ -485,9 +523,9 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                 const SizedBox(width: 12),
                 Expanded(
                     child: FilledButton.icon(
-                        onPressed: () => _showMessage('照片已准备好，可进入工作室编辑'),
+                        onPressed: () => context.go('/studio'),
                         icon: const Icon(Icons.auto_fix_high),
-                        label: const Text('使用照片'))),
+                        label: const Text('进入工作室'))),
               ])),
         ])),
       );
@@ -504,9 +542,30 @@ class _FocusRing extends StatelessWidget {
           borderRadius: BorderRadius.circular(4)));
 }
 
+class _LevelIndicator extends StatelessWidget {
+  const _LevelIndicator({required this.angle});
+  final double angle;
+  @override
+  Widget build(BuildContext context) {
+    final level = angle.abs() < 2.5;
+    return Transform.rotate(
+        angle: angle * math.pi / 180,
+        child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            width: level ? 86 : 58,
+            height: 3,
+            decoration: BoxDecoration(
+                color: level ? Colors.amber : Colors.white70,
+                borderRadius: BorderRadius.circular(99))));
+  }
+}
+
 class _CameraTip extends StatelessWidget {
-  const _CameraTip({required this.zoom});
+  const _CameraTip(
+      {required this.zoom, required this.brightness, required this.suggestion});
   final double zoom;
+  final double brightness;
+  final String suggestion;
   @override
   Widget build(BuildContext context) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -515,9 +574,9 @@ class _CameraTip extends StatelessWidget {
       child: Row(children: [
         const Icon(Icons.auto_awesome, color: Colors.white, size: 16),
         const SizedBox(width: 8),
-        const Expanded(
-            child: Text('让主体靠近交叉点，画面会更有呼吸感',
-                style: TextStyle(color: Colors.white, fontSize: 12))),
+        Expanded(
+            child: Text(brightness < 58 ? '光线较暗，建议靠近光源或开启闪光灯' : suggestion,
+                style: const TextStyle(color: Colors.white, fontSize: 12))),
         Text('${zoom.toStringAsFixed(1)}×',
             style: const TextStyle(color: Colors.white70, fontSize: 12))
       ]));
