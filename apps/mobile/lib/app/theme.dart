@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 
 abstract final class AppColors {
-  static const ink = Color(0xFF27212D);
-  static const muted = Color(0xFF756D7B);
-  static const rose = Color(0xFFD95F87);
-  static const blush = Color(0xFFFFE8EF);
-  static const lavender = Color(0xFFEDE7FF);
-  static const cream = Color(0xFFFFFAF7);
-  static const line = Color(0xFFEAE3E8);
+  static const ink = Color(0xFF292725);
+  static const muted = Color(0xFF77716B);
+  static const rose = Color(0xFF7B5152);
+  static const blush = Color(0xFFF1E8E1);
+  static const lavender = Color(0xFFE5E9E1);
+  static const cream = Color(0xFFF8F6F1);
+  static const line = Color(0xFFE5DED6);
 }
 
 ThemeData buildAppTheme() {
@@ -15,15 +15,15 @@ ThemeData buildAppTheme() {
     primary: AppColors.rose,
     onPrimary: Colors.white,
     primaryContainer: AppColors.blush,
-    onPrimaryContainer: Color(0xFF6D2941),
-    secondary: Color(0xFF8066B2),
+    onPrimaryContainer: Color(0xFF4E3031),
+    secondary: Color(0xFF687267),
     secondaryContainer: AppColors.lavender,
-    onSecondaryContainer: Color(0xFF3D2C62),
+    onSecondaryContainer: Color(0xFF343B34),
     surface: Colors.white,
     onSurface: AppColors.ink,
-    surfaceContainerHighest: Color(0xFFF5F0F4),
+    surfaceContainerHighest: Color(0xFFF0EDE7),
     outline: AppColors.line,
-    outlineVariant: Color(0xFFF2EBEF),
+    outlineVariant: Color(0xFFEDE8E1),
     error: Color(0xFFBA3A49),
   );
   final base = ThemeData(
@@ -66,6 +66,8 @@ ThemeData buildAppTheme() {
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
+        backgroundColor: AppColors.ink,
+        foregroundColor: Colors.white,
         minimumSize: const Size(0, 54),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),

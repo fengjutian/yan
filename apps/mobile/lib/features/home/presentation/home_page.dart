@@ -47,7 +47,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ]),
             const SizedBox(height: 14),
             Row(children: [
-              Expanded(child: _InspirationCard(icon: Icons.face_retouching_natural, color: AppColors.lavender, iconColor: const Color(0xFF765AA7), title: '人物写真', description: '保留你的独特气质', onTap: () => context.push('/create/reference'))),
+              Expanded(child: _InspirationCard(icon: Icons.face_retouching_natural, color: AppColors.lavender, iconColor: const Color(0xFF667065), title: '人物写真', description: '保留你的独特气质', onTap: () => context.push('/create/reference'))),
               const SizedBox(width: 12),
               Expanded(child: _InspirationCard(icon: Icons.collections_outlined, color: const Color(0xFFFFEEDB), iconColor: const Color(0xFFC7793B), title: '作品画廊', description: '收藏每一次心动', onTap: () => context.push('/history'))),
             ]),
@@ -68,7 +68,7 @@ class _BrandMark extends StatelessWidget {
     decoration: BoxDecoration(
       color: AppColors.rose,
       borderRadius: BorderRadius.circular(12),
-      boxShadow: const [BoxShadow(color: Color(0x33D95F87), blurRadius: 14, offset: Offset(0, 6))],
+      boxShadow: const [BoxShadow(color: Color(0x247B5152), blurRadius: 14, offset: Offset(0, 6))],
     ),
     child: const Icon(Icons.auto_awesome, color: Colors.white, size: 18),
   );
@@ -168,7 +168,7 @@ class _HeroCreateCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.rose,
+                color: AppColors.ink,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: const Row(mainAxisSize: MainAxisSize.min, children: [

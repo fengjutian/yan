@@ -13,7 +13,7 @@ class MainShell extends StatelessWidget {
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           color: Colors.white,
-          border: Border(top: BorderSide(color: Color(0xFFF0E9ED))),
+          border: Border(top: BorderSide(color: Color(0xFFE8E2DA))),
         ),
         child: SafeArea(
           top: false,
