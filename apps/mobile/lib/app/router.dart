@@ -59,7 +59,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/history', builder: (_, __) => const HistoryPage()),
       GoRoute(
         path: '/create/reference',
-        builder: (context, state) => ReferencePage(initialBytes: state.extra as Uint8List?),
+        builder: (context, state) =>
+            ReferencePage(initialBytes: state.extra as Uint8List?),
       ),
       GoRoute(
         path: '/task/:taskId',

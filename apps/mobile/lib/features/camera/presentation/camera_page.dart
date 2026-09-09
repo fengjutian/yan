@@ -20,7 +20,8 @@ class CameraPage extends ConsumerStatefulWidget {
   ConsumerState<CameraPage> createState() => _CameraPageState();
 }
 
-class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObserver {
+class _CameraPageState extends ConsumerState<CameraPage>
+    with WidgetsBindingObserver {
   final _picker = ImagePicker();
   CameraController? _controller;
   List<CameraDescription> _cameras = const [];
@@ -118,7 +119,8 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
     try {
       await controller.startImageStream((image) {
         final now = DateTime.now();
-        if (now.difference(_lastFrameAt).inMilliseconds < 600 || image.planes.isEmpty) return;
+        if (now.difference(_lastFrameAt).inMilliseconds < 600 ||
+            image.planes.isEmpty) return;
         _lastFrameAt = now;
         final bytes = image.planes.first.bytes;
         var total = 0;
@@ -183,20 +185,23 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
         await Future<void>.delayed(const Duration(seconds: 1));
       }
       if (mounted) setState(() => _countdown = 0);
-      if (controller.value.isStreamingImages) await controller.stopImageStream();
+      if (controller.value.isStreamingImages)
+        await controller.stopImageStream();
       final values = <Uint8List>[];
       XFile? analysisFile;
       for (var index = 0; index < _burstCount; index++) {
         final file = await controller.takePicture();
         analysisFile ??= file;
         values.add(await file.readAsBytes());
-        if (index + 1 < _burstCount) await Future<void>.delayed(const Duration(milliseconds: 220));
+        if (index + 1 < _burstCount)
+          await Future<void>.delayed(const Duration(milliseconds: 220));
       }
       await ref.read(cameraSessionProvider.notifier).setPhotos(values);
       final session = ref.read(cameraSessionProvider);
       final size = controller.value.previewSize;
       if (analysisFile != null && size != null) {
-        final analysis = await analyzeFaces(analysisFile.path, size.width.round(), size.height.round());
+        final analysis = await analyzeFaces(
+            analysisFile.path, size.width.round(), size.height.round());
         _compositionSuggestion = analysis.suggestion;
       }
       if (mounted) setState(() => _capturedImage = session.selected?.bytes);
@@ -383,9 +388,12 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                         child: SizedBox(
                             width: 140,
                             child: Slider(
-                                value: _exposure.clamp(_minExposure, _maxExposure),
+                                value:
+                                    _exposure.clamp(_minExposure, _maxExposure),
                                 min: _minExposure,
-                                max: _maxExposure == _minExposure ? _minExposure + 1 : _maxExposure,
+                                max: _maxExposure == _minExposure
+                                    ? _minExposure + 1
+                                    : _maxExposure,
                                 onChanged: _setExposure)))),
                 Positioned(
                     bottom: 18,
@@ -403,18 +411,24 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
         padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
         child: Column(children: [
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (final ratio in const [('1:1', 1.0), ('3:4', .75), ('9:16', .5625)])
+            for (final ratio in const [
+              ('1:1', 1.0),
+              ('3:4', .75),
+              ('9:16', .5625)
+            ])
               Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
                   child: ChoiceChip(
                       label: Text(ratio.$1),
                       selected: _aspectRatio == ratio.$2,
-                      onSelected: (_) => setState(() => _aspectRatio = ratio.$2))),
+                      onSelected: (_) =>
+                          setState(() => _aspectRatio = ratio.$2))),
             const SizedBox(width: 6),
             ChoiceChip(
                 label: Text(_burstCount == 1 ? '单拍' : '连拍 5 张'),
                 selected: _burstCount == 5,
-                onSelected: (_) => setState(() => _burstCount = _burstCount == 1 ? 5 : 1)),
+                onSelected: (_) =>
+                    setState(() => _burstCount = _burstCount == 1 ? 5 : 1)),
           ]),
           const SizedBox(height: 8),
           Row(
@@ -480,14 +494,18 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                 height: 74,
                 child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     itemCount: ref.watch(cameraSessionProvider).photos.length,
                     separatorBuilder: (_, __) => const SizedBox(width: 8),
                     itemBuilder: (context, index) {
-                      final photo = ref.watch(cameraSessionProvider).photos[index];
+                      final photo =
+                          ref.watch(cameraSessionProvider).photos[index];
                       return GestureDetector(
                           onTap: () {
-                            ref.read(cameraSessionProvider.notifier).select(index);
+                            ref
+                                .read(cameraSessionProvider.notifier)
+                                .select(index);
                             setState(() => _capturedImage = photo.bytes);
                           },
                           child: Stack(children: [
@@ -502,10 +520,15 @@ class _CameraPageState extends ConsumerState<CameraPage> with WidgetsBindingObse
                                   child: DecoratedBox(
                                       decoration: BoxDecoration(
                                           color: Colors.black54,
-                                          borderRadius: BorderRadius.all(Radius.circular(5))),
+                                          borderRadius: BorderRadius.all(
+                                              Radius.circular(5))),
                                       child: Padding(
-                                          padding: EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                                          child: Text('最佳', style: TextStyle(color: Colors.white, fontSize: 9)))))
+                                          padding: EdgeInsets.symmetric(
+                                              horizontal: 5, vertical: 2),
+                                          child: Text('最佳',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 9)))))
                           ]));
                     })),
           Padding(

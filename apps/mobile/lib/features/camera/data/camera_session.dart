@@ -20,12 +20,15 @@ class CameraSessionController extends StateNotifier<CameraSession> {
   CameraSessionController() : super(const CameraSession());
 
   Future<void> setPhotos(List<Uint8List> values) async {
-    final photos = values.map((bytes) => CapturedPhoto(bytes: bytes, score: _score(bytes))).toList();
+    final photos = values
+        .map((bytes) => CapturedPhoto(bytes: bytes, score: _score(bytes)))
+        .toList();
     photos.sort((a, b) => b.score.compareTo(a.score));
     state = CameraSession(photos: photos);
   }
 
-  void select(int index) => state = CameraSession(photos: state.photos, selectedIndex: index);
+  void select(int index) =>
+      state = CameraSession(photos: state.photos, selectedIndex: index);
   void clear() => state = const CameraSession();
 
   double _score(Uint8List bytes) {
@@ -52,4 +55,6 @@ class CameraSessionController extends StateNotifier<CameraSession> {
   }
 }
 
-final cameraSessionProvider = StateNotifierProvider<CameraSessionController, CameraSession>((ref) => CameraSessionController());
+final cameraSessionProvider =
+    StateNotifierProvider<CameraSessionController, CameraSession>(
+        (ref) => CameraSessionController());

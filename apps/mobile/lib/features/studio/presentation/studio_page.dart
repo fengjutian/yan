@@ -9,47 +9,57 @@ class StudioPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final captured = ref.watch(cameraSessionProvider).selected;
     return Scaffold(
-        appBar: AppBar(title: const Text('工作室')),
-        body: ListView(padding: const EdgeInsets.all(20), children: [
-          Text('让照片成为作品', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: 8),
-          Text('导入照片，选择适合它的创作方式。',
-              style: Theme.of(context).textTheme.bodyLarge),
-          if (captured != null) ...[
-            const SizedBox(height: 20),
-            ClipRRect(
-                borderRadius: BorderRadius.circular(22),
-                child: Stack(alignment: Alignment.bottomLeft, children: [
-                  Image.memory(captured.bytes, height: 220, width: double.infinity, fit: BoxFit.cover),
-                  Container(margin: const EdgeInsets.all(12), padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(99)), child: Text('相机成片 · 质量 ${captured.score.round()} 分', style: const TextStyle(color: Colors.white, fontSize: 12))),
-                ])),
-          ],
-          const SizedBox(height: 26),
-          _StudioCard(
-              icon: Icons.auto_fix_high,
-              title: 'AI 风格迁移',
-              subtitle: '保留人物特征，重塑画面氛围',
-              onTap: () => context.push('/create/reference', extra: captured?.bytes)),
-          const SizedBox(height: 12),
-          _StudioCard(
-              icon: Icons.add_photo_alternate_outlined,
-              title: '导入照片',
-              subtitle: '上传原图并开始编辑',
-              onTap: () => context.push('/assets/upload')),
-          const SizedBox(height: 12),
-          _StudioCard(
-              icon: Icons.draw_outlined,
-              title: 'AI 图像创作',
-              subtitle: '用一句话创造全新画面',
-              onTap: () => context.push('/create/text-to-image')),
-          const SizedBox(height: 12),
-          _StudioCard(
-              icon: Icons.collections_outlined,
-              title: '我的作品',
-              subtitle: '查看成片与历史版本',
-              onTap: () => context.push('/history')),
-        ]),
-      );
+      appBar: AppBar(title: const Text('工作室')),
+      body: ListView(padding: const EdgeInsets.all(20), children: [
+        Text('让照片成为作品', style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 8),
+        Text('导入照片，选择适合它的创作方式。', style: Theme.of(context).textTheme.bodyLarge),
+        if (captured != null) ...[
+          const SizedBox(height: 20),
+          ClipRRect(
+              borderRadius: BorderRadius.circular(22),
+              child: Stack(alignment: Alignment.bottomLeft, children: [
+                Image.memory(captured.bytes,
+                    height: 220, width: double.infinity, fit: BoxFit.cover),
+                Container(
+                    margin: const EdgeInsets.all(12),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(99)),
+                    child: Text('相机成片 · 质量 ${captured.score.round()} 分',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 12))),
+              ])),
+        ],
+        const SizedBox(height: 26),
+        _StudioCard(
+            icon: Icons.auto_fix_high,
+            title: 'AI 风格迁移',
+            subtitle: '保留人物特征，重塑画面氛围',
+            onTap: () =>
+                context.push('/create/reference', extra: captured?.bytes)),
+        const SizedBox(height: 12),
+        _StudioCard(
+            icon: Icons.add_photo_alternate_outlined,
+            title: '导入照片',
+            subtitle: '上传原图并开始编辑',
+            onTap: () => context.push('/assets/upload')),
+        const SizedBox(height: 12),
+        _StudioCard(
+            icon: Icons.draw_outlined,
+            title: 'AI 图像创作',
+            subtitle: '用一句话创造全新画面',
+            onTap: () => context.push('/create/text-to-image')),
+        const SizedBox(height: 12),
+        _StudioCard(
+            icon: Icons.collections_outlined,
+            title: '我的作品',
+            subtitle: '查看成片与历史版本',
+            onTap: () => context.push('/history')),
+      ]),
+    );
   }
 }
 

@@ -4,4 +4,5 @@ class FaceAnalysis {
   final String suggestion;
 }
 
-Future<FaceAnalysis> analyzeFaces(String path, int width, int height) async => const FaceAnalysis();
+Future<FaceAnalysis> analyzeFaces(String path, int width, int height) async =>
+    const FaceAnalysis();

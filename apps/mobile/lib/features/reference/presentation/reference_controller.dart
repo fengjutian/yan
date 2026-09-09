@@ -132,15 +132,24 @@ class ReferenceController extends StateNotifier<ReferenceState> {
       state = state.copyWith(errorMessage: '图片不能超过 10 MB');
       return;
     }
-    state = state.copyWith(previewBytes: bytes, busy: true, uploadProgress: 0, clearError: true);
+    state = state.copyWith(
+        previewBytes: bytes, busy: true, uploadProgress: 0, clearError: true);
     try {
-      final file = XFile.fromData(bytes, mimeType: 'image/jpeg', name: 'camera-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file = XFile.fromData(bytes,
+          mimeType: 'image/jpeg',
+          name: 'camera-${DateTime.now().millisecondsSinceEpoch}.jpg');
       final asset = await _assets.upload(file, onProgress: (progress) {
-        state = state.copyWith(previewBytes: bytes, busy: true, uploadProgress: progress);
+        state = state.copyWith(
+            previewBytes: bytes, busy: true, uploadProgress: progress);
       });
-      state = state.copyWith(previewBytes: bytes, sourceAsset: asset, busy: false, uploadProgress: 1);
+      state = state.copyWith(
+          previewBytes: bytes,
+          sourceAsset: asset,
+          busy: false,
+          uploadProgress: 1);
     } catch (error) {
-      state = state.copyWith(previewBytes: bytes, busy: false, errorMessage: error.toString());
+      state = state.copyWith(
+          previewBytes: bytes, busy: false, errorMessage: error.toString());
     }
   }
 
