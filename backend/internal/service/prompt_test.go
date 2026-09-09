@@ -1,10 +1,16 @@
 package service
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/yan/ai-image-studio/backend/internal/repository"
 )
+
+type promptConfigStub struct{ value *repository.AIModelConfig }
+func (s promptConfigStub) GetAIModelConfig(context.Context) (*repository.AIModelConfig, error) { return s.value, nil }
 
 func TestPromptServiceEnhance(t *testing.T) {
 	t.Parallel()
@@ -17,7 +23,7 @@ func TestPromptServiceEnhance(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := NewPromptService("test-key", server.URL, "test-model").Enhance(t.Context(), "小猫在月球散步")
+	result, err := NewPromptService(promptConfigStub{&repository.AIModelConfig{APIKey: "test-key", BaseURL: server.URL, Model: "test-model", Enabled: true}}).Enhance(t.Context(), "小猫在月球散步")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +34,7 @@ func TestPromptServiceEnhance(t *testing.T) {
 
 func TestPromptServiceRejectsEmptyPrompt(t *testing.T) {
 	t.Parallel()
-	_, err := NewPromptService("key", "https://example.test", "model").Enhance(t.Context(), "  ")
+	_, err := NewPromptService(promptConfigStub{&repository.AIModelConfig{APIKey: "key", BaseURL: "https://example.test", Model: "model", Enabled: true}}).Enhance(t.Context(), "  ")
 	if err == nil {
 		t.Fatal("expected invalid prompt error")
 	}

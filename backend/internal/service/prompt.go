@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/yan/ai-image-studio/backend/internal/repository"
 )
 
 var (
@@ -18,18 +20,18 @@ var (
 )
 
 type PromptService struct {
-	apiKey  string
-	baseURL string
-	model   string
-	client  *http.Client
+	config PromptConfigProvider
+	client *http.Client
 }
 
-func NewPromptService(apiKey, baseURL, model string) *PromptService {
+type PromptConfigProvider interface {
+	GetAIModelConfig(context.Context) (*repository.AIModelConfig, error)
+}
+
+func NewPromptService(config PromptConfigProvider) *PromptService {
 	return &PromptService{
-		apiKey:  strings.TrimSpace(apiKey),
-		baseURL: strings.TrimRight(baseURL, "/"),
-		model:   model,
-		client:  &http.Client{Timeout: 14 * time.Second},
+		config: config,
+		client: &http.Client{Timeout: 14 * time.Second},
 	}
 }
 
@@ -38,11 +40,12 @@ func (s *PromptService) Enhance(ctx context.Context, prompt string) (string, err
 	if prompt == "" || len([]rune(prompt)) > 1500 {
 		return "", ErrInvalidPrompt
 	}
-	if s.apiKey == "" {
-		return "", fmt.Errorf("%w: MINIMAX_API_KEY is empty", ErrPromptService)
+	config, err := s.config.GetAIModelConfig(ctx)
+	if err != nil || !config.Enabled || strings.TrimSpace(config.APIKey) == "" {
+		return "", fmt.Errorf("%w: model is not configured", ErrPromptService)
 	}
 	payload := map[string]any{
-		"model": s.model,
+		"model": config.Model,
 		"messages": []map[string]string{
 			{"role": "system", "name": "AI绘画提示词助手", "content": "你是专业的AI绘画提示词编辑。依据用户原意补充主体细节、环境、光线、构图、色彩和材质。不要改变主体，不要解释，不要使用标题或Markdown，只输出一段可直接用于图片生成的中文提示词，控制在80到220字。"},
 			{"role": "user", "name": "用户", "content": prompt},
@@ -54,11 +57,11 @@ func (s *PromptService) Enhance(ctx context.Context, prompt string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrPromptService, err)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.baseURL+"/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(config.BaseURL, "/")+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrPromptService, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.apiKey)
+	req.Header.Set("Authorization", "Bearer "+config.APIKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {

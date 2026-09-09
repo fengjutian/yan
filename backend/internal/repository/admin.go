@@ -11,6 +11,12 @@ type AdminOverview struct {
 	Users, ActiveUsers, Tasks, CompletedTasks, FailedTasks, Styles int64
 }
 
+type AIModelConfig struct {
+	Provider, BaseURL, Model, APIKey, UpdatedBy string
+	Enabled                                    bool
+	CreatedAt, UpdatedAt                       time.Time
+}
+
 type AdminRepository interface {
 	Overview(ctx context.Context) (AdminOverview, error)
 	ListUsers(ctx context.Context, query, status string, offset, limit int) ([]model.User, int64, error)
@@ -23,4 +29,6 @@ type AdminRepository interface {
 	ListTasks(ctx context.Context, status string, offset, limit int) ([]model.ImageTask, int64, error)
 	ListAuditLogs(ctx context.Context, offset, limit int) ([]model.AdminAuditLog, int64, error)
 	CreateAuditLog(ctx context.Context, log *model.AdminAuditLog) error
+	GetAIModelConfig(ctx context.Context) (*AIModelConfig, error)
+	UpsertAIModelConfig(ctx context.Context, config *AIModelConfig) error
 }

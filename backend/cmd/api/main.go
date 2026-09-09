@@ -76,12 +76,9 @@ func main() {
 	taskRepository := gormrepo.NewTaskRepository(db)
 	styleRepository := gormrepo.NewStyleRepository(db)
 	styleService := service.NewStyleService(styleRepository)
-	promptService := service.NewPromptService(
-		cfg.MiniMax.APIKey,
-		cfg.MiniMax.BaseURL,
-		cfg.MiniMax.TextModel,
-	)
-	adminService := service.NewAdminService(gormrepo.NewAdminRepository(db))
+	adminRepository := gormrepo.NewAdminRepository(db)
+	promptService := service.NewPromptService(adminRepository)
+	adminService := service.NewAdminService(adminRepository)
 	imageQueue := queue.NewAsynqImageQueue(cfg.RedisAddr)
 	defer imageQueue.Close()
 	taskService := service.NewTaskService(taskRepository, imageQueue, assetService, styleRepository)

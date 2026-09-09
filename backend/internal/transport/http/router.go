@@ -87,6 +87,8 @@ func NewRouter(
 			admin.DELETE("/styles/:styleID", adminAPI.deleteStyle)
 			admin.GET("/tasks", adminAPI.tasks)
 			admin.GET("/audit-logs", adminAPI.audit)
+			admin.GET("/ai-model", adminAPI.aiModel)
+			admin.PUT("/ai-model", adminAPI.updateAIModel)
 		}
 		if assets != nil {
 			assetAPI := assetHandler{assets: assets, maxUploadBytes: maxUploadBytes}
