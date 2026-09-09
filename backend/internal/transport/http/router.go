@@ -23,6 +23,7 @@ func NewRouter(
 	maxUploadBytes int64,
 	allowedOrigins []string,
 	readiness func(context.Context) error,
+	adminServices ...*service.AdminService,
 ) *gin.Engine {
 	if environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -70,6 +71,19 @@ func NewRouter(
 		authRoutes.POST("/refresh", handler.refresh)
 		authRoutes.POST("/logout", handler.logout)
 		v1.GET("/me", authMiddleware(auth), handler.me)
+		if len(adminServices) > 0 && adminServices[0] != nil {
+			adminAPI := adminHandler{admin: adminServices[0]}
+			admin := v1.Group("/admin", authMiddleware(auth), adminMiddleware(auth))
+			admin.GET("/overview", adminAPI.overview)
+			admin.GET("/users", adminAPI.users)
+			admin.PATCH("/users/:userID", adminAPI.updateUser)
+			admin.GET("/styles", adminAPI.styles)
+			admin.POST("/styles", adminAPI.createStyle)
+			admin.PUT("/styles/:styleID", adminAPI.updateStyle)
+			admin.DELETE("/styles/:styleID", adminAPI.deleteStyle)
+			admin.GET("/tasks", adminAPI.tasks)
+			admin.GET("/audit-logs", adminAPI.audit)
+		}
 		if assets != nil {
 			assetAPI := assetHandler{assets: assets, maxUploadBytes: maxUploadBytes}
 			assetRoutes := v1.Group("/assets", authMiddleware(auth))

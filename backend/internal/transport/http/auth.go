@@ -40,6 +40,7 @@ type userResponse struct {
 	Nickname       string `json:"nickname"`
 	AvatarAssetID  string `json:"avatar_asset_id,omitempty"`
 	CreditsBalance int64  `json:"credits_balance"`
+	Role           string `json:"role"`
 }
 
 type tokenResponse struct {
@@ -196,6 +197,7 @@ func publicUser(user *model.User) userResponse {
 		Email:          user.Email,
 		Nickname:       user.Nickname,
 		CreditsBalance: user.CreditsBalance,
+		Role:           user.Role,
 	}
 	if user.AvatarAssetID != nil {
 		response.AvatarAssetID = *user.AvatarAssetID

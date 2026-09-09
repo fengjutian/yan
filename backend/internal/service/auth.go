@@ -110,6 +110,7 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*AuthR
 		PasswordHash:   string(passwordHash),
 		Nickname:       nickname,
 		Status:         "ACTIVE",
+		Role:           "USER",
 		CreditsBalance: s.initialCredits,
 		CreatedAt:      now,
 		UpdatedAt:      now,
