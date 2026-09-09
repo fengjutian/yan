@@ -69,6 +69,7 @@ class _SplashPageState extends State<SplashPage>
                 fontFamilyFallback: [
                   'Source Han Serif CN',
                   'Noto Serif CJK SC',
+                  'Noto Serif SC',
                   'STSong',
                   'SimSun',
                   'serif',
