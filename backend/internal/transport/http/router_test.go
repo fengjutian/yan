@@ -18,7 +18,7 @@ func TestLiveness(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/health/live", nil)
-	NewRouter("test", time.Now(), nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil, nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -44,7 +44,7 @@ func TestMeRequiresAuthentication(t *testing.T) {
 	}
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
-	NewRouter("test", time.Now(), auth, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), auth, nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
@@ -84,7 +84,7 @@ func TestRegisterRejectsInvalidPayload(t *testing.T) {
 		strings.NewReader(`{"email":"missing-fields@example.com"}`),
 	)
 	request.Header.Set("Content-Type", "application/json")
-	NewRouter("test", time.Now(), auth, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), auth, nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusBadRequest {
 		t.Fatalf("expected %d, got %d", http.StatusBadRequest, recorder.Code)
@@ -96,7 +96,7 @@ func TestUnknownRoute(t *testing.T) {
 
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/missing", nil)
-	NewRouter("test", time.Now(), nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
+	NewRouter("test", time.Now(), nil, nil, nil, nil, nil, 0, nil, nil).ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusNotFound {
 		t.Fatalf("expected %d, got %d", http.StatusNotFound, recorder.Code)
@@ -108,7 +108,7 @@ func TestReadinessFailure(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	request := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
 	NewRouter(
-		"test", time.Now(), nil, nil, nil, nil, 0, nil,
+		"test", time.Now(), nil, nil, nil, nil, nil, 0, nil,
 		func(context.Context) error { return errors.New("database unavailable") },
 	).ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusServiceUnavailable {
@@ -122,7 +122,7 @@ func TestCORSPreflight(t *testing.T) {
 	request := httptest.NewRequest(http.MethodOptions, "/api/v1/meta", nil)
 	request.Header.Set("Origin", "https://app.example.test")
 	NewRouter(
-		"test", time.Now(), nil, nil, nil, nil, 0,
+		"test", time.Now(), nil, nil, nil, nil, nil, 0,
 		[]string{"https://app.example.test"}, nil,
 	).ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusNoContent {

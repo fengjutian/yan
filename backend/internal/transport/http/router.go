@@ -20,6 +20,7 @@ func NewRouter(
 	assets *service.AssetService,
 	tasks *service.TaskService,
 	styles *service.StyleService,
+	prompts *service.PromptService,
 	maxUploadBytes int64,
 	allowedOrigins []string,
 	readiness func(context.Context) error,
@@ -62,6 +63,9 @@ func NewRouter(
 	})
 	if styles != nil {
 		v1.GET("/styles", styleHandler{styles: styles}.list)
+	}
+	if prompts != nil {
+		v1.POST("/prompts/enhance", promptHandler{prompts: prompts}.enhance)
 	}
 	if auth != nil {
 		handler := authHandler{auth: auth}

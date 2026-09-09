@@ -16,6 +16,7 @@ class GenerateState {
       this.aspectRatio = '1:1',
       this.count = 1,
       this.promptOptimizer = true,
+      this.enhancing = false,
       this.submitting = false,
       this.task,
       this.errorMessage});
@@ -23,6 +24,7 @@ class GenerateState {
   final String aspectRatio;
   final int count;
   final bool promptOptimizer;
+  final bool enhancing;
   final bool submitting;
   final ImageTask? task;
   final String? errorMessage;
@@ -31,6 +33,7 @@ class GenerateState {
           String? aspectRatio,
           int? count,
           bool? promptOptimizer,
+          bool? enhancing,
           bool? submitting,
           ImageTask? task,
           String? errorMessage,
@@ -40,6 +43,7 @@ class GenerateState {
         aspectRatio: aspectRatio ?? this.aspectRatio,
         count: count ?? this.count,
         promptOptimizer: promptOptimizer ?? this.promptOptimizer,
+        enhancing: enhancing ?? this.enhancing,
         submitting: submitting ?? this.submitting,
         task: task ?? this.task,
         errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
@@ -57,6 +61,20 @@ class GenerateController extends StateNotifier<GenerateState> {
   void setCount(int value) => state = state.copyWith(count: value);
   void setPromptOptimizer(bool value) =>
       state = state.copyWith(promptOptimizer: value);
+
+  Future<String?> enhancePrompt() async {
+    final prompt = state.prompt.trim();
+    if (prompt.isEmpty || state.enhancing) return null;
+    state = state.copyWith(enhancing: true, clearError: true);
+    try {
+      final enhanced = await _repository.enhancePrompt(prompt);
+      state = state.copyWith(prompt: enhanced, enhancing: false);
+      return enhanced;
+    } catch (error) {
+      state = state.copyWith(enhancing: false, errorMessage: error.toString());
+      return null;
+    }
+  }
 
   Future<void> generate() async {
     final prompt = state.prompt.trim();

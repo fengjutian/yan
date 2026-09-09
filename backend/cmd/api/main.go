@@ -76,6 +76,11 @@ func main() {
 	taskRepository := gormrepo.NewTaskRepository(db)
 	styleRepository := gormrepo.NewStyleRepository(db)
 	styleService := service.NewStyleService(styleRepository)
+	promptService := service.NewPromptService(
+		cfg.MiniMax.APIKey,
+		cfg.MiniMax.BaseURL,
+		cfg.MiniMax.TextModel,
+	)
 	adminService := service.NewAdminService(gormrepo.NewAdminRepository(db))
 	imageQueue := queue.NewAsynqImageQueue(cfg.RedisAddr)
 	defer imageQueue.Close()
@@ -109,6 +114,7 @@ func main() {
 			assetService,
 			taskService,
 			styleService,
+			promptService,
 			cfg.Image.MaxUploadBytes,
 			cfg.HTTP.AllowedOrigins,
 			readiness,

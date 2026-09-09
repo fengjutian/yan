@@ -23,6 +23,22 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
 
   Future<void> _openAiAssistant(GenerateController controller) async {
     final prompt = _promptController.text.trim();
+    if (prompt.isNotEmpty) {
+      final result = await controller.enhancePrompt();
+      if (result == null || !mounted) return;
+      _applyPrompt(result, controller);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text('已依据你的描述补充画面细节'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+      }
+      return;
+    }
     final result = await showModalBottomSheet<String>(
       context: context,
       useSafeArea: true,
@@ -31,6 +47,10 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
       builder: (context) => _AiPromptSheet(currentPrompt: prompt),
     );
     if (result == null || !mounted) return;
+    _applyPrompt(result, controller);
+  }
+
+  void _applyPrompt(String result, GenerateController controller) {
     _promptController.value = TextEditingValue(
       text: result,
       selection: TextSelection.collapsed(offset: result.length),
@@ -58,9 +78,11 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
               suffixIcon: Padding(
                 padding: const EdgeInsets.only(right: 8, bottom: 78),
                 child: TextButton.icon(
-                  onPressed: () => _openAiAssistant(controller),
-                  icon: const Icon(Icons.auto_awesome, size: 19),
-                  label: const Text('AI 帮写'),
+                  onPressed: state.enhancing ? null : () => _openAiAssistant(controller),
+                  icon: state.enhancing
+                      ? const SizedBox(width: 17, height: 17, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Icon(Icons.auto_awesome, size: 19),
+                  label: Text(state.enhancing ? '生成中' : 'AI 帮写'),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF7B5152),
                     backgroundColor: const Color(0xFFF1E8E1),
@@ -162,9 +184,6 @@ class _AiPromptSheet extends StatelessWidget {
     ),
   ];
 
-  String get _enhanced =>
-      '$currentPrompt，主体明确，构图简洁，光影自然，低饱和高级配色，细节丰富但不过度锐化，真实材质，画面具有编辑感与叙事氛围';
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -200,20 +219,6 @@ class _AiPromptSheet extends StatelessWidget {
             currentPrompt.isEmpty ? '选择一个方向，快速获得完整画面描述。' : '完善当前描述，或换一个创作方向。',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
-          if (currentPrompt.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            ListTile(
-              onTap: () => Navigator.pop(context, _enhanced),
-              tileColor: const Color(0xFF292725),
-              textColor: Colors.white,
-              iconColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-              leading: const Icon(Icons.auto_fix_high),
-              title: const Text('智能完善当前描述', style: TextStyle(fontWeight: FontWeight.w700)),
-              subtitle: const Text('补充构图、光线与质感', style: TextStyle(color: Color(0xFFD8D3CD))),
-              trailing: const Icon(Icons.arrow_forward_rounded),
-            ),
-          ],
           const SizedBox(height: 16),
           Flexible(
             child: ListView.separated(

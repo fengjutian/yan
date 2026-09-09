@@ -9,6 +9,18 @@ class GenerateRepository {
   final ApiClient _apiClient;
   static const _uuid = Uuid();
 
+  Future<String> enhancePrompt(String prompt) async {
+    try {
+      final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        '/prompts/enhance',
+        data: {'prompt': prompt},
+      );
+      return response.data!['prompt'] as String;
+    } on DioException catch (error) {
+      throw ApiException.fromDio(error);
+    }
+  }
+
   Future<ImageTask> create(
       {required String prompt,
       required String aspectRatio,
