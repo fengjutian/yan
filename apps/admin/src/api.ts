@@ -59,6 +59,14 @@ export type Audit = {
   DetailsJSON: string;
   CreatedAt: string;
 };
+export type AIModelSettings = {
+  provider: string;
+  base_url: string;
+  model: string;
+  enabled: boolean;
+  api_key_configured: boolean;
+  api_key?: string;
+};
 
 export class ApiError extends Error {
   constructor(
@@ -128,4 +136,10 @@ export const api = {
     request<void>(`/api/v1/admin/styles/${id}`, { method: "DELETE" }),
   tasks: () => request<Page<Task>>("/api/v1/admin/tasks"),
   audit: () => request<Page<Audit>>("/api/v1/admin/audit-logs"),
+  aiModel: () => request<AIModelSettings>("/api/v1/admin/ai-model"),
+  saveAIModel: (value: AIModelSettings) =>
+    request<AIModelSettings>("/api/v1/admin/ai-model", {
+      method: "PUT",
+      body: JSON.stringify(value),
+    }),
 };

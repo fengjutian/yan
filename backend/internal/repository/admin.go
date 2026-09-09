@@ -13,8 +13,8 @@ type AdminOverview struct {
 
 type AIModelConfig struct {
 	Provider, BaseURL, Model, APIKey, UpdatedBy string
-	Enabled                                    bool
-	CreatedAt, UpdatedAt                       time.Time
+	Enabled                                     bool
+	CreatedAt, UpdatedAt                        time.Time
 }
 
 type AdminRepository interface {

@@ -168,7 +168,9 @@ func (r *AdminRepository) CreateAuditLog(ctx context.Context, log *model.AdminAu
 func (r *AdminRepository) GetAIModelConfig(ctx context.Context) (*repository.AIModelConfig, error) {
 	var value repository.AIModelConfig
 	err := r.db.WithContext(ctx).Table("ai_model_settings").Where("id = ?", "prompt-ai").First(&value).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) { return nil, repository.ErrNotFound }
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, repository.ErrNotFound
+	}
 	return &value, err
 }
 
@@ -179,7 +181,7 @@ func (r *AdminRepository) UpsertAIModelConfig(ctx context.Context, value *reposi
 		"updated_by": value.UpdatedBy, "created_at": value.CreatedAt, "updated_at": value.UpdatedAt,
 	}
 	return r.db.WithContext(ctx).Table("ai_model_settings").Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "id"}},
+		Columns:   []clause.Column{{Name: "id"}},
 		DoUpdates: clause.AssignmentColumns([]string{"provider", "base_url", "model", "api_key", "enabled", "updated_by", "updated_at"}),
 	}).Create(row).Error
 }

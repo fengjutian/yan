@@ -10,7 +10,10 @@ import (
 )
 
 type promptConfigStub struct{ value *repository.AIModelConfig }
-func (s promptConfigStub) GetAIModelConfig(context.Context) (*repository.AIModelConfig, error) { return s.value, nil }
+
+func (s promptConfigStub) GetAIModelConfig(context.Context) (*repository.AIModelConfig, error) {
+	return s.value, nil
+}
 
 func TestPromptServiceEnhance(t *testing.T) {
 	t.Parallel()

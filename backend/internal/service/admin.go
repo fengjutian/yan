@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
-	"net/url"
 
 	"github.com/oklog/ulid/v2"
 	"github.com/yan/ai-image-studio/backend/internal/model"
@@ -130,12 +130,20 @@ func (s *AdminService) UpdateAIModel(ctx context.Context, adminID string, input 
 		return nil, ErrAdminInvalidInput
 	}
 	existing, findErr := s.repository.GetAIModelConfig(ctx)
-	if input.APIKey == "" && findErr == nil { input.APIKey = existing.APIKey }
-	if input.APIKey == "" { return nil, ErrAdminInvalidInput }
+	if input.APIKey == "" && findErr == nil {
+		input.APIKey = existing.APIKey
+	}
+	if input.APIKey == "" {
+		return nil, ErrAdminInvalidInput
+	}
 	now := s.now().UTC()
 	value := &repository.AIModelConfig{Provider: input.Provider, BaseURL: strings.TrimRight(input.BaseURL, "/"), Model: input.Model, APIKey: input.APIKey, Enabled: input.Enabled, UpdatedBy: adminID, CreatedAt: now, UpdatedAt: now}
-	if findErr == nil { value.CreatedAt = existing.CreatedAt }
-	if err := s.repository.UpsertAIModelConfig(ctx, value); err != nil { return nil, err }
+	if findErr == nil {
+		value.CreatedAt = existing.CreatedAt
+	}
+	if err := s.repository.UpsertAIModelConfig(ctx, value); err != nil {
+		return nil, err
+	}
 	s.audit(ctx, adminID, "AI_MODEL_UPDATE", "ai_model", "prompt-ai", map[string]any{"provider": value.Provider, "base_url": value.BaseURL, "model": value.Model, "enabled": value.Enabled, "api_key_changed": strings.TrimSpace(input.APIKey) != ""})
 	return value, nil
 }

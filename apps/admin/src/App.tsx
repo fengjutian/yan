@@ -6,7 +6,8 @@ import {
   Routes,
   useNavigate,
 } from "react-router-dom";
-import { api, Audit, CurrentUser, Overview, Style, Task, User } from "./api";
+import { api, AIModelSettings, Audit, CurrentUser, Overview, Style, Task, User } from "./api";
+import "./settings.css";
 
 const nav = [
   ["/", "◈", "工作台"],
@@ -14,6 +15,7 @@ const nav = [
   ["/users", "♙", "用户管理"],
   ["/tasks", "▣", "生成任务"],
   ["/audit", "⌁", "操作审计"],
+  ["/settings", "⚙", "模型设置"],
 ];
 function App() {
   return (
@@ -145,6 +147,7 @@ function Shell({ user }: { user: CurrentUser }) {
           <Route path="users" element={<Users current={user} />} />
           <Route path="tasks" element={<Tasks />} />
           <Route path="audit" element={<AuditLogs />} />
+          <Route path="settings" element={<ModelSettings />} />
         </Routes>
       </main>
     </div>
@@ -575,6 +578,63 @@ function AuditLogs() {
           </tbody>
         </table>
         {!items.length && <Empty text="暂无操作记录" />}
+      </section>
+    </>
+  );
+}
+function ModelSettings() {
+  const [value, setValue] = useState<AIModelSettings>();
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.aiModel().then(setValue).catch((e) => setError(e.message));
+  }, []);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!value) return;
+    setBusy(true);
+    setMessage("");
+    setError("");
+    try {
+      const saved = await api.saveAIModel({ ...value, api_key: apiKey });
+      setValue(saved);
+      setApiKey("");
+      setMessage("模型配置已保存并立即生效");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <Head title="大模型设置" desc="配置移动端 AI 帮写所使用的文本大模型。" />
+      <section className="panel settings-panel">
+        {!value ? (
+          <div className="loading-inline">正在读取配置…</div>
+        ) : (
+          <form className="model-form" onSubmit={save}>
+            <div className="setting-intro">
+              <span className="stat-icon">✦</span>
+              <div>
+                <h2>提示词辅助模型</h2>
+                <p>支持 OpenAI Chat Completions 兼容接口，保存后无需重启服务。</p>
+              </div>
+            </div>
+            <div className="form-grid">
+              <label>服务商<input value={value.provider} onChange={(e) => setValue({ ...value, provider: e.target.value })} placeholder="minimax" required /></label>
+              <label>模型名称<input value={value.model} onChange={(e) => setValue({ ...value, model: e.target.value })} placeholder="MiniMax-M2.7" required /></label>
+              <label className="full">API Base URL<input type="url" value={value.base_url} onChange={(e) => setValue({ ...value, base_url: e.target.value })} placeholder="https://api.minimaxi.com" required /></label>
+              <label className="full">API Key<input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder={value.api_key_configured ? "已配置，留空则保持不变" : "请输入 API Key"} required={!value.api_key_configured} /><small>{value.api_key_configured ? "密钥已隐藏，不会从接口返回。" : "尚未配置密钥。"}</small></label>
+              <label className="check"><input type="checkbox" checked={value.enabled} onChange={(e) => setValue({ ...value, enabled: e.target.checked })} /> 启用 AI 辅助生成</label>
+            </div>
+            {error && <div className="error">{error}</div>}
+            {message && <div className="success">{message}</div>}
+            <footer><button className="primary" disabled={busy}>{busy ? "保存中…" : "保存模型配置"}</button></footer>
+          </form>
+        )}
       </section>
     </>
   );

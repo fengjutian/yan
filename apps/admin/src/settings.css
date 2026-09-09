@@ -1,0 +1,10 @@
+.settings-panel { max-width: 820px; padding: 30px; }
+.model-form { max-width: 720px; }
+.setting-intro { display: flex; align-items: center; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #eeeaf3; }
+.setting-intro h2 { margin: 0 0 5px; font-size: 19px; }
+.setting-intro p { margin: 0; color: #8a8494; font-size: 13px; }
+.model-form .form-grid { margin-top: 24px; }
+.model-form label small { font-weight: 400; color: #9691a2; }
+.model-form footer { display: flex; justify-content: flex-end; }
+.success { color: #23745a; background: #e7f6ef; padding: 10px 12px; border-radius: 8px; margin: 10px 0; font-size: 13px; }
+.loading-inline { padding: 40px; text-align: center; color: #8a8494; }

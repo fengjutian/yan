@@ -134,14 +134,23 @@ func (h adminHandler) audit(c *gin.Context) {
 }
 func (h adminHandler) aiModel(c *gin.Context) {
 	value, err := h.admin.GetAIModel(c.Request.Context())
-	if err != nil { writeAdminError(c, err); return }
+	if err != nil {
+		writeAdminError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"provider": value.Provider, "base_url": value.BaseURL, "model": value.Model, "enabled": value.Enabled, "api_key_configured": value.APIKey != ""})
 }
 func (h adminHandler) updateAIModel(c *gin.Context) {
 	var request adminAIModelRequest
-	if c.ShouldBindJSON(&request) != nil { writeAdminError(c, service.ErrAdminInvalidInput); return }
+	if c.ShouldBindJSON(&request) != nil {
+		writeAdminError(c, service.ErrAdminInvalidInput)
+		return
+	}
 	value, err := h.admin.UpdateAIModel(c.Request.Context(), c.GetString(userIDContextKey), service.AIModelInput{Provider: request.Provider, BaseURL: request.BaseURL, Model: request.Model, APIKey: request.APIKey, Enabled: request.Enabled})
-	if err != nil { writeAdminError(c, err); return }
+	if err != nil {
+		writeAdminError(c, err)
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"provider": value.Provider, "base_url": value.BaseURL, "model": value.Model, "enabled": value.Enabled, "api_key_configured": true})
 }
 func styleInput(r adminStyleRequest) service.StyleInput {
