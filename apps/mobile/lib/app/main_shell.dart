@@ -10,7 +10,12 @@ class MainShell extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: navigationShell,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: DecoratedBox(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFF0E9ED))),
+        ),
+        child: SafeArea(top: false, child: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (index) => navigationShell.goBranch(
           index,
@@ -38,7 +43,7 @@ class MainShell extends StatelessWidget {
             label: '我的',
           ),
         ],
-      ),
+        )),
     );
   }
 }
