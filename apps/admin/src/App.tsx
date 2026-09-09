@@ -236,6 +236,14 @@ function Prompts() {
       setError(e.message);
     }
   }
+  async function testConnection() {
+    setBusy(true); setMessage(""); setError("");
+    try {
+      await api.testAIModel();
+      setMessage("连接成功，模型已正常返回内容");
+    } catch (e: any) { setError(e.message); }
+    finally { setBusy(false); }
+  }
   async function remove(item: Style) {
     if (confirm(`确定删除“${item.Name}”吗？`)) {
       await api.deleteStyle(item.ID);
@@ -632,7 +640,7 @@ function ModelSettings() {
             </div>
             {error && <div className="error">{error}</div>}
             {message && <div className="success">{message}</div>}
-            <footer><button className="primary" disabled={busy}>{busy ? "保存中…" : "保存模型配置"}</button></footer>
+            <footer><button type="button" onClick={testConnection} disabled={busy || !value.api_key_configured}>测试连接</button><button className="primary" disabled={busy}>{busy ? "处理中…" : "保存模型配置"}</button></footer>
           </form>
         )}
       </section>

@@ -75,6 +75,19 @@ func (h authHandler) register(c *gin.Context) {
 	c.JSON(http.StatusCreated, authResultResponse(result))
 }
 
+func (h authHandler) guest(c *gin.Context) {
+	var request struct {
+		DeviceName string `json:"device_name"`
+	}
+	_ = c.ShouldBindJSON(&request)
+	result, err := h.auth.Guest(c.Request.Context(), request.DeviceName)
+	if err != nil {
+		writeAuthError(c, err)
+		return
+	}
+	c.JSON(http.StatusCreated, authResultResponse(result))
+}
+
 func (h authHandler) login(c *gin.Context) {
 	var request loginRequest
 	if err := c.ShouldBindJSON(&request); err != nil {

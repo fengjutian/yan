@@ -59,8 +59,12 @@ class AuthController extends StateNotifier<AuthState> {
   Future<void> initialize() async {
     if (state.initialized) return;
     try {
-      final user = await _repository.restoreSession();
-      state = AuthState(user: user, initialized: true);
+      var user = await _repository.restoreSession();
+      if (user == null) {
+		final session = await _repository.guest();
+		user = session.user;
+	  }
+	  state = AuthState(user: user, initialized: true);
     } catch (error) {
       state = AuthState(initialized: true, errorMessage: error.toString());
     }

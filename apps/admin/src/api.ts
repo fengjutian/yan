@@ -142,4 +142,8 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(value),
     }),
+  testAIModel: () => request<{ prompt: string }>("/api/v1/prompts/enhance", {
+    method: "POST",
+    body: JSON.stringify({ prompt: "一朵花" }),
+  }),
 };

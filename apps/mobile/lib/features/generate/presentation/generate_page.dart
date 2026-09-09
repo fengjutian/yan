@@ -14,6 +14,7 @@ class GeneratePage extends ConsumerStatefulWidget {
 
 class _GeneratePageState extends ConsumerState<GeneratePage> {
   final _promptController = TextEditingController();
+  String? _previousPrompt;
 
   @override
   void dispose() {
@@ -24,6 +25,7 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
   Future<void> _openAiAssistant(GenerateController controller) async {
     final prompt = _promptController.text.trim();
     if (prompt.isNotEmpty) {
+	  _previousPrompt = prompt;
       final result = await controller.enhancePrompt();
       if (result == null || !mounted) return;
       _applyPrompt(result, controller);
@@ -31,9 +33,10 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
-              content: Text('已依据你的描述补充画面细节'),
+            SnackBar(
+              content: const Text('已依据你的描述补充画面细节'),
               behavior: SnackBarBehavior.floating,
+              action: SnackBarAction(label: '撤销', onPressed: _undoEnhancement),
             ),
           );
       }
@@ -48,6 +51,14 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
     );
     if (result == null || !mounted) return;
     _applyPrompt(result, controller);
+  }
+
+  void _undoEnhancement() {
+	final previous = _previousPrompt;
+	if (previous == null) return;
+	final controller = ref.read(generateControllerProvider.notifier);
+	_applyPrompt(previous, controller);
+	_previousPrompt = null;
   }
 
   void _applyPrompt(String result, GenerateController controller) {

@@ -1,15 +1,17 @@
 import 'package:ai_image_studio/app/theme.dart';
+import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-class SplashPage extends StatefulWidget {
+class SplashPage extends ConsumerStatefulWidget {
   const SplashPage({super.key});
 
   @override
-  State<SplashPage> createState() => _SplashPageState();
+  ConsumerState<SplashPage> createState() => _SplashPageState();
 }
 
-class _SplashPageState extends State<SplashPage>
+class _SplashPageState extends ConsumerState<SplashPage>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
   late final Animation<double> _opacity;
@@ -40,9 +42,15 @@ class _SplashPageState extends State<SplashPage>
     _scale = Tween<double>(begin: .94, end: 1.04).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
     );
-    _controller.forward().whenComplete(() {
-      if (mounted) context.go('/home');
-    });
+    _start();
+  }
+
+  Future<void> _start() async {
+    await Future.wait([
+      _controller.forward(),
+      ref.read(authControllerProvider.notifier).initialize(),
+    ]);
+    if (mounted) context.go('/home');
   }
 
   @override

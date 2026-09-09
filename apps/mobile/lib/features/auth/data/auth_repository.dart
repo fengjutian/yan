@@ -34,6 +34,10 @@ class AuthRepository {
     });
   }
 
+  Future<AuthSession> guest() {
+	return _authenticate('/auth/guest', {'device_name': 'flutter-guest'});
+  }
+
   Future<void> logout() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
     try {

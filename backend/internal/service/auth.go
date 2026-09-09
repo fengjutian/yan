@@ -50,6 +50,27 @@ type LoginInput struct {
 	DeviceName string
 }
 
+func (s *AuthService) Guest(ctx context.Context, deviceName string) (*AuthResult, error) {
+	now := s.now().UTC()
+	id := ulid.Make().String()
+	user := &model.User{
+		ID: id, Email: "guest-" + strings.ToLower(id) + "@guest.local",
+		PasswordHash: "!guest", Nickname: "游客", Status: "ACTIVE", Role: "GUEST",
+		CreditsBalance: s.initialCredits, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := s.users.Create(ctx, user); err != nil {
+		return nil, fmt.Errorf("create guest: %w", err)
+	}
+	tokens, refreshRecord, err := s.newTokenPair(user.ID, deviceName, now)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.refreshTokens.Create(ctx, refreshRecord); err != nil {
+		return nil, fmt.Errorf("store refresh token: %w", err)
+	}
+	return &AuthResult{User: user, Tokens: tokens}, nil
+}
+
 type TokenPair struct {
 	AccessToken      string
 	RefreshToken     string

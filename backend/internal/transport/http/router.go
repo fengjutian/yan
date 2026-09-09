@@ -71,6 +71,7 @@ func NewRouter(
 		handler := authHandler{auth: auth}
 		authRoutes := v1.Group("/auth")
 		authRoutes.POST("/register", handler.register)
+		authRoutes.POST("/guest", handler.guest)
 		authRoutes.POST("/login", handler.login)
 		authRoutes.POST("/refresh", handler.refresh)
 		authRoutes.POST("/logout", handler.logout)
