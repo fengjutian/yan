@@ -1,5 +1,6 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-export type User = {id:string; email:string; nickname:string; status:string; role:string; credits_balance:number; created_at:string}
+export type CurrentUser = {id:string;email:string;nickname:string;role:string;credits_balance:number}
+export type User = {ID:string;Email:string;Nickname:string;Status:string;Role:string;CreditsBalance:number;CreatedAt:string}
 export type Style = {ID:string; Slug:string; Name:string; Description:string; PromptTemplate:string; NegativePrompt?:string; SortOrder:number; Enabled:boolean; CreatedAt:string; UpdatedAt:string}
 export type Page<T> = {items:T[];total:number;page:number;page_size:number}
 export type Overview = {Users:number;ActiveUsers:number;Tasks:number;CompletedTasks:number;FailedTasks:number;Styles:number}
@@ -15,8 +16,8 @@ async function request<T>(path:string, options:RequestInit={}):Promise<T>{
   return response.status===204?undefined as T:response.json()
 }
 export const api={
-  async login(email:string,password:string){const result=await request<any>('/api/v1/auth/login',{method:'POST',body:JSON.stringify({email,password,device_name:'admin-web'})});if(result.user.role!=='ADMIN')throw new ApiError(403,'该账号不是管理员');localStorage.setItem('admin_access_token',result.tokens.access_token);return result.user as User},
-  me:()=>request<User>('/api/v1/me'), overview:()=>request<Overview>('/api/v1/admin/overview'),
+  async login(email:string,password:string){const result=await request<any>('/api/v1/auth/login',{method:'POST',body:JSON.stringify({email,password,device_name:'admin-web'})});if(result.user.role!=='ADMIN')throw new ApiError(403,'该账号不是管理员');localStorage.setItem('admin_access_token',result.tokens.access_token);return result.user as CurrentUser},
+  me:()=>request<CurrentUser>('/api/v1/me'), overview:()=>request<Overview>('/api/v1/admin/overview'),
   users:(query='',status='')=>request<Page<User>>(`/api/v1/admin/users?query=${encodeURIComponent(query)}&status=${status}`),
   updateUser:(id:string,data:{status?:string;credits_delta?:number})=>request<User>(`/api/v1/admin/users/${id}`,{method:'PATCH',body:JSON.stringify(data)}),
   styles:()=>request<{items:Style[]}>('/api/v1/admin/styles'),
