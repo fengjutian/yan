@@ -20,18 +20,24 @@ var (
 )
 
 type PromptService struct {
-	config PromptConfigProvider
-	client *http.Client
+	config  PromptConfigProvider
+	client  *http.Client
+	secrets *secretCipher
 }
 
 type PromptConfigProvider interface {
 	GetAIModelConfig(context.Context) (*repository.AIModelConfig, error)
 }
 
-func NewPromptService(config PromptConfigProvider) *PromptService {
+func NewPromptService(config PromptConfigProvider, encryptionKey ...string) *PromptService {
+	key := "development-only-secret"
+	if len(encryptionKey) > 0 && encryptionKey[0] != "" {
+		key = encryptionKey[0]
+	}
 	return &PromptService{
-		config: config,
-		client: &http.Client{Timeout: 14 * time.Second},
+		config:  config,
+		client:  &http.Client{Timeout: 14 * time.Second},
+		secrets: newSecretCipher(key),
 	}
 }
 
@@ -40,9 +46,16 @@ func (s *PromptService) Enhance(ctx context.Context, prompt string) (string, err
 	if prompt == "" || len([]rune(prompt)) > 1500 {
 		return "", ErrInvalidPrompt
 	}
+	if err := validateSafePrompt(prompt); err != nil {
+		return "", err
+	}
 	config, err := s.config.GetAIModelConfig(ctx)
 	if err != nil || !config.Enabled || strings.TrimSpace(config.APIKey) == "" {
 		return "", fmt.Errorf("%w: model is not configured", ErrPromptService)
+	}
+	apiKey, err := s.secrets.decrypt(config.APIKey)
+	if err != nil {
+		return "", fmt.Errorf("%w: decrypt model credential", ErrPromptService)
 	}
 	payload := map[string]any{
 		"model": config.Model,
@@ -61,7 +74,7 @@ func (s *PromptService) Enhance(ctx context.Context, prompt string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrPromptService, err)
 	}
-	req.Header.Set("Authorization", "Bearer "+config.APIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {

@@ -116,6 +116,8 @@ func (h taskHandler) retry(c *gin.Context) {
 
 func writeTaskError(c *gin.Context, err error) {
 	switch {
+	case errors.Is(err, service.ErrUnsafePrompt):
+		writeError(c, http.StatusBadRequest, "UNSAFE_PROMPT", "描述包含不适合生成的内容，请调整后重试")
 	case errors.Is(err, service.ErrInvalidTask):
 		writeError(c, http.StatusBadRequest, "INVALID_TASK", "请检查生成参数和幂等键")
 	case errors.Is(err, service.ErrInsufficientCredits):

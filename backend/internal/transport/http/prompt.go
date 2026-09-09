@@ -20,6 +20,10 @@ func (h promptHandler) enhance(c *gin.Context) {
 	}
 	enhanced, err := h.prompts.Enhance(c.Request.Context(), request.Prompt)
 	if err != nil {
+		if errors.Is(err, service.ErrUnsafePrompt) {
+			writeError(c, http.StatusBadRequest, "UNSAFE_PROMPT", "描述包含不适合生成的内容，请调整后重试")
+			return
+		}
 		if errors.Is(err, service.ErrInvalidPrompt) {
 			writeError(c, http.StatusBadRequest, "INVALID_PROMPT", "画面描述长度应为 1 到 1500 字")
 			return

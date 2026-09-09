@@ -20,6 +20,7 @@ var ErrLastAdmin = errors.New("admin: cannot disable current admin")
 type AdminService struct {
 	repository repository.AdminRepository
 	now        func() time.Time
+	secrets    *secretCipher
 }
 
 type StyleInput struct {
@@ -33,8 +34,12 @@ type AIModelInput struct {
 	Enabled                          bool
 }
 
-func NewAdminService(repository repository.AdminRepository) *AdminService {
-	return &AdminService{repository: repository, now: time.Now}
+func NewAdminService(repository repository.AdminRepository, encryptionKey ...string) *AdminService {
+	key := "development-only-secret"
+	if len(encryptionKey) > 0 && encryptionKey[0] != "" {
+		key = encryptionKey[0]
+	}
+	return &AdminService{repository: repository, now: time.Now, secrets: newSecretCipher(key)}
 }
 
 func (s *AdminService) Overview(ctx context.Context) (repository.AdminOverview, error) {
@@ -136,6 +141,12 @@ func (s *AdminService) UpdateAIModel(ctx context.Context, adminID string, input 
 	}
 	if input.APIKey == "" {
 		return nil, ErrAdminInvalidInput
+	}
+	if apiKeyChanged {
+		input.APIKey, err = s.secrets.encrypt(input.APIKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 	now := s.now().UTC()
 	value := &repository.AIModelConfig{Provider: input.Provider, BaseURL: strings.TrimRight(input.BaseURL, "/"), Model: input.Model, APIKey: input.APIKey, Enabled: input.Enabled, UpdatedBy: adminID, CreatedAt: now, UpdatedAt: now}

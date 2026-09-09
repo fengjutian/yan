@@ -87,6 +87,9 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 	if input.Type == "TEXT_TO_IMAGE" && input.SourceAssetID != nil {
 		return nil, ErrInvalidTask
 	}
+	if err := validateSafePrompt(input.Prompt); err != nil {
+		return nil, err
+	}
 	if input.SourceAssetID != nil {
 		if s.assets == nil {
 			return nil, ErrInvalidTask
