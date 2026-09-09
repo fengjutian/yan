@@ -36,10 +36,9 @@ type MinIOConfig struct {
 }
 
 type MiniMaxConfig struct {
-	APIKey    string
-	BaseURL   string
-	Model     string
-	TextModel string
+	APIKey  string
+	BaseURL string
+	Model   string
 }
 
 type AuthConfig struct {
@@ -125,10 +124,9 @@ func Load() (Config, error) {
 			UseSSL:    useSSL,
 		},
 		MiniMax: MiniMaxConfig{
-			APIKey:    os.Getenv("MINIMAX_API_KEY"),
-			BaseURL:   value("MINIMAX_BASE_URL", "https://api.minimaxi.com"),
-			Model:     value("MINIMAX_IMAGE_MODEL", "image-01"),
-			TextModel: value("MINIMAX_TEXT_MODEL", "MiniMax-M2.7"),
+			APIKey:  os.Getenv("MINIMAX_API_KEY"),
+			BaseURL: value("MINIMAX_BASE_URL", "https://api.minimaxi.com"),
+			Model:   value("MINIMAX_IMAGE_MODEL", "image-01"),
 		},
 		Auth: AuthConfig{
 			JWTSigningKey:   os.Getenv("JWT_SIGNING_KEY"),

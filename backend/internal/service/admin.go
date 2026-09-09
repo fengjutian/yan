@@ -130,6 +130,7 @@ func (s *AdminService) UpdateAIModel(ctx context.Context, adminID string, input 
 		return nil, ErrAdminInvalidInput
 	}
 	existing, findErr := s.repository.GetAIModelConfig(ctx)
+	apiKeyChanged := input.APIKey != ""
 	if input.APIKey == "" && findErr == nil {
 		input.APIKey = existing.APIKey
 	}
@@ -144,7 +145,7 @@ func (s *AdminService) UpdateAIModel(ctx context.Context, adminID string, input 
 	if err := s.repository.UpsertAIModelConfig(ctx, value); err != nil {
 		return nil, err
 	}
-	s.audit(ctx, adminID, "AI_MODEL_UPDATE", "ai_model", "prompt-ai", map[string]any{"provider": value.Provider, "base_url": value.BaseURL, "model": value.Model, "enabled": value.Enabled, "api_key_changed": strings.TrimSpace(input.APIKey) != ""})
+	s.audit(ctx, adminID, "AI_MODEL_UPDATE", "ai_model", "prompt-ai", map[string]any{"provider": value.Provider, "base_url": value.BaseURL, "model": value.Model, "enabled": value.Enabled, "api_key_changed": apiKeyChanged})
 	return value, nil
 }
 func (s *AdminService) audit(ctx context.Context, adminID, action, resourceType, resourceID string, details any) {
