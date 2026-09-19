@@ -26,6 +26,7 @@ class HistoryState {
 class HistoryController extends StateNotifier<HistoryState> {
   HistoryController(this._repository) : super(const HistoryState());
   final GenerateRepository _repository;
+  Future<void>? _inflight;
   Future<void> refresh() => _load(replace: true);
   Future<void> loadMore() async {
     if (state.loading || state.nextCursor.isEmpty) return;
@@ -34,6 +35,15 @@ class HistoryController extends StateNotifier<HistoryState> {
 
   Future<void> _load({required bool replace}) async {
     if (state.loading) return;
+    // 用 inflight future 去重,避免连续两次 refresh/loadMore 各自跑出独立请求,
+    // 后续 await 用同一份结果。
+    final myCall = _inflight ??= _doLoad(replace).whenComplete(() {
+      _inflight = null;
+    });
+    await myCall;
+  }
+
+  Future<void> _doLoad(bool replace) async {
     state = HistoryState(
         tasks: state.tasks, nextCursor: state.nextCursor, loading: true);
     try {

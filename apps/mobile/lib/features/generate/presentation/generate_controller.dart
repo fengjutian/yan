@@ -66,6 +66,10 @@ class GenerateController extends StateNotifier<GenerateState> {
     final prompt = state.prompt.trim();
     if (prompt.isEmpty || state.enhancing) return null;
     state = state.copyWith(enhancing: true, clearError: true);
+    // 在 setState 之后再读一次 state 防止并发穿过,setState 是同步的,
+    // 此处读到的 state.enhancing 必然为 true。
+    if (state.enhancing && _enhancingInFlight) return null;
+    _enhancingInFlight = true;
     try {
       final enhanced = await _repository.enhancePrompt(prompt);
       state = state.copyWith(prompt: enhanced, enhancing: false);
@@ -73,10 +77,16 @@ class GenerateController extends StateNotifier<GenerateState> {
     } catch (error) {
       state = state.copyWith(enhancing: false, errorMessage: error.toString());
       return null;
+    } finally {
+      _enhancingInFlight = false;
     }
   }
 
+  bool _enhancingInFlight = false;
+
   Future<void> generate() async {
+    // 防双击/连点:即便按钮禁用被绕过,这里也能挡住。
+    if (state.submitting) return;
     final prompt = state.prompt.trim();
     if (prompt.isEmpty) {
       state = state.copyWith(errorMessage: '请输入画面描述');

@@ -98,6 +98,7 @@ class ReferenceController extends StateNotifier<ReferenceState> {
   }
 
   Future<void> selectAndUpload() async {
+    if (state.busy) return;
     final file = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 4096,
@@ -128,6 +129,7 @@ class ReferenceController extends StateNotifier<ReferenceState> {
   }
 
   Future<void> uploadBytes(Uint8List bytes) async {
+    if (state.busy) return;
     if (bytes.length > maxUploadBytes) {
       state = state.copyWith(errorMessage: '图片不能超过 10 MB');
       return;
@@ -160,6 +162,7 @@ class ReferenceController extends StateNotifier<ReferenceState> {
       state = state.copyWith(aspectRatio: ratio);
 
   Future<void> generate() async {
+    if (state.busy) return;
     if (state.sourceAsset == null ||
         state.styleId == null ||
         state.prompt.trim().isEmpty) {
