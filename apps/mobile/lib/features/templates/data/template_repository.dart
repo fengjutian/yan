@@ -1,4 +1,5 @@
 import 'package:ai_image_studio/features/templates/data/template_models.dart';
+import 'package:flutter/material.dart' show Color, Offset;
 
 /// 灵感模板仓库:内置 mock 数据(后端 /templates 接口起来后切换到 dio)。
 class TemplateRepository {

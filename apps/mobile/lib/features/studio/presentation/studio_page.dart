@@ -38,8 +38,13 @@ class StudioPage extends ConsumerWidget {
             icon: Icons.auto_fix_high,
             title: 'AI 风格迁移',
             subtitle: '保留人物特征，重塑画面氛围',
-            onTap: () =>
-                context.push('/create/reference', extra: captured?.bytes)),
+            onTap: () => context.push('/style-transfer', extra: captured?.bytes)),
+        const SizedBox(height: 12),
+        _StudioCard(
+            icon: Icons.tune,
+            title: '图片编辑器',
+            subtitle: '裁剪/旋转/调色，本地即时处理',
+            onTap: () => context.push('/editor', extra: captured?.bytes)),
         const SizedBox(height: 12),
         _StudioCard(
             icon: Icons.add_photo_alternate_outlined,

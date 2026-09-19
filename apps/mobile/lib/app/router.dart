@@ -68,7 +68,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             GoRoute(path: '/home', builder: (_, __) => const HomePage()),
           ]),
           StatefulShellBranch(routes: [
-            GoRoute(path: '/camera', builder: (_, __) => const CameraPage()),
+            GoRoute(
+        path: '/camera',
+        builder: (context, state) {
+          final extra = state.extra;
+          if (extra is Map<String, dynamic>) {
+            return CameraPage(
+              templateParams: TemplateParams(
+                templateId: (extra['templateId'] as String?) ?? '',
+                prompt: (extra['prompt'] as String?) ?? '',
+                composition: (extra['composition'] as String?) ?? 'thirds',
+                angle: (extra['angle'] as String?) ?? 'eyeLevel',
+              ),
+            );
+          }
+          return const CameraPage();
+        },
+      ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/studio', builder: (_, __) => const StudioPage()),
