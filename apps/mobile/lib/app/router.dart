@@ -10,6 +10,7 @@ import 'package:ai_image_studio/features/profile/presentation/profile_page.dart'
 import 'package:ai_image_studio/features/camera/presentation/camera_page.dart';
 import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:typed_data';
@@ -17,6 +18,27 @@ import 'dart:typed_data';
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     initialLocation: '/splash',
+    errorBuilder: (context, state) => Scaffold(
+      appBar: AppBar(title: const Text('页面不存在')),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.help_outline, size: 56),
+              const SizedBox(height: 12),
+              Text('找不到 ${state.uri}'),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => context.go('/home'),
+                child: const Text('回到首页'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
     routes: [
       GoRoute(
         path: '/splash',

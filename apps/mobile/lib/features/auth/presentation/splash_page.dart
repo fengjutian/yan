@@ -47,7 +47,9 @@ class _SplashPageState extends ConsumerState<SplashPage>
 
   Future<void> _start() async {
     try {
-      await Future.wait([
+      // 显式标注 <void>,因为 _controller.forward() 返回 TickerFuture (extends Future<void>),
+      // 不加类型参数 Future.wait 会推断失败。
+      await Future.wait<void>(<Future<void>>[
         _controller.forward(),
         ref.read(authControllerProvider.notifier).initialize(),
       ]);

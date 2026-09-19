@@ -8,24 +8,36 @@ final tokenStorageProvider = Provider<TokenStorage>(
   (ref) => SecureTokenStorage(),
 );
 
-final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
-  (ref) => AuthController(ref.watch(authRepositoryProvider)),
+/// ApiClient 用这个 provider 拿到 session 失效回调。
+/// 拆出独立 provider 是为了打破 apiClientProvider <-> authControllerProvider
+/// 之间的循环依赖:apiClient 不再直接 watch authController,改为读一个
+/// 单独的回调槽位,由 AuthController 启动时把自己写进去。
+final sessionInvalidatedProvider = StateProvider<void Function()?>(
+  (ref) => null,
 );
 
-final apiClientProvider = Provider<ApiClient>((ref) {
-  final tokenStorage = ref.watch(tokenStorageProvider);
-  final auth = ref.watch(authControllerProvider.notifier);
-  return ApiClient(
-    tokenStorage: tokenStorage,
-    onSessionInvalidated: auth.onSessionInvalidated,
-  );
-});
+final apiClientProvider = Provider<ApiClient>(
+  (ref) => ApiClient(
+    tokenStorage: ref.watch(tokenStorageProvider),
+    onSessionInvalidated: ref.watch(sessionInvalidatedProvider),
+  ),
+);
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(
     apiClient: ref.watch(apiClientProvider),
     tokenStorage: ref.watch(tokenStorageProvider),
   ),
+);
+
+final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
+  (ref) {
+    final controller = AuthController(ref.watch(authRepositoryProvider));
+    // 把 controller 的回调注入到 apiClient 看得见的槽位上。
+    ref.read(sessionInvalidatedProvider.notifier).state =
+        controller.onSessionInvalidated;
+    return controller;
+  },
 );
 
 class AuthState {

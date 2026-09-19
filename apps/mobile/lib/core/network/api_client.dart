@@ -45,7 +45,7 @@ class _AuthInterceptor extends QueuedInterceptor {
   final void Function()? onSessionInvalidated;
 
   /// 把多个并发 401 合并成同一次 /auth/refresh,避免 refresh_token 被快速消耗。
-  Future<void>? _refreshing;
+  Future<String?>? _refreshing;
 
   @override
   Future<void> onRequest(

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:ai_image_studio/app/app.dart';
 import 'package:flutter/foundation.dart';
