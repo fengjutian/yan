@@ -12,6 +12,10 @@ import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/features/share/presentation/share_workshop_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/favorites_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/drafts_page.dart';
+import 'package:ai_image_studio/features/templates/presentation/templates_home_page.dart';
+import 'package:ai_image_studio/features/templates/presentation/template_detail_page.dart';
+import 'package:ai_image_studio/features/editor/presentation/editor_page.dart';
+import 'package:ai_image_studio/features/style_transfer/presentation/style_transfer_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -104,6 +108,31 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/me/drafts',
         builder: (_, __) => const DraftsPage(),
+      ),
+      GoRoute(
+        path: '/templates',
+        builder: (_, __) => const TemplatesHomePage(),
+      ),
+      GoRoute(
+        path: '/templates/:templateId',
+        builder: (context, state) => TemplateDetailPage(
+            templateId: state.pathParameters['templateId']!),
+      ),
+      GoRoute(
+        path: '/editor',
+        builder: (context, state) {
+          final bytes = state.extra;
+          return EditorPage(
+              sourceBytes: bytes is Uint8List ? bytes : null);
+        },
+      ),
+      GoRoute(
+        path: '/style-transfer',
+        builder: (context, state) {
+          final bytes = state.extra;
+          return StyleTransferPage(
+              sourceBytes: bytes is Uint8List ? bytes : null);
+        },
       ),
     ],
   );

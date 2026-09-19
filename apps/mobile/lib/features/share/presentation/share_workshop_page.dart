@@ -1,8 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
-import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/data/share_models.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
@@ -168,7 +166,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
               border: OutlineInputBorder(),
               isDense: true,
             ),
-            onChanged: (v) => state_set_title(ref, v),
+            onChanged: controller.setTitle,
           ),
           const SizedBox(height: 8),
           TextField(
@@ -216,16 +214,10 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     );
   }
 
-  void state_set_title(WidgetRef ref, String v) {
-    final cur = ref.read(shareControllerProvider);
-    ref.read(shareControllerProvider.notifier).state =
-        cur.copyWith(title: v, clearError: true);
-  }
-
   Future<void> _copyText(BuildContext context) async {
     final text = ref.read(shareControllerProvider.notifier).exportText();
     await Clipboard.setData(ClipboardData(text: text));
-    if (!mounted) return;
+    if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(const SnackBar(
@@ -241,12 +233,12 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     try {
       final bytes = await _downloadImage(url);
       final result = await SaverGallery.saveImage(
-        bytes: bytes,
+        bytes,
         fileName: 'yan-${DateTime.now().millisecondsSinceEpoch}',
-        androidRelativePath: 'Pictures/Yan',
+        albumPath: 'Yan',
         skipIfExists: false,
       );
-      if (!mounted) return;
+      if (!context.mounted) return;
       if (result.isSuccess) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('已保存到相册')),
@@ -255,7 +247,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
         throw Exception(result.errorMessage ?? '保存失败');
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('保存失败：${e.toString()}')),
       );
@@ -280,7 +272,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
         subject: ref.read(shareControllerProvider).title,
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('分享失败：${e.toString()}')),
       );
@@ -507,6 +499,4 @@ class _TagsEditorState extends State<_TagsEditor> {
   }
 }
 
-extension ImageTaskShare on ImageTask {
-  // 留个扩展点,后续可直接传 ImageTask 进来。
-}
+// ImageTaskShare extension moved to history_controller import scope; removed.

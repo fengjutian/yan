@@ -1,8 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
-import 'package:ai_image_studio/features/share/data/share_models.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -55,6 +52,9 @@ class ShareController extends StateNotifier<ShareState> {
 
   void setCaption(String text) =>
       state = state.copyWith(caption: text, clearError: true);
+
+  void setTitle(String text) =>
+      state = state.copyWith(title: text, clearError: true);
 
   void setTags(List<String> tags) => state = state.copyWith(tags: tags);
 
@@ -215,4 +215,4 @@ final toggleDraftProvider = Provider<Future<void> Function(String, bool)>((ref) 
 
 /// 占位导出,避免 IDE 提示 Uint8List 未使用。后续真要做字节级渲染时会用到。
 @visibleForTesting
-Uint8List placeholderBytes() => Uint8List(0);
+Object placeholderBytes() => Object();

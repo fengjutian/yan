@@ -1,12 +1,13 @@
-import 'package:ai_image_studio/features/generate/data/image_task.dart';
-import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
+import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-/// 收藏�?本地保存�?taskId 集合,按时间倒序展示对应的历史作品�?/// MVP 没有单独接口,先复用历史接口按 ID �?后续�?/me/favorites�?class FavoritesPage extends ConsumerWidget {
+/// 收藏页:本地保存的 taskId 集合,按时间倒序展示对应的历史作品。
+/// MVP 没有单独接口,先复用历史接口按 ID 拉,后续接 /me/favorites。
+class FavoritesPage extends ConsumerWidget {
   const FavoritesPage({super.key});
 
   @override
@@ -19,7 +20,13 @@ import 'package:go_router/go_router.dart';
         error: (e, _) => Center(child: Text('加载失败:$e')),
         data: (ids) {
           if (ids.isEmpty) {
-            return const _EmptyHint(text: '还没有收藏的作品');
+            return const _EmptyHint(
+              icon: Icons.favorite_border,
+              title: '还没有收藏的作品',
+              hint: '在作品详情页点击 ♥ 即可收藏',
+              actionLabel: '去作品库看看',
+              actionRoute: '/history',
+            );
           }
           return ListView.separated(
             padding: const EdgeInsets.all(16),
@@ -27,7 +34,7 @@ import 'package:go_router/go_router.dart';
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, index) {
               final id = ids.elementAt(ids.length - 1 - index);
-              return _FavoriteRow(taskId: id);
+              return _CollectionRow(taskId: id, kind: _RowKind.favorite);
             },
           );
         },
@@ -36,9 +43,12 @@ import 'package:go_router/go_router.dart';
   }
 }
 
-class _FavoriteRow extends ConsumerWidget {
-  const _FavoriteRow({required this.taskId});
+enum _RowKind { favorite }
+
+class _CollectionRow extends ConsumerWidget {
+  const _CollectionRow({required this.taskId, required this.kind});
   final String taskId;
+  final _RowKind kind;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -57,7 +67,8 @@ class _FavoriteRow extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: taskAsync.maybeWhen(
                   data: (t) {
-                    final url = t.images.isNotEmpty ? t.images.first.thumbnailUrl : null;
+                    final url =
+                        t.images.isNotEmpty ? t.images.first.thumbnailUrl : null;
                     if (url == null) {
                       return const ColoredBox(
                         color: Colors.black12,
@@ -107,14 +118,27 @@ class _FavoriteRow extends ConsumerWidget {
               ),
             ),
             IconButton(
-              tooltip: '取消收藏',
-              icon: const Icon(Icons.favorite, color: Colors.redAccent),
+              tooltip: kind == _RowKind.favorite ? '取消收藏' : '从草稿移除',
+              icon: Icon(
+                kind == _RowKind.favorite
+                    ? Icons.favorite
+                    : Icons.edit_note,
+                color: kind == _RowKind.favorite
+                    ? Colors.redAccent
+                    : Colors.blueAccent,
+              ),
               onPressed: () async {
-                await ref.read(toggleFavoriteProvider)(taskId);
+                if (kind == _RowKind.favorite) {
+                  await ref.read(toggleFavoriteProvider)(taskId);
+                } else {
+                  await ref.read(toggleDraftProvider)(taskId, false);
+                }
                 if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('已取消收�?)),
-                  );
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(kind == _RowKind.favorite
+                        ? '已取消收藏'
+                        : '已从草稿移除'),
+                  ));
                 }
               },
             ),
@@ -126,8 +150,20 @@ class _FavoriteRow extends ConsumerWidget {
 }
 
 class _EmptyHint extends StatelessWidget {
-  const _EmptyHint({required this.text});
-  final String text;
+  const _EmptyHint({
+    required this.icon,
+    required this.title,
+    required this.hint,
+    required this.actionLabel,
+    required this.actionRoute,
+  });
+
+  final IconData icon;
+  final String title;
+  final String hint;
+  final String actionLabel;
+  final String actionRoute;
+
   @override
   Widget build(BuildContext context) => Center(
         child: Padding(
@@ -135,15 +171,15 @@ class _EmptyHint extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.favorite_border, size: 56),
+              Icon(icon, size: 56),
               const SizedBox(height: 12),
-              Text(text, style: Theme.of(context).textTheme.titleMedium),
+              Text(title, style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              const Text('在作品详情页点击 �?即可收藏'),
+              Text(hint),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: () => context.go('/history'),
-                child: const Text('去作品库看看'),
+                onPressed: () => context.go(actionRoute),
+                child: Text(actionLabel),
               ),
             ],
           ),

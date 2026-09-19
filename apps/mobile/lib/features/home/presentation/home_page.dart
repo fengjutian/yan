@@ -1,5 +1,6 @@
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/templates/presentation/templates_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -53,9 +54,13 @@ class _HomePageState extends ConsumerState<HomePage> {
             Row(children: [
               Text('更多灵感', style: Theme.of(context).textTheme.titleLarge),
               const Spacer(),
-              const Text('找到你的创作方式',
-                  style: TextStyle(color: AppColors.muted, fontSize: 12)),
+              TextButton(
+                onPressed: () => context.push('/templates'),
+                child: const Text('找到你的创作方式 →'),
+              ),
             ]),
+            const SizedBox(height: 14),
+            _FeaturedPreviewStrip(),
             const SizedBox(height: 14),
             Row(children: [
               Expanded(
@@ -293,4 +298,60 @@ class _DailyTip extends StatelessWidget {
                       fontSize: 13, color: AppColors.muted, height: 1.4))),
         ]),
       );
+}
+
+/// HomePage 内嵌的"精选模板"横滑条(用 featured 仓储,空时占位)。
+class _FeaturedPreviewStrip extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final featured = ref.watch(featuredTemplatesProvider);
+    return SizedBox(
+      height: 140,
+      child: featured.when(
+        data: (items) => ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: items.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 12),
+          itemBuilder: (context, i) {
+            final t = items[i];
+            return InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: () => context.push('/templates/${t.id}'),
+              child: Container(
+                width: 200,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [t.coverColor, Color.lerp(t.coverColor, Colors.white, .5)!],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(t.category.icon, size: 22, color: Colors.black54),
+                    const Spacer(),
+                    Text(t.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800)),
+                    Text(t.subtitle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11, color: Colors.black54)),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (_, __) => const SizedBox.shrink(),
+      ),
+    );
+  }
 }

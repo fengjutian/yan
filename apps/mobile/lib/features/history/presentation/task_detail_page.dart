@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
@@ -184,9 +183,9 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       final bytes = await _downloadImage(url);
       if (bytes == null) throw Exception('下载图片失败');
       final result = await SaverGallery.saveImage(
-        bytes: bytes,
+        bytes,
         fileName: 'yan-${DateTime.now().millisecondsSinceEpoch}',
-        androidRelativePath: 'Pictures/Yan',
+        albumPath: 'Yan',
         skipIfExists: false,
       );
       if (!mounted) return;
@@ -213,8 +212,8 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       await file.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/jpeg')],
-        text: value_prompt_text(ref, widget.taskId),
-        subject: value_prompt_text(ref, widget.taskId),
+        text: _valuePromptText(ref, widget.taskId),
+        subject: _valuePromptText(ref, widget.taskId),
       );
     } catch (e) {
       if (!mounted) return;
@@ -226,7 +225,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
   }
 }
 
-String value_prompt_text(WidgetRef ref, String taskId) {
+String _valuePromptText(WidgetRef ref, String taskId) {
   final task = ref.read(taskDetailProvider(taskId));
   return task.maybeWhen(
     data: (t) => t.prompt.isEmpty ? '颜 · AI 生成' : t.prompt,

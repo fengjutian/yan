@@ -15,10 +15,27 @@ import 'package:sensors_plus/sensors_plus.dart';
 enum CompositionGuide { thirds, center, symmetry }
 
 class CameraPage extends ConsumerStatefulWidget {
-  const CameraPage({super.key});
+  const CameraPage({super.key, this.templateParams});
+
+  /// 来自 /templates/:id 跳过来时携带的模板参数(机位/构图/初始 prompt)。
+  final TemplateParams? templateParams;
 
   @override
   ConsumerState<CameraPage> createState() => _CameraPageState();
+}
+
+/// 模板参数:跳相机时由 router extra 传入。
+class TemplateParams {
+  const TemplateParams({
+    required this.templateId,
+    required this.prompt,
+    required this.composition,
+    required this.angle,
+  });
+  final String templateId;
+  final String prompt;
+  final String composition; // CompositionGuide.name
+  final String angle;        // CameraAngle.name
 }
 
 class _CameraPageState extends ConsumerState<CameraPage>
@@ -62,8 +79,28 @@ class _CameraPageState extends ConsumerState<CameraPage>
       final angle = math.atan2(event.x, event.y) * 180 / math.pi;
       if (mounted) setState(() => _levelAngle = angle.clamp(-45, 45));
     }, onError: (_) {});
+    _applyTemplateParams();
     unawaited(_loadCameras());
   }
+
+  void _applyTemplateParams() {
+    final p = widget.templateParams;
+    if (p == null) return;
+    // 构图线按模板初始值预选。
+    final guide = CompositionGuide.values.firstWhere(
+      (g) => g.name == p.composition,
+      orElse: () => CompositionGuide.thirds,
+    );
+    _guide = guide;
+    _showGuide = true;
+    // 初始 prompt 由后续 review 流程注入到 generate 控制器,
+    // 这里仅缓存到本地,后续 review 时通过 go_router 携带。
+    _initialPrompt = p.prompt;
+    _templateId = p.templateId;
+  }
+
+  String? _initialPrompt;
+  String? _templateId;
 
   Future<void> _loadCameras() async {
     try {

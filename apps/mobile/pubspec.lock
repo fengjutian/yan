@@ -473,7 +473,7 @@ packages:
     source: hosted
     version: "2.0.2"
   http:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: http
       sha256: "87721a4a50b19c7f1d49001e51409bddc46303966ce89a65af4f4e6004896412"
@@ -860,10 +860,10 @@ packages:
     dependency: "direct main"
     description:
       name: saver_gallery
-      sha256: c24cfec2d94a0db9a2ae02d6a21847ba49a369c9b6c3a83f3da17d14720c0888
+      sha256: dcecd87113ffcb0eb467bb0ef5ed8f6dd894e26ff3dfd5822624281e7d2cb894
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "4.1.2"
+    version: "5.1.0"
   sensors_plus:
     dependency: "direct main"
     description:
