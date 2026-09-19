@@ -5,9 +5,9 @@ class GeneratedImage {
   final String url;
   final String thumbnailUrl;
   factory GeneratedImage.fromJson(Map<String, dynamic> json) => GeneratedImage(
-        id: json['id'] as String,
-        url: json['url'] as String,
-        thumbnailUrl: json['thumbnail_url'] as String? ?? '',
+        id: (json['id'] as String?) ?? '',
+        url: (json['url'] as String?) ?? '',
+        thumbnailUrl: (json['thumbnail_url'] as String?) ?? '',
       );
 }
 
@@ -34,17 +34,22 @@ class ImageTask {
   bool get isTerminal =>
       status == 'SUCCEEDED' || status == 'FAILED' || status == 'CANCELED';
   factory ImageTask.fromJson(Map<String, dynamic> json) => ImageTask(
-        id: json['id'] as String,
-        status: json['status'] as String,
-        progress: json['progress'] as int,
-        prompt: json['prompt'] as String,
-        images: (json['images'] as List<dynamic>? ?? const [])
-            .map(
-                (item) => GeneratedImage.fromJson(item as Map<String, dynamic>))
+        id: (json['id'] as String?) ?? '',
+        status: (json['status'] as String?) ?? 'UNKNOWN',
+        // progress 可能是 double(如 12.5),容错转 int
+        progress: (json['progress'] is int)
+            ? json['progress'] as int
+            : (json['progress'] is num)
+                ? (json['progress'] as num).round()
+                : 0,
+        prompt: (json['prompt'] as String?) ?? '',
+        images: ((json['images'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(GeneratedImage.fromJson)
             .toList(),
         errorCode: json['error_code'] as String?,
         errorMessage: json['error_message'] as String?,
-        type: json['type'] as String? ?? 'TEXT_TO_IMAGE',
+        type: (json['type'] as String?) ?? 'TEXT_TO_IMAGE',
         createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
       );
 }

@@ -29,6 +29,24 @@ class AssetUploadState {
   final bool uploading;
   final double progress;
   final String? errorMessage;
+
+  AssetUploadState copyWith({
+    XFile? selectedFile,
+    Uint8List? previewBytes,
+    ImageAsset? uploadedAsset,
+    bool? uploading,
+    double? progress,
+    String? errorMessage,
+    bool clearError = false,
+  }) =>
+      AssetUploadState(
+        selectedFile: selectedFile ?? this.selectedFile,
+        previewBytes: previewBytes ?? this.previewBytes,
+        uploadedAsset: uploadedAsset ?? this.uploadedAsset,
+        uploading: uploading ?? this.uploading,
+        progress: progress ?? this.progress,
+        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+      );
 }
 
 class AssetUploadController extends StateNotifier<AssetUploadState> {
@@ -46,7 +64,9 @@ class AssetUploadController extends StateNotifier<AssetUploadState> {
     if (selected == null) return;
     final bytes = await selected.readAsBytes();
     if (bytes.length > maxUploadBytes) {
-      state = const AssetUploadState(errorMessage: '图片不能超过 10 MB');
+      // 用 copyWith 而不是 new const,保留已选的 selectedFile/previewBytes
+      // (虽然这里还没设置,但保持模式一致),便于后续要展示"换个文件"时无需重选。
+      state = state.copyWith(errorMessage: '图片不能超过 10 MB');
       return;
     }
     state = AssetUploadState(selectedFile: selected, previewBytes: bytes);

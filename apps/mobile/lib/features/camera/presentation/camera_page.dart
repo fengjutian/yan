@@ -6,6 +6,7 @@ import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -45,6 +46,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _brightness = 128;
   double _aspectRatio = 3 / 4;
   int _burstCount = 1;
+  int _activeIndex = 0;
   String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
   Offset? _focusPoint;
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
@@ -69,49 +71,76 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (_cameras.isEmpty) throw CameraException('no-camera', '未检测到可用相机');
       await _initializeCamera(0);
     } on CameraException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = _cameraError(error);
-          _initializing = false;
-        });
-      }
+      _handleCameraError(error);
+    } on PlatformException catch (error) {
+      _handleCameraError(error);
+    } catch (error) {
+      _handleCameraError(error);
     }
+  }
+
+  void _handleCameraError(Object error) {
+    final stale = _controller;
+    if (!mounted) {
+      // 即使 widget 已 dispose 也要把 controller 释放,避免 native handle 泄漏。
+      unawaited(stale?.dispose());
+      return;
+    }
+    setState(() {
+      _error = _cameraError(error);
+      _initializing = false;
+      _controller = null;
+    });
+    // 失败路径的旧 controller 需要释放,否则 native camera HAL 句柄会泄漏。
+    unawaited(stale?.dispose());
   }
 
   Future<void> _initializeCamera(int index) async {
     final previous = _controller;
-    _controller = null;
+    if (previous != null && mounted) {
+      // 先把 UI 切到加载态，避免 dispose 的 await 期间出现
+      // _initializing=false / _controller=null 的不一致窗口。
+      setState(() {
+        _initializing = true;
+        _error = null;
+        _controller = null;
+      });
+    }
     await previous?.dispose();
     if (!mounted) return;
-    setState(() {
-      _initializing = true;
-      _error = null;
-    });
     final controller = CameraController(
       _cameras[index],
       ResolutionPreset.high,
       enableAudio: false,
       imageFormatGroup: ImageFormatGroup.jpeg,
     );
+    if (!mounted) {
+      unawaited(controller.dispose());
+      return;
+    }
     _controller = controller;
     try {
-      await controller.initialize();
-      _minZoom = await controller.getMinZoomLevel();
-      _maxZoom = await controller.getMaxZoomLevel();
-      _minExposure = await controller.getMinExposureOffset();
-      _maxExposure = await controller.getMaxExposureOffset();
+      // Vivo 等定制 ROM 上 controller.initialize() / getMinZoomLevel 等偶发挂死,
+      // 用 .timeout 兜底,超时后落到错误态而不是永久 spinner。
+      await controller.initialize().timeout(const Duration(seconds: 8));
+      _minZoom = await controller.getMinZoomLevel().timeout(const Duration(seconds: 3));
+      _maxZoom = await controller.getMaxZoomLevel().timeout(const Duration(seconds: 3));
+      _minExposure = await controller.getMinExposureOffset().timeout(const Duration(seconds: 3));
+      _maxExposure = await controller.getMaxExposureOffset().timeout(const Duration(seconds: 3));
       _zoom = _minZoom;
       _flashMode = FlashMode.off;
-      await controller.setFlashMode(_flashMode);
+      await controller.setFlashMode(_flashMode).timeout(const Duration(seconds: 3));
       await _startLightMonitoring(controller);
       if (mounted) setState(() => _initializing = false);
     } on CameraException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = _cameraError(error);
-          _initializing = false;
-        });
-      }
+      _handleCameraError(error);
+    } on PlatformException catch (error) {
+      _handleCameraError(error);
+    } on TimeoutException catch (_) {
+      _handleCameraError(
+          CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
+    } catch (error) {
+      _handleCameraError(error);
     }
   }
 
@@ -140,14 +169,30 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
     if (state == AppLifecycleState.inactive) {
-      controller.dispose();
-      _controller = null;
-    } else if (state == AppLifecycleState.resumed && _cameras.isNotEmpty) {
-      final index = _cameras.indexOf(controller.description);
-      unawaited(_initializeCamera(index < 0 ? 0 : index));
+      final controller = _controller;
+      if (controller != null && controller.value.isInitialized) {
+        _activeIndex = _cameras.indexOf(controller.description);
+        if (_activeIndex < 0) _activeIndex = 0;
+        controller.dispose();
+      }
+      if (mounted) {
+        // 必须连同 _initializing 一起置位,避免下一次 build 命中 _controller==null
+        // 但 _initializing==false 的不一致窗口。
+        setState(() {
+          _controller = null;
+          _initializing = true;
+        });
+      }
+      return;
+    }
+    if (state == AppLifecycleState.resumed) {
+      if (_cameras.isEmpty) return;
+      // 上面的 inactive 已经把 _controller 置 null,所以这里不能再用
+      // "controller == null" 作为 early-return 条件 —— 那会让 resumed 静默退出,
+      // UI 永久卡在 spinner 上。
+      if (_controller != null && _controller!.value.isInitialized) return;
+      unawaited(_initializeCamera(_activeIndex));
     }
   }
 
@@ -155,7 +200,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
     if (_cameras.length < 2 || _initializing) return;
     final current = _controller?.description;
     final index = _cameras.indexWhere((camera) => camera == current);
-    await _initializeCamera((index + 1) % _cameras.length);
+    _activeIndex = (index + 1) % _cameras.length;
+    await _initializeCamera(_activeIndex);
   }
 
   Future<void> _toggleFlash() async {
@@ -211,6 +257,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (mounted) setState(() => _capturedImage = session.selected?.bytes);
     } on CameraException catch (error) {
       if (mounted) _showMessage(_cameraError(error));
+    } on PlatformException catch (error) {
+      if (mounted) _showMessage(_cameraError(error));
+    } catch (error) {
+      // MLKit 失败、文件 IO 失败等都兜到这里,不裸露异常。
+      if (mounted) _showMessage(_cameraError(error));
     } finally {
       if (mounted) setState(() => _capturing = false);
     }
@@ -246,15 +297,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
     final controller = _controller;
     if (controller == null) return;
     final value = (_baseZoom * scale).clamp(_minZoom, _maxZoom).toDouble();
-    await controller.setZoomLevel(value);
-    if (mounted) setState(() => _zoom = value);
+    try {
+      await controller.setZoomLevel(value);
+      if (mounted) setState(() => _zoom = value);
+    } on CameraException catch (_) {
+      // 设备不支持连续 zoom,静默失败
+    } on PlatformException catch (_) {
+      // 部分 ROM 上 setZoomLevel 偶发 PlatformException
+    }
   }
 
   Future<void> _setExposure(double value) async {
     final controller = _controller;
     if (controller == null) return;
-    final applied = await controller.setExposureOffset(value);
-    if (mounted) setState(() => _exposure = applied);
+    try {
+      final applied = await controller.setExposureOffset(value);
+      if (mounted) setState(() => _exposure = applied);
+    } on CameraException catch (_) {
+      // 设备不支持曝光调节
+    } on PlatformException catch (_) {/* 同上 */}
   }
 
   void _showMessage(String message) => ScaffoldMessenger.of(context)
@@ -262,12 +323,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
     ..showSnackBar(
         SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
 
-  String _cameraError(CameraException error) {
-    if (error.code == 'CameraAccessDenied' ||
-        error.code == 'CameraAccessDeniedWithoutPrompt') {
-      return '需要相机权限才能拍摄，请在系统设置中允许访问';
+  String _cameraError(Object error) {
+    if (error is CameraException) {
+      if (error.code == 'CameraAccessDenied' ||
+          error.code == 'CameraAccessDeniedWithoutPrompt') {
+        return '需要相机权限才能拍摄，请在系统设置中允许访问';
+      }
+      return error.description ?? '相机暂时不可用';
     }
-    return error.description ?? '相机暂时不可用';
+    if (error is PlatformException) {
+      if (error.code == 'CameraAccessDenied' ||
+          error.code == 'camera_permission' ||
+          error.code == 'MissingPluginException') {
+        return '需要相机权限才能拍摄，请在系统设置中允许访问';
+      }
+      return error.message ?? '相机暂时不可用';
+    }
+    return error.toString();
   }
 
   String get _guideName => switch (_guide) {
@@ -286,7 +358,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
-    _controller?.dispose();
+    final controller = _controller;
+    _controller = null; // 先置 null,避免 didChangeAppLifecycleState 二次 dispose
+    unawaited(controller?.dispose());
     super.dispose();
   }
 
@@ -333,7 +407,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
 
   Widget _buildPreview() {
-    if (_initializing) {
+    // _initializing 和 _controller 必须联动:前者 true 时后者允许为 null,
+    // 但反过来不应出现 _initializing==false 且 _controller==null 的窗口。
+    // 这里兜底一次,避免任何遗漏路径触发 NPE。
+    if (_initializing || _controller == null) {
       return const ColoredBox(
           color: Color(0xFF242220),
           child: Center(child: CircularProgressIndicator(color: Colors.white)));

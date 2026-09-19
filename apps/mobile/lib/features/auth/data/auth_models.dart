@@ -12,10 +12,14 @@ class AuthUser {
   final int creditsBalance;
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
-        id: json['id'] as String,
-        email: json['email'] as String,
-        nickname: json['nickname'] as String,
-        creditsBalance: json['credits_balance'] as int,
+        id: (json['id'] as String?) ?? '',
+        email: (json['email'] as String?) ?? '',
+        nickname: (json['nickname'] as String?) ?? '',
+        creditsBalance: (json['credits_balance'] is int)
+            ? json['credits_balance'] as int
+            : (json['credits_balance'] is num)
+                ? (json['credits_balance'] as num).round()
+                : 0,
       );
 }
 
@@ -26,8 +30,8 @@ class AuthTokens {
   final String refreshToken;
 
   factory AuthTokens.fromJson(Map<String, dynamic> json) => AuthTokens(
-        accessToken: json['access_token'] as String,
-        refreshToken: json['refresh_token'] as String,
+        accessToken: (json['access_token'] as String?) ?? '',
+        refreshToken: (json['refresh_token'] as String?) ?? '',
       );
 }
 

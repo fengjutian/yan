@@ -92,10 +92,11 @@ class GenerateRepository {
       );
       final body = response.data!;
       return ImageTaskPage(
-        tasks: (body['tasks'] as List<dynamic>)
-            .map((item) => ImageTask.fromJson(item as Map<String, dynamic>))
+        tasks: ((body['tasks'] as List<dynamic>?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(ImageTask.fromJson)
             .toList(),
-        nextCursor: body['next_cursor'] as String? ?? '',
+        nextCursor: (body['next_cursor'] as String?) ?? '',
       );
     } on DioException catch (error) {
       throw ApiException.fromDio(error);

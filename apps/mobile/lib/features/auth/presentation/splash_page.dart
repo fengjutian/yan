@@ -46,11 +46,18 @@ class _SplashPageState extends ConsumerState<SplashPage>
   }
 
   Future<void> _start() async {
-    await Future.wait([
-      _controller.forward(),
-      ref.read(authControllerProvider.notifier).initialize(),
-    ]);
-    if (mounted) context.go('/home');
+    try {
+      await Future.wait([
+        _controller.forward(),
+        ref.read(authControllerProvider.notifier).initialize(),
+      ]);
+    } catch (_) {
+      // 即使动画或 initialize() 抛错,也要把用户带离 splash,避免永久卡住。
+    }
+    if (!mounted) return;
+    // 即使 initialize 失败,AuthController 也会把 initialized=true 写回 state,
+    // 用户只是以 guest/匿名身份进入 /home。
+    context.go('/home');
   }
 
   @override
