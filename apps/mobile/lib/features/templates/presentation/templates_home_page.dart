@@ -384,7 +384,7 @@ class _FavoritesSheet extends ConsumerWidget {
                       builder: (context, snap) {
                         final t = snap.data;
                         if (t == null) return const SizedBox.shrink();
-                        return ActionChip(
+                        return InputChip(
                           avatar: Icon(t.category.icon, size: 14),
                           label: Text(t.title),
                           onPressed: () {
