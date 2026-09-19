@@ -58,6 +58,12 @@ class StudioPage extends ConsumerWidget {
             title: '我的作品',
             subtitle: '查看成片与历史版本',
             onTap: () => context.push('/history')),
+        const SizedBox(height: 12),
+        _StudioCard(
+            icon: Icons.share_outlined,
+            title: '分享工作台',
+            subtitle: '平台裁剪 / AI 文案 / 一键分享',
+            onTap: () => context.push('/share')),
       ]),
     );
   }

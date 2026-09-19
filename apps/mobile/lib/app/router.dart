@@ -9,6 +9,9 @@ import 'package:ai_image_studio/features/reference/presentation/reference_page.d
 import 'package:ai_image_studio/features/profile/presentation/profile_page.dart';
 import 'package:ai_image_studio/features/camera/presentation/camera_page.dart';
 import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
+import 'package:ai_image_studio/features/share/presentation/share_workshop_page.dart';
+import 'package:ai_image_studio/features/profile/presentation/favorites_page.dart';
+import 'package:ai_image_studio/features/profile/presentation/drafts_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -88,6 +91,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/task/:taskId',
         builder: (context, state) =>
             TaskDetailPage(taskId: state.pathParameters['taskId']!),
+      ),
+      GoRoute(
+        path: '/share',
+        builder: (context, state) =>
+            ShareWorkshopPage(taskId: state.uri.queryParameters['taskId']),
+      ),
+      GoRoute(
+        path: '/me/favorites',
+        builder: (_, __) => const FavoritesPage(),
+      ),
+      GoRoute(
+        path: '/me/drafts',
+        builder: (_, __) => const DraftsPage(),
       ),
     ],
   );
