@@ -34,8 +34,13 @@ final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
     final controller = AuthController(ref.watch(authRepositoryProvider));
     // 把 controller 的回调注入到 apiClient 看得见的槽位上。
-    ref.read(sessionInvalidatedProvider.notifier).state =
-        controller.onSessionInvalidated;
+    // 必须延后到当前 build phase 之外再写 sessionInvalidatedProvider,
+    // 否则触发 "Providers are not allowed to modify other providers
+    // during their initialization"。
+    Future<void>.delayed(Duration.zero, () {
+      ref.read(sessionInvalidatedProvider.notifier).state =
+          controller.onSessionInvalidated;
+    });
     return controller;
   },
 );

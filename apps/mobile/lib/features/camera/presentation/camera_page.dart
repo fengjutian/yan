@@ -102,6 +102,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String? _initialPrompt;
   String? _templateId;
 
+  /// 当前模板携带的初始 prompt(供相机 UI 显示给用户看,
+  /// 后续"用此图生成"时可直接注入到生成器)。
+  String? get initialPrompt => _initialPrompt;
+
   Future<void> _loadCameras() async {
     try {
       _cameras = await availableCameras();
@@ -409,6 +413,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
       body: SafeArea(
         child: Column(children: [
           _buildTopBar(),
+          if (_templateId != null)
+            _TemplateChip(
+                templateId: _templateId!, initialPrompt: _initialPrompt),
           Expanded(
               child: Center(
                   child: AspectRatio(
@@ -721,6 +728,38 @@ class _CameraTip extends StatelessWidget {
         Text('${zoom.toStringAsFixed(1)}×',
             style: const TextStyle(color: Colors.white70, fontSize: 12))
       ]));
+}
+
+class _TemplateChip extends StatelessWidget {
+  const _TemplateChip({required this.templateId, this.initialPrompt});
+  final String templateId;
+  final String? initialPrompt;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(14, 0, 14, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.auto_awesome, color: Colors.white, size: 14),
+        const SizedBox(width: 6),
+        Flexible(
+          child: Text(
+            initialPrompt == null || initialPrompt!.isEmpty
+                ? '模板 $templateId · 已应用构图线'
+                : '模板 $templateId · 初始描述已就绪',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+        ),
+      ]),
+    );
+  }
 }
 
 class _RoundAction extends StatelessWidget {

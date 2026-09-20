@@ -42,7 +42,10 @@ class _SplashPageState extends ConsumerState<SplashPage>
     _scale = Tween<double>(begin: .94, end: 1.04).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutCubic),
     );
-    _start();
+    // GoRouter 用 SynchronousFuture + ChangeNotifier 同步派发,
+    // 在 initState/build phase 期间调 context.go 会撞上 "setState during build"。
+    // 延后到首帧渲染之后再启动 _start,后续 context.go 也在帧外执行。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
   Future<void> _start() async {
