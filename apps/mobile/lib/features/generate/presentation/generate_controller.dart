@@ -2,10 +2,14 @@ import 'dart:async';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/generate/data/generate_repository.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final generateRepositoryProvider = Provider<GenerateRepository>(
-    (ref) => GenerateRepository(ref.watch(apiClientProvider)));
+    (ref) => GenerateRepository(
+          ref.watch(apiClientProvider),
+          ref.watch(localAIClientProvider),
+        ));
 final generateControllerProvider =
     StateNotifierProvider.autoDispose<GenerateController, GenerateState>(
         (ref) => GenerateController(ref.watch(generateRepositoryProvider)));

@@ -16,6 +16,7 @@ import 'package:ai_image_studio/features/templates/presentation/templates_home_p
 import 'package:ai_image_studio/features/templates/presentation/template_detail_page.dart';
 import 'package:ai_image_studio/features/editor/presentation/editor_page.dart';
 import 'package:ai_image_studio/features/style_transfer/presentation/style_transfer_page.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -124,6 +125,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/me/drafts',
         builder: (_, __) => const DraftsPage(),
+      ),
+      GoRoute(
+        path: '/settings/ai',
+        builder: (_, __) => const AISettingsPage(),
       ),
       GoRoute(
         path: '/templates',

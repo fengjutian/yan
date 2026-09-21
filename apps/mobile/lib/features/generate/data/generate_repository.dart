@@ -1,21 +1,19 @@
 import 'package:ai_image_studio/core/network/api_client.dart';
 import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/ai_settings/data/local_ai_client.dart';
 import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 class GenerateRepository {
-  GenerateRepository(this._apiClient);
+  GenerateRepository(this._apiClient, this._localAIClient);
   final ApiClient _apiClient;
+  final LocalAIClient _localAIClient;
   static const _uuid = Uuid();
 
   Future<String> enhancePrompt(String prompt) async {
     try {
-      final response = await _apiClient.dio.post<Map<String, dynamic>>(
-        '/prompts/enhance',
-        data: {'prompt': prompt},
-      );
-      return response.data!['prompt'] as String;
+      return await _localAIClient.complete(prompt);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

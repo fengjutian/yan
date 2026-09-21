@@ -1,5 +1,7 @@
 import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/ai_settings/data/local_ai_client.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,9 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// 复用 /prompts/enhance 生成分享文案(title + body + tags)。
 /// 后端会基于图片 prompt + 风格上下文产出更贴切的文案。
 class ShareController extends StateNotifier<ShareState> {
-  ShareController(this._dio) : super(const ShareState());
+  ShareController(this._localAIClient) : super(const ShareState());
 
-  final Dio _dio;
+  final LocalAIClient _localAIClient;
 
   /// [imagePrompt] 是图片生成时的原始 prompt,作为文案的上下文。
   /// [styleName] 可选,加上能产出更准的风格调性。
@@ -23,16 +25,10 @@ class ShareController extends StateNotifier<ShareState> {
     if (trimmed.isEmpty) return;
     state = state.copyWith(generating: true, clearError: true);
     try {
-      final response = await _dio.post<Map<String, dynamic>>(
-        '/prompts/enhance',
-        data: {'prompt': _composeShareSeed(trimmed, styleName)},
+      final enhanced = await _localAIClient.complete(
+        _composeShareSeed(trimmed, styleName),
+        systemMessage: '你是中文社交媒体文案助手。严格按用户要求生成标题、正文和标签，不要解释。',
       );
-      final body = response.data;
-      if (body == null) {
-        state = state.copyWith(generating: false, errorMessage: '服务端返回为空');
-        return;
-      }
-      final enhanced = (body['prompt'] as String?) ?? trimmed;
       final caption = _splitCaption(enhanced);
       state = state.copyWith(
         generating: false,
@@ -126,7 +122,7 @@ class ShareState {
 
 final shareControllerProvider =
     StateNotifierProvider.autoDispose<ShareController, ShareState>((ref) {
-  return ShareController(ref.watch(apiClientProvider).dio);
+  return ShareController(ref.watch(localAIClientProvider));
 });
 
 /// 收藏 + 草稿用本地 SharedPreferences 持久化,MVP 不上后端。
