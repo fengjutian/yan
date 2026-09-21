@@ -133,8 +133,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
             ),
             child: const Center(child: Text('本次生成未产出图片')),
           ),
-        Text(value.prompt,
-            style: Theme.of(context).textTheme.titleMedium),
+        Text(value.prompt, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(value.type == 'CHARACTER_REFERENCE'
             ? '人物参考创作 · AI 生成'
@@ -142,8 +141,10 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         const SizedBox(height: 24),
         _ActionGrid(
           busy: _busy,
-          onSave: () => _save(value.images.isNotEmpty ? value.images.first.url : null),
-          onShare: () => _share(value.images.isNotEmpty ? value.images.first.url : null),
+          onSave: () =>
+              _save(value.images.isNotEmpty ? value.images.first.url : null),
+          onShare: () =>
+              _share(value.images.isNotEmpty ? value.images.first.url : null),
           onShareWorkshop: () =>
               context.push('/share?taskId=${Uri.encodeComponent(value.id)}'),
           onToggleDraft: () => _toggleDraft(value.id, true),
@@ -190,7 +191,8 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.isSuccess ? '已保存到相册' : '保存失败:${result.errorMessage}'),
+        content:
+            Text(result.isSuccess ? '已保存到相册' : '保存失败:${result.errorMessage}'),
       ));
     } catch (e) {
       if (!mounted) return;
@@ -208,7 +210,8 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       final bytes = await _downloadImage(url);
       if (bytes == null) throw Exception('下载图片失败');
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file =
+          File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
       await file.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/jpeg')],
@@ -369,7 +372,8 @@ class _ParamsCard extends StatelessWidget {
                       .textTheme
                       .bodySmall
                       ?.copyWith(color: AppColors.muted))),
-          Expanded(child: Text(v, style: Theme.of(context).textTheme.bodySmall)),
+          Expanded(
+              child: Text(v, style: Theme.of(context).textTheme.bodySmall)),
         ]),
       );
 }

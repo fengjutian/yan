@@ -181,7 +181,8 @@ class _HeaderCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 if (isGuest)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: Colors.black12,
                       borderRadius: BorderRadius.circular(8),

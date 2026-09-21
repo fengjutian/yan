@@ -70,22 +70,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ]),
           StatefulShellBranch(routes: [
             GoRoute(
-        path: '/camera',
-        builder: (context, state) {
-          final extra = state.extra;
-          if (extra is Map<String, dynamic>) {
-            return CameraPage(
-              templateParams: TemplateParams(
-                templateId: (extra['templateId'] as String?) ?? '',
-                prompt: (extra['prompt'] as String?) ?? '',
-                composition: (extra['composition'] as String?) ?? 'thirds',
-                angle: (extra['angle'] as String?) ?? 'eyeLevel',
-              ),
-            );
-          }
-          return const CameraPage();
-        },
-      ),
+              path: '/camera',
+              builder: (context, state) {
+                final extra = state.extra;
+                if (extra is Map<String, dynamic>) {
+                  return CameraPage(
+                    templateParams: TemplateParams(
+                      templateId: (extra['templateId'] as String?) ?? '',
+                      prompt: (extra['prompt'] as String?) ?? '',
+                      composition:
+                          (extra['composition'] as String?) ?? 'thirds',
+                      angle: (extra['angle'] as String?) ?? 'eyeLevel',
+                    ),
+                  );
+                }
+                return const CameraPage();
+              },
+            ),
           ]),
           StatefulShellBranch(routes: [
             GoRoute(path: '/studio', builder: (_, __) => const StudioPage()),
@@ -136,15 +137,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/templates/:templateId',
-        builder: (context, state) => TemplateDetailPage(
-            templateId: state.pathParameters['templateId']!),
+        builder: (context, state) =>
+            TemplateDetailPage(templateId: state.pathParameters['templateId']!),
       ),
       GoRoute(
         path: '/editor',
         builder: (context, state) {
           final bytes = state.extra;
-          return EditorPage(
-              sourceBytes: bytes is Uint8List ? bytes : null);
+          return EditorPage(sourceBytes: bytes is Uint8List ? bytes : null);
         },
       ),
       GoRoute(

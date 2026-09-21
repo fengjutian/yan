@@ -321,7 +321,10 @@ class _FeaturedPreviewStrip extends ConsumerWidget {
                 width: 200,
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: [t.coverColor, Color.lerp(t.coverColor, Colors.white, .5)!],
+                    colors: [
+                      t.coverColor,
+                      Color.lerp(t.coverColor, Colors.white, .5)!
+                    ],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -336,8 +339,7 @@ class _FeaturedPreviewStrip extends ConsumerWidget {
                     Text(t.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800)),
+                        style: const TextStyle(fontWeight: FontWeight.w800)),
                     Text(t.subtitle,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

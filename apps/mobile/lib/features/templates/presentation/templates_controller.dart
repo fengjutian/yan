@@ -22,14 +22,14 @@ final featuredTemplatesProvider =
 });
 
 final templateByCategoryProvider = FutureProvider.family
-    .autoDispose<List<InspirationTemplate>, TemplateCategory?>((ref, cat) async {
+    .autoDispose<List<InspirationTemplate>, TemplateCategory?>(
+        (ref, cat) async {
   final repo = ref.watch(templateRepositoryProvider);
   return repo.listByCategory(cat);
 });
 
-final templateByIdProvider =
-    FutureProvider.family.autoDispose<InspirationTemplate?, String>(
-        (ref, id) async {
+final templateByIdProvider = FutureProvider.family
+    .autoDispose<InspirationTemplate?, String>((ref, id) async {
   final repo = ref.watch(templateRepositoryProvider);
   return repo.findById(id);
 });
@@ -58,8 +58,7 @@ final templateFavoritesServiceProvider =
     Provider<TemplateFavoritesService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider).maybeWhen(
         data: (v) => v,
-        orElse: () =>
-            throw StateError('sharedPreferencesProvider 未就绪'),
+        orElse: () => throw StateError('sharedPreferencesProvider 未就绪'),
       );
   return TemplateFavoritesService(prefs);
 });

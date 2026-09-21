@@ -26,6 +26,7 @@ class ShareConfig {
 
   final SharePlatform platform;
   final WatermarkPosition watermark;
+
   /// 分享图片里是否保留 EXIF 位置/设备信息。
   final bool showMetadata;
 

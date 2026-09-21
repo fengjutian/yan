@@ -1,5 +1,4 @@
 import 'package:ai_image_studio/core/network/api_exception.dart';
-import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/ai_settings/data/local_ai_client.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:dio/dio.dart';
@@ -56,7 +55,8 @@ class ShareController extends StateNotifier<ShareState> {
 
   /// 复制到剪贴板由 UI 层做(避免 share_plus 依赖剪贴板),controller 仅暴露文本。
   String exportText() {
-    final tagsLine = state.tags.isEmpty ? '' : '\n${state.tags.map((t) => '#$t').join(' ')}';
+    final tagsLine =
+        state.tags.isEmpty ? '' : '\n${state.tags.map((t) => '#$t').join(' ')}';
     return '${state.title}\n${state.caption}$tagsLine';
   }
 
@@ -66,10 +66,14 @@ class ShareController extends StateNotifier<ShareState> {
         '小红书/朋友圈风格分享文案,以及 3~5 个简短中文标签(用空格分隔):\n画面:$prompt';
   }
 
-  ({String title, String body, List<String> tags}) _splitCaption(String enhanced) {
+  ({String title, String body, List<String> tags}) _splitCaption(
+      String enhanced) {
     // 服务端返回的 enhanced prompt 是一段连续文本,我们按行/句拆分。
     // 格式约定:\n第一行 = 标题,后面段落 = 正文,最后 #tag1 #tag2 行 = 标签。
-    final lines = enhanced.split(RegExp(r'[\n]')).where((l) => l.trim().isNotEmpty).toList();
+    final lines = enhanced
+        .split(RegExp(r'[\n]'))
+        .where((l) => l.trim().isNotEmpty)
+        .toList();
     String title = lines.isNotEmpty ? lines.first.trim() : '';
     String body = lines.length > 1 ? lines.sublist(1).join('\n').trim() : title;
     final tags = <String>[];
@@ -168,8 +172,7 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
   return SharedPreferences.getInstance();
 });
 
-final localCollectionServiceProvider =
-    Provider<LocalCollectionService>((ref) {
+final localCollectionServiceProvider = Provider<LocalCollectionService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider).maybeWhen(
         data: (v) => v,
         orElse: () => throw StateError(
@@ -197,7 +200,8 @@ final toggleFavoriteProvider = Provider<Future<void> Function(String)>((ref) {
   };
 });
 
-final toggleDraftProvider = Provider<Future<void> Function(String, bool)>((ref) {
+final toggleDraftProvider =
+    Provider<Future<void> Function(String, bool)>((ref) {
   return (taskId, add) async {
     final svc = ref.read(localCollectionServiceProvider);
     if (add) {

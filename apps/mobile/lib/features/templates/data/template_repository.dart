@@ -23,7 +23,8 @@ class TemplateRepository {
 
   Future<List<InspirationTemplate>> featured() async {
     await Future<void>.delayed(const Duration(milliseconds: 80));
-    final sorted = [..._mock]..sort((a, b) => b.popularity.compareTo(a.popularity));
+    final sorted = [..._mock]
+      ..sort((a, b) => b.popularity.compareTo(a.popularity));
     return sorted.take(6).toList();
   }
 }

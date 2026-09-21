@@ -88,7 +88,8 @@ class InspirationTemplate {
         title: (json['title'] as String?) ?? '',
         subtitle: (json['subtitle'] as String?) ?? '',
         category: _categoryFromString((json['category'] as String?) ?? ''),
-        coverColor: _colorFromHex((json['cover_color'] as String?) ?? '#E6D3B8'),
+        coverColor:
+            _colorFromHex((json['cover_color'] as String?) ?? '#E6D3B8'),
         examplePrompt: (json['example_prompt'] as String?) ?? '',
         compositionRule:
             _compositionFromString((json['composition'] as String?) ?? ''),

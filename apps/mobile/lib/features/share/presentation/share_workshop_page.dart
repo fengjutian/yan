@@ -155,12 +155,12 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Text(shareState.errorMessage!,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error)),
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ),
           TextField(
             controller: TextEditingController(text: shareState.title)
-              ..selection = TextSelection.collapsed(offset: shareState.title.length),
+              ..selection =
+                  TextSelection.collapsed(offset: shareState.title.length),
             decoration: const InputDecoration(
               labelText: '标题',
               border: OutlineInputBorder(),
@@ -171,7 +171,8 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
           const SizedBox(height: 8),
           TextField(
             controller: TextEditingController(text: shareState.caption)
-              ..selection = TextSelection.collapsed(offset: shareState.caption.length),
+              ..selection =
+                  TextSelection.collapsed(offset: shareState.caption.length),
             maxLines: 4,
             decoration: const InputDecoration(
               labelText: '正文',
@@ -263,7 +264,8 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     try {
       final bytes = await _downloadImage(url);
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file =
+          File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
       await file.writeAsBytes(bytes, flush: true);
       final text = ref.read(shareControllerProvider.notifier).exportText();
       await Share.shareXFiles(
@@ -460,7 +462,9 @@ class _TagsEditorState extends State<_TagsEditor> {
                   widget.onChanged(next);
                 },
               ),
-            for (int i = 0; i < 3 - widget.tags.length && widget.tags.length < 3; i++)
+            for (int i = 0;
+                i < 3 - widget.tags.length && widget.tags.length < 3;
+                i++)
               const SizedBox.shrink(),
           ],
         ),

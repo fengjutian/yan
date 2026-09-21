@@ -44,8 +44,7 @@ class StyleTransferState {
         protectBackground: protectBackground ?? this.protectBackground,
         submitting: submitting ?? this.submitting,
         taskId: clearTask ? null : (taskId ?? this.taskId),
-        errorMessage:
-            clearError ? null : (errorMessage ?? this.errorMessage),
+        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
       );
 }
 
@@ -106,6 +105,6 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
   }
 }
 
-final styleTransferControllerProvider =
-    StateNotifierProvider.autoDispose<StyleTransferController,
-        StyleTransferState>((ref) => StyleTransferController(ref));
+final styleTransferControllerProvider = StateNotifierProvider.autoDispose<
+    StyleTransferController,
+    StyleTransferState>((ref) => StyleTransferController(ref));

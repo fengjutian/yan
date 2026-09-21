@@ -65,7 +65,10 @@ class _Body extends StatelessWidget {
           height: 220,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [t.coverColor, Color.lerp(t.coverColor, Colors.white, .4)!],
+              colors: [
+                t.coverColor,
+                Color.lerp(t.coverColor, Colors.white, .4)!
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -185,8 +188,7 @@ class _InfoRow extends StatelessWidget {
             child: Text(value,
                 style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        expanded ? FontWeight.w500 : FontWeight.w700)),
+                    fontWeight: expanded ? FontWeight.w500 : FontWeight.w700)),
           ),
         ],
       ),
