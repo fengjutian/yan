@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
+import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
@@ -35,7 +36,7 @@ class TemplateParams {
   final String templateId;
   final String prompt;
   final String composition; // CompositionGuide.name
-  final String angle;        // CameraAngle.name
+  final String angle; // CameraAngle.name
 }
 
 class _CameraPageState extends ConsumerState<CameraPage>
@@ -68,6 +69,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Offset? _focusPoint;
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
+  final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
+  LiveCameraAnalysis? _liveAnalysis;
+  bool _showRealtimeGuidance = true;
 
   @override
   void initState() {
@@ -153,7 +157,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _cameras[index],
       ResolutionPreset.high,
       enableAudio: false,
-      imageFormatGroup: ImageFormatGroup.jpeg,
+      imageFormatGroup: preferredAnalysisFormat,
     );
     if (!mounted) {
       unawaited(controller.dispose());
@@ -164,13 +168,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // Vivo 等定制 ROM 上 controller.initialize() / getMinZoomLevel 等偶发挂死,
       // 用 .timeout 兜底,超时后落到错误态而不是永久 spinner。
       await controller.initialize().timeout(const Duration(seconds: 8));
-      _minZoom = await controller.getMinZoomLevel().timeout(const Duration(seconds: 3));
-      _maxZoom = await controller.getMaxZoomLevel().timeout(const Duration(seconds: 3));
-      _minExposure = await controller.getMinExposureOffset().timeout(const Duration(seconds: 3));
-      _maxExposure = await controller.getMaxExposureOffset().timeout(const Duration(seconds: 3));
+      _minZoom = await controller
+          .getMinZoomLevel()
+          .timeout(const Duration(seconds: 3));
+      _maxZoom = await controller
+          .getMaxZoomLevel()
+          .timeout(const Duration(seconds: 3));
+      _minExposure = await controller
+          .getMinExposureOffset()
+          .timeout(const Duration(seconds: 3));
+      _maxExposure = await controller
+          .getMaxExposureOffset()
+          .timeout(const Duration(seconds: 3));
       _zoom = _minZoom;
       _flashMode = FlashMode.off;
-      await controller.setFlashMode(_flashMode).timeout(const Duration(seconds: 3));
+      await controller
+          .setFlashMode(_flashMode)
+          .timeout(const Duration(seconds: 3));
       await _startLightMonitoring(controller);
       if (mounted) setState(() => _initializing = false);
     } on CameraException catch (error) {
@@ -178,8 +192,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     } on PlatformException catch (error) {
       _handleCameraError(error);
     } on TimeoutException catch (_) {
-      _handleCameraError(
-          CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
+      _handleCameraError(CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
     } catch (error) {
       _handleCameraError(error);
     }
@@ -189,7 +202,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     try {
       await controller.startImageStream((image) {
         final now = DateTime.now();
-        if (now.difference(_lastFrameAt).inMilliseconds < 600 ||
+        if (now.difference(_lastFrameAt).inMilliseconds < 260 ||
             image.planes.isEmpty) {
           return;
         }
@@ -202,10 +215,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
           count++;
         }
         if (mounted && count > 0) setState(() => _brightness = total / count);
+        if (_showRealtimeGuidance) {
+          unawaited(_analyzeFrame(image, controller.description));
+        }
       });
     } on CameraException {
       // Some web cameras do not expose an image stream.
     }
+  }
+
+  Future<void> _analyzeFrame(
+    CameraImage image,
+    CameraDescription camera,
+  ) async {
+    final result = await _liveAnalyzer.process(image, camera);
+    if (!mounted || result == null || !_showRealtimeGuidance) return;
+    setState(() {
+      _liveAnalysis = result;
+      _compositionSuggestion = result.suggestion;
+    });
   }
 
   @override
@@ -399,6 +427,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
+    unawaited(_liveAnalyzer.close());
     final controller = _controller;
     _controller = null; // 先置 null,避免 didChangeAppLifecycleState 二次 dispose
     unawaited(controller?.dispose());
@@ -444,6 +473,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   style: const TextStyle(color: Colors.white))),
           const Spacer(),
           IconButton(
+              tooltip: '实时姿态指导',
+              onPressed: () => setState(() {
+                    _showRealtimeGuidance = !_showRealtimeGuidance;
+                    if (!_showRealtimeGuidance) _liveAnalysis = null;
+                  }),
+              icon: Icon(
+                  _showRealtimeGuidance
+                      ? Icons.accessibility_new
+                      : Icons.accessibility_new_outlined,
+                  color:
+                      _showRealtimeGuidance ? Colors.amber : Colors.white70)),
+          IconButton(
               onPressed: _switchCamera,
               icon:
                   const Icon(Icons.cameraswitch_outlined, color: Colors.white)),
@@ -485,6 +526,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
               onScaleUpdate: (details) => _setZoom(details.scale),
               child: Stack(fit: StackFit.expand, children: [
                 CameraPreview(controller),
+                if (_showRealtimeGuidance &&
+                    _liveAnalysis?.landmarks.isNotEmpty == true)
+                  IgnorePointer(
+                      child: CustomPaint(
+                          painter: _PosePainter(_liveAnalysis!.landmarks))),
                 if (_showGuide)
                   IgnorePointer(
                       child: CustomPaint(painter: _GuidePainter(_guide))),
@@ -505,6 +551,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     left: 0,
                     right: 0,
                     child: Center(child: _LevelIndicator(angle: _levelAngle))),
+                if (_showRealtimeGuidance && _liveAnalysis != null)
+                  Positioned(
+                      top: 40,
+                      left: 14,
+                      child: _SceneChip(
+                          scene: _liveAnalysis!.scene,
+                          confidence: _liveAnalysis!.sceneConfidence)),
                 Positioned(
                     right: 4,
                     top: 55,
@@ -815,4 +868,76 @@ class _GuidePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _GuidePainter oldDelegate) =>
       oldDelegate.guide != guide;
+}
+
+class _SceneChip extends StatelessWidget {
+  const _SceneChip({required this.scene, required this.confidence});
+  final String scene;
+  final double confidence;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.black54,
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          const Icon(Icons.visibility_outlined,
+              color: Colors.white70, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            confidence > 0 ? '$scene ${(confidence * 100).round()}%' : scene,
+            style: const TextStyle(color: Colors.white, fontSize: 10),
+          ),
+        ]),
+      );
+}
+
+class _PosePainter extends CustomPainter {
+  const _PosePainter(this.points);
+  final Map<String, Offset> points;
+
+  static const _bones = <(String, String)>[
+    ('leftShoulder', 'rightShoulder'),
+    ('leftShoulder', 'leftElbow'),
+    ('leftElbow', 'leftWrist'),
+    ('rightShoulder', 'rightElbow'),
+    ('rightElbow', 'rightWrist'),
+    ('leftShoulder', 'leftHip'),
+    ('rightShoulder', 'rightHip'),
+    ('leftHip', 'rightHip'),
+    ('leftHip', 'leftKnee'),
+    ('leftKnee', 'leftAnkle'),
+    ('rightHip', 'rightKnee'),
+    ('rightKnee', 'rightAnkle'),
+  ];
+
+  Offset _scaled(Offset value, Size size) =>
+      Offset(value.dx * size.width, value.dy * size.height);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = Colors.amber.withValues(alpha: .8)
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+    final dot = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    for (final bone in _bones) {
+      final start = points[bone.$1];
+      final end = points[bone.$2];
+      if (start != null && end != null) {
+        canvas.drawLine(_scaled(start, size), _scaled(end, size), line);
+      }
+    }
+    for (final point in points.values) {
+      canvas.drawCircle(_scaled(point, size), 3.2, dot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _PosePainter oldDelegate) =>
+      oldDelegate.points != points;
 }
