@@ -15,7 +15,8 @@ class AISettings {
   final String model;
   final String apiKey;
 
-  bool get canCallLocally => enabled && preferLocal && apiKey.trim().isNotEmpty;
+  bool get canCallLocally =>
+      enabled && preferLocal && apiKey.trim().isNotEmpty;
 
   AISettings copyWith({
     bool? enabled,
@@ -55,9 +56,10 @@ class SecureAISettingsRepository implements AISettingsStore {
         enabled: await _storage.read(key: _enabledKey) == 'true',
         preferLocal:
             (await _storage.read(key: _preferLocalKey) ?? 'true') == 'true',
-        baseUrl:
-            await _storage.read(key: _baseUrlKey) ?? 'https://api.minimaxi.com',
-        model: await _storage.read(key: _modelKey) ?? 'MiniMax-M2.5',
+        baseUrl: await _storage.read(key: _baseUrlKey) ??
+            'https://api.minimaxi.com',
+        model:
+            await _storage.read(key: _modelKey) ?? 'MiniMax-M2.5',
         apiKey: await _storage.read(key: _apiKeyKey) ?? '',
       );
 

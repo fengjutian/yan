@@ -8,7 +8,7 @@ class EditorState {
   const EditorState({
     required this.sourceBytes,
     this.brightness = 0, // -100..100
-    this.contrast = 0, // -100..100
+    this.contrast = 0,   // -100..100
     this.saturation = 0, // -100..100
     this.rotationQuarterTurns = 0, // 0..3
     this.flipHorizontal = false,
@@ -40,7 +40,8 @@ class EditorState {
         brightness: brightness ?? this.brightness,
         contrast: contrast ?? this.contrast,
         saturation: saturation ?? this.saturation,
-        rotationQuarterTurns: rotationQuarterTurns ?? this.rotationQuarterTurns,
+        rotationQuarterTurns:
+            rotationQuarterTurns ?? this.rotationQuarterTurns,
         flipHorizontal: flipHorizontal ?? this.flipHorizontal,
         flipVertical: flipVertical ?? this.flipVertical,
         cropRect: clearCrop ? null : (cropRect ?? this.cropRect),
@@ -69,7 +70,8 @@ class CropRectNormalized {
 }
 
 class EditorController extends StateNotifier<EditorState> {
-  EditorController(Uint8List source) : super(EditorState(sourceBytes: source));
+  EditorController(Uint8List source)
+      : super(EditorState(sourceBytes: source));
 
   void setBrightness(int v) => state = state.copyWith(brightness: v);
   void setContrast(int v) => state = state.copyWith(contrast: v);
@@ -80,8 +82,7 @@ class EditorController extends StateNotifier<EditorState> {
       state = state.copyWith(flipHorizontal: !state.flipHorizontal);
   void flipVertical() =>
       state = state.copyWith(flipVertical: !state.flipVertical);
-  void setCrop(CropRectNormalized rect) =>
-      state = state.copyWith(cropRect: rect);
+  void setCrop(CropRectNormalized rect) => state = state.copyWith(cropRect: rect);
   void clearCrop() => state = state.copyWith(clearCrop: true);
 
   void reset() {
@@ -126,8 +127,7 @@ Future<Uint8List> applyAdjustments(EditorState s) async {
   return Uint8List.fromList(img.encodePng(src));
 }
 
-img.Image _adjustColors(
-    img.Image src, int brightness, int contrast, int saturation) {
+img.Image _adjustColors(img.Image src, int brightness, int contrast, int saturation) {
   // 预计算对比度因子:contrast ∈ [-100,100] → factor ∈ [0.5, 1.5]
   final cFactor = 1.0 + (contrast / 100.0);
   // 亮度直接加到 RGB
@@ -148,8 +148,7 @@ img.Image _adjustColors(
     }
     // 饱和度:基于最大/最小通道差
     if (saturation != 0) {
-      final gray =
-          (pixel.r * 0.299 + pixel.g * 0.587 + pixel.b * 0.114).toInt();
+      final gray = (pixel.r * 0.299 + pixel.g * 0.587 + pixel.b * 0.114).toInt();
       final sFactor = 1.0 + saturation / 100.0;
       pixel.r = ((gray + (pixel.r - gray) * sFactor).clamp(0, 255)).toInt();
       pixel.g = ((gray + (pixel.g - gray) * sFactor).clamp(0, 255)).toInt();
@@ -159,6 +158,6 @@ img.Image _adjustColors(
   return src;
 }
 
-final editorControllerProvider = StateNotifierProvider.autoDispose
-    .family<EditorController, EditorState, Uint8List>(
+final editorControllerProvider =
+    StateNotifierProvider.autoDispose.family<EditorController, EditorState, Uint8List>(
         (ref, bytes) => EditorController(bytes));

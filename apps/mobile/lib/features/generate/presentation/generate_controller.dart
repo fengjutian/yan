@@ -5,8 +5,8 @@ import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final generateRepositoryProvider =
-    Provider<GenerateRepository>((ref) => GenerateRepository(
+final generateRepositoryProvider = Provider<GenerateRepository>(
+    (ref) => GenerateRepository(
           ref.watch(apiClientProvider),
           ref.watch(localAIClientProvider),
         ));

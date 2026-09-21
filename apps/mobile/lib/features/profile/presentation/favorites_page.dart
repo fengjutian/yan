@@ -67,9 +67,8 @@ class _CollectionRow extends ConsumerWidget {
                 borderRadius: BorderRadius.circular(12),
                 child: taskAsync.maybeWhen(
                   data: (t) {
-                    final url = t.images.isNotEmpty
-                        ? t.images.first.thumbnailUrl
-                        : null;
+                    final url =
+                        t.images.isNotEmpty ? t.images.first.thumbnailUrl : null;
                     if (url == null) {
                       return const ColoredBox(
                         color: Colors.black12,
@@ -121,7 +120,9 @@ class _CollectionRow extends ConsumerWidget {
             IconButton(
               tooltip: kind == _RowKind.favorite ? '取消收藏' : '从草稿移除',
               icon: Icon(
-                kind == _RowKind.favorite ? Icons.favorite : Icons.edit_note,
+                kind == _RowKind.favorite
+                    ? Icons.favorite
+                    : Icons.edit_note,
                 color: kind == _RowKind.favorite
                     ? Colors.redAccent
                     : Colors.blueAccent,
@@ -134,8 +135,9 @@ class _CollectionRow extends ConsumerWidget {
                 }
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content:
-                        Text(kind == _RowKind.favorite ? '已取消收藏' : '已从草稿移除'),
+                    content: Text(kind == _RowKind.favorite
+                        ? '已取消收藏'
+                        : '已从草稿移除'),
                   ));
                 }
               },

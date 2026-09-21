@@ -68,8 +68,8 @@ class _DraftRow extends ConsumerWidget {
         title: taskAsync.maybeWhen(
           data: (t) => Text(t.prompt.isEmpty ? '(无提示词)' : t.prompt,
               maxLines: 2, overflow: TextOverflow.ellipsis),
-          orElse: () =>
-              Text(taskId, style: Theme.of(context).textTheme.bodySmall),
+          orElse: () => Text(taskId,
+              style: Theme.of(context).textTheme.bodySmall),
         ),
         subtitle: taskAsync.maybeWhen(
           data: (t) => Text(t.status),

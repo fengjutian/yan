@@ -157,7 +157,8 @@ class _FeaturedCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(99),
@@ -167,8 +168,8 @@ class _FeaturedCard extends StatelessWidget {
             ),
             const Spacer(),
             Text(item.title,
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                style: const TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
             Text(item.subtitle,
                 maxLines: 2,
@@ -308,13 +309,11 @@ class _TemplateCard extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(20)),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20)),
               ),
               child: Stack(children: [
-                Center(
-                    child: Icon(item.category.icon,
-                        size: 36, color: Colors.black54)),
+                Center(child: Icon(item.category.icon, size: 36, color: Colors.black54)),
                 Positioned(
                   top: 8,
                   right: 8,

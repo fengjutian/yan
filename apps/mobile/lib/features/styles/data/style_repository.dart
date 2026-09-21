@@ -11,9 +11,9 @@ class StyleRepository {
       final response =
           await _apiClient.dio.get<Map<String, dynamic>>('/styles');
       return ((response.data!['styles'] as List<dynamic>?) ?? const [])
-          .whereType<Map<String, dynamic>>()
-          .map(StylePreset.fromJson)
-          .toList();
+        .whereType<Map<String, dynamic>>()
+        .map(StylePreset.fromJson)
+        .toList();
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }

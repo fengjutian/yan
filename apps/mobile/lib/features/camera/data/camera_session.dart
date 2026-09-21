@@ -36,8 +36,9 @@ class CameraSessionController extends StateNotifier<CameraSession> {
   }
 
   void select(int index) {
-    final clamped =
-        state.photos.isEmpty ? 0 : index.clamp(0, state.photos.length - 1);
+    final clamped = state.photos.isEmpty
+        ? 0
+        : index.clamp(0, state.photos.length - 1);
     state = CameraSession(photos: state.photos, selectedIndex: clamped);
   }
 

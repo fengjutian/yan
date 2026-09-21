@@ -14,8 +14,8 @@ final localAIClientProvider = Provider<LocalAIClient>(
   ),
 );
 
-final aiSettingsControllerProvider =
-    StateNotifierProvider.autoDispose<AISettingsController, AISettingsState>(
+final aiSettingsControllerProvider = StateNotifierProvider.autoDispose<
+    AISettingsController, AISettingsState>(
   (ref) => AISettingsController(
     ref.watch(aiSettingsStoreProvider),
     ref.watch(localAIClientProvider),
@@ -110,8 +110,8 @@ class AISettingsController extends StateNotifier<AISettingsState> {
       state = state.copyWith(
           testing: false, message: 'MiniMax 国内线路连接成功', isError: false);
     } catch (error) {
-      state =
-          state.copyWith(testing: false, message: '连接失败：$error', isError: true);
+      state = state.copyWith(
+          testing: false, message: '连接失败：$error', isError: true);
     }
   }
 }

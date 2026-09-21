@@ -35,7 +35,7 @@ class TemplateParams {
   final String templateId;
   final String prompt;
   final String composition; // CompositionGuide.name
-  final String angle; // CameraAngle.name
+  final String angle;        // CameraAngle.name
 }
 
 class _CameraPageState extends ConsumerState<CameraPage>
@@ -164,23 +164,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // Vivo 等定制 ROM 上 controller.initialize() / getMinZoomLevel 等偶发挂死,
       // 用 .timeout 兜底,超时后落到错误态而不是永久 spinner。
       await controller.initialize().timeout(const Duration(seconds: 8));
-      _minZoom = await controller
-          .getMinZoomLevel()
-          .timeout(const Duration(seconds: 3));
-      _maxZoom = await controller
-          .getMaxZoomLevel()
-          .timeout(const Duration(seconds: 3));
-      _minExposure = await controller
-          .getMinExposureOffset()
-          .timeout(const Duration(seconds: 3));
-      _maxExposure = await controller
-          .getMaxExposureOffset()
-          .timeout(const Duration(seconds: 3));
+      _minZoom = await controller.getMinZoomLevel().timeout(const Duration(seconds: 3));
+      _maxZoom = await controller.getMaxZoomLevel().timeout(const Duration(seconds: 3));
+      _minExposure = await controller.getMinExposureOffset().timeout(const Duration(seconds: 3));
+      _maxExposure = await controller.getMaxExposureOffset().timeout(const Duration(seconds: 3));
       _zoom = _minZoom;
       _flashMode = FlashMode.off;
-      await controller
-          .setFlashMode(_flashMode)
-          .timeout(const Duration(seconds: 3));
+      await controller.setFlashMode(_flashMode).timeout(const Duration(seconds: 3));
       await _startLightMonitoring(controller);
       if (mounted) setState(() => _initializing = false);
     } on CameraException catch (error) {
@@ -188,7 +178,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
     } on PlatformException catch (error) {
       _handleCameraError(error);
     } on TimeoutException catch (_) {
-      _handleCameraError(CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
+      _handleCameraError(
+          CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
     } catch (error) {
       _handleCameraError(error);
     }

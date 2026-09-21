@@ -73,8 +73,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                     ? Transform(
                         alignment: Alignment.center,
                         transform: Matrix4.identity()
-                          ..scaleByDouble(state.flipHorizontal ? -1.0 : 1.0,
-                              state.flipVertical ? -1.0 : 1.0, 1.0, 1.0),
+                          ..scaleByDouble(
+                              state.flipHorizontal ? -1.0 : 1.0,
+                              state.flipVertical ? -1.0 : 1.0,
+                              1.0,
+                              1.0),
                         child: RotatedBox(
                           quarterTurns: state.rotationQuarterTurns,
                           child: InteractiveViewer(
@@ -175,7 +178,9 @@ class _ToolbarRow extends StatelessWidget {
           label: '旋转',
           onTap: controller.rotateClockwise),
       _ToolButton(
-          icon: Icons.flip, label: '水平翻转', onTap: controller.flipHorizontal),
+          icon: Icons.flip,
+          label: '水平翻转',
+          onTap: controller.flipHorizontal),
       _ToolButton(
           icon: Icons.flip_camera_android,
           label: '垂直翻转',
@@ -268,7 +273,8 @@ class _SliderRow extends StatelessWidget {
         SizedBox(
           width: 36,
           child: Text(value.round().toString(),
-              textAlign: TextAlign.right, style: const TextStyle(fontSize: 11)),
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 11)),
         ),
       ]);
 }
