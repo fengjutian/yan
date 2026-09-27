@@ -69,26 +69,45 @@ func requestLogger() gin.HandlerFunc {
 }
 
 type ipRateLimiter struct {
-	mu       sync.Mutex
-	visitors map[string]*rate.Limiter
-	limit    rate.Limit
-	burst    int
+	mu        sync.Mutex
+	visitors  map[string]*rateLimitVisitor
+	limit     rate.Limit
+	burst     int
+	lastSweep time.Time
+}
+
+type rateLimitVisitor struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
 }
 
 func newIPRateLimiter(requestsPerSecond rate.Limit, burst int) *ipRateLimiter {
-	return &ipRateLimiter{visitors: make(map[string]*rate.Limiter), limit: requestsPerSecond, burst: burst}
+	return &ipRateLimiter{
+		visitors: make(map[string]*rateLimitVisitor), limit: requestsPerSecond,
+		burst: burst, lastSweep: time.Now(),
+	}
 }
 
 func (l *ipRateLimiter) middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
+		now := time.Now()
 		l.mu.Lock()
-		limiter := l.visitors[ip]
-		if limiter == nil {
-			limiter = rate.NewLimiter(l.limit, l.burst)
-			l.visitors[ip] = limiter
+		if now.Sub(l.lastSweep) >= time.Minute {
+			for key, visitor := range l.visitors {
+				if now.Sub(visitor.lastSeen) >= 10*time.Minute {
+					delete(l.visitors, key)
+				}
+			}
+			l.lastSweep = now
 		}
-		allowed := limiter.Allow()
+		visitor := l.visitors[ip]
+		if visitor == nil {
+			visitor = &rateLimitVisitor{limiter: rate.NewLimiter(l.limit, l.burst)}
+			l.visitors[ip] = visitor
+		}
+		visitor.lastSeen = now
+		allowed := visitor.limiter.Allow()
 		l.mu.Unlock()
 		if !allowed {
 			writeError(c, http.StatusTooManyRequests, "RATE_LIMITED", "请求过于频繁，请稍后重试")

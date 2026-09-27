@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
@@ -48,9 +48,12 @@ class LiveCameraAnalyzer {
   Future<LiveCameraAnalysis?> process(
     CameraImage image,
     CameraDescription camera,
+    DeviceOrientation deviceOrientation,
   ) async {
     if (_processing || _closed || image.planes.length != 1) return null;
-    final input = _toInputImage(image, camera);
+    final rotation = _inputRotation(camera, deviceOrientation);
+    if (rotation == null) return null;
+    final input = _toInputImage(image, rotation);
     if (input == null) return null;
     _processing = true;
     try {
@@ -64,7 +67,7 @@ class LiveCameraAnalyzer {
       }
       final landmarks = poses.isEmpty
           ? <String, Offset>{}
-          : _normalize(poses.first, image, camera);
+          : _normalize(poses.first, image, camera, rotation);
       _smoothed = _smooth(_smoothed, landmarks);
       return LiveCameraAnalysis(
         landmarks: _smoothed,
@@ -80,15 +83,30 @@ class LiveCameraAnalyzer {
     }
   }
 
-  InputImage? _toInputImage(
-    CameraImage image,
+  InputImageRotation? _inputRotation(
     CameraDescription camera,
+    DeviceOrientation deviceOrientation,
   ) {
-    final rotation = InputImageRotationValue.fromRawValue(
-      camera.sensorOrientation,
-    );
+    if (Platform.isIOS) {
+      return InputImageRotationValue.fromRawValue(camera.sensorOrientation);
+    }
+    const orientationDegrees = <DeviceOrientation, int>{
+      DeviceOrientation.portraitUp: 0,
+      DeviceOrientation.landscapeLeft: 90,
+      DeviceOrientation.portraitDown: 180,
+      DeviceOrientation.landscapeRight: 270,
+    };
+    final deviceDegrees = orientationDegrees[deviceOrientation];
+    if (deviceDegrees == null) return null;
+    final degrees = camera.lensDirection == CameraLensDirection.front
+        ? (camera.sensorOrientation + deviceDegrees) % 360
+        : (camera.sensorOrientation - deviceDegrees + 360) % 360;
+    return InputImageRotationValue.fromRawValue(degrees);
+  }
+
+  InputImage? _toInputImage(CameraImage image, InputImageRotation rotation) {
     final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (rotation == null || format == null) return null;
+    if (format == null) return null;
     if (Platform.isAndroid && format != InputImageFormat.nv21) return null;
     if (Platform.isIOS && format != InputImageFormat.bgra8888) return null;
     return InputImage.fromBytes(
@@ -106,9 +124,10 @@ class LiveCameraAnalyzer {
     Pose pose,
     CameraImage image,
     CameraDescription camera,
+    InputImageRotation rotation,
   ) {
-    final rotated =
-        camera.sensorOrientation == 90 || camera.sensorOrientation == 270;
+    final rotated = rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
     final width = rotated ? image.height.toDouble() : image.width.toDouble();
     final height = rotated ? image.width.toDouble() : image.height.toDouble();
     final result = <String, Offset>{};

@@ -1,5 +1,5 @@
 import 'package:camera/camera.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 ImageFormatGroup get preferredAnalysisFormat => ImageFormatGroup.jpeg;
 
@@ -21,6 +21,7 @@ class LiveCameraAnalyzer {
   Future<LiveCameraAnalysis?> process(
     CameraImage image,
     CameraDescription camera,
+    DeviceOrientation deviceOrientation,
   ) async =>
       null;
 

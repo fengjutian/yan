@@ -25,6 +25,14 @@ func (r *TaskRepository) CreatePending(
 	var result *model.ImageTask
 	var existing bool
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Serialize creation per user before checking the idempotency record. This
+		// closes the check-then-insert race between identical concurrent requests.
+		var user model.User
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			First(&user, "id = ? AND deleted_at IS NULL", task.UserID).Error; err != nil {
+			return err
+		}
+
 		var record model.IdempotencyRecord
 		err := tx.Where("user_id = ? AND idempotency_key = ?", task.UserID, idempotencyKey).
 			First(&record).Error
@@ -44,11 +52,6 @@ func (r *TaskRepository) CreatePending(
 			return err
 		}
 
-		var user model.User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			First(&user, "id = ? AND deleted_at IS NULL", task.UserID).Error; err != nil {
-			return err
-		}
 		if user.CreditsBalance < task.CreditsReserved {
 			return repository.ErrInsufficientCredits
 		}

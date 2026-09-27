@@ -63,6 +63,36 @@ func TestMeRequiresAuthentication(t *testing.T) {
 	}
 }
 
+func TestPromptEnhancementRequiresAuthentication(t *testing.T) {
+	t.Parallel()
+
+	auth, err := service.NewAuthService(
+		nil,
+		nil,
+		"test-signing-key-with-at-least-32-bytes",
+		15*time.Minute,
+		24*time.Hour,
+		100,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/api/v1/prompts/enhance",
+		strings.NewReader(`{"prompt":"a cat"}`),
+	)
+	request.Header.Set("Content-Type", "application/json")
+	prompts := service.NewPromptService(nil)
+	NewRouter("test", time.Now(), auth, nil, nil, nil, prompts, 0, nil, nil).
+		ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+}
+
 func TestRegisterRejectsInvalidPayload(t *testing.T) {
 	t.Parallel()
 

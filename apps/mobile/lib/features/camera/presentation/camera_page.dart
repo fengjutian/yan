@@ -7,7 +7,7 @@ import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show PlatformException;
+import 'package:flutter/services.dart' show DeviceOrientation, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -216,7 +216,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
         }
         if (mounted && count > 0) setState(() => _brightness = total / count);
         if (_showRealtimeGuidance) {
-          unawaited(_analyzeFrame(image, controller.description));
+          unawaited(_analyzeFrame(
+            image,
+            controller.description,
+            controller.value.deviceOrientation,
+          ));
         }
       });
     } on CameraException {
@@ -227,8 +231,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Future<void> _analyzeFrame(
     CameraImage image,
     CameraDescription camera,
+    DeviceOrientation deviceOrientation,
   ) async {
-    final result = await _liveAnalyzer.process(image, camera);
+    final result = await _liveAnalyzer.process(image, camera, deviceOrientation);
     if (!mounted || result == null || !_showRealtimeGuidance) return;
     setState(() {
       _liveAnalysis = result;
@@ -495,11 +500,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
     // _initializing 和 _controller 必须联动:前者 true 时后者允许为 null,
     // 但反过来不应出现 _initializing==false 且 _controller==null 的窗口。
     // 这里兜底一次,避免任何遗漏路径触发 NPE。
-    if (_initializing || _controller == null) {
-      return const ColoredBox(
-          color: Color(0xFF242220),
-          child: Center(child: CircularProgressIndicator(color: Colors.white)));
-    }
     if (_error != null) {
       return ColoredBox(
           color: const Color(0xFF242220),
@@ -517,6 +517,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     OutlinedButton(
                         onPressed: _loadCameras, child: const Text('重试'))
                   ]))));
+    }
+    if (_initializing || _controller == null) {
+      return const ColoredBox(
+          color: Color(0xFF242220),
+          child: Center(child: CircularProgressIndicator(color: Colors.white)));
     }
     final controller = _controller!;
     return LayoutBuilder(
@@ -719,7 +724,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
               child: Row(children: [
                 Expanded(
                     child: OutlinedButton(
-                        onPressed: () => setState(() => _capturedImage = null),
+                        onPressed: _retake,
                         child: const Text('重拍'))),
                 const SizedBox(width: 12),
                 Expanded(
@@ -730,6 +735,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
               ])),
         ])),
       );
+
+  Future<void> _retake() async {
+    if (mounted) setState(() => _capturedImage = null);
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    if (!controller.value.isStreamingImages) {
+      await _startLightMonitoring(controller);
+    }
+  }
 }
 
 class _FocusRing extends StatelessWidget {

@@ -12,14 +12,20 @@ final tokenStorageProvider = Provider<TokenStorage>(
 /// 拆出独立 provider 是为了打破 apiClientProvider <-> authControllerProvider
 /// 之间的循环依赖:apiClient 不再直接 watch authController,改为读一个
 /// 单独的回调槽位,由 AuthController 启动时把自己写进去。
-final sessionInvalidatedProvider = StateProvider<void Function()?>(
-  (ref) => null,
+final sessionInvalidatedProvider = Provider<SessionInvalidationHandler>(
+  (ref) => SessionInvalidationHandler(),
 );
+
+class SessionInvalidationHandler {
+  void Function()? callback;
+
+  void call() => callback?.call();
+}
 
 final apiClientProvider = Provider<ApiClient>(
   (ref) => ApiClient(
     tokenStorage: ref.watch(tokenStorageProvider),
-    onSessionInvalidated: ref.watch(sessionInvalidatedProvider),
+    onSessionInvalidated: ref.watch(sessionInvalidatedProvider).call,
   ),
 );
 
@@ -33,14 +39,11 @@ final authRepositoryProvider = Provider<AuthRepository>(
 final authControllerProvider = StateNotifierProvider<AuthController, AuthState>(
   (ref) {
     final controller = AuthController(ref.watch(authRepositoryProvider));
-    // 把 controller 的回调注入到 apiClient 看得见的槽位上。
-    // 必须延后到当前 build phase 之外再写 sessionInvalidatedProvider,
-    // 否则触发 "Providers are not allowed to modify other providers
-    // during their initialization"。
-    Future<void>.delayed(Duration.zero, () {
-      ref.read(sessionInvalidatedProvider.notifier).state =
-          controller.onSessionInvalidated;
-    });
+    // 回调槽不是响应式状态，可以在 provider 初始化期间同步赋值，避免留下
+    // 零延迟 Timer，也不会触发 provider 初始化期间修改其他状态的限制。
+    final handler = ref.read(sessionInvalidatedProvider);
+    handler.callback = controller.onSessionInvalidated;
+    ref.onDispose(() => handler.callback = null);
     return controller;
   },
 );

@@ -64,9 +64,6 @@ func NewRouter(
 	if styles != nil {
 		v1.GET("/styles", styleHandler{styles: styles}.list)
 	}
-	if prompts != nil {
-		v1.POST("/prompts/enhance", promptHandler{prompts: prompts}.enhance)
-	}
 	if auth != nil {
 		handler := authHandler{auth: auth}
 		authRoutes := v1.Group("/auth")
@@ -76,6 +73,9 @@ func NewRouter(
 		authRoutes.POST("/refresh", handler.refresh)
 		authRoutes.POST("/logout", handler.logout)
 		v1.GET("/me", authMiddleware(auth), handler.me)
+		if prompts != nil {
+			v1.POST("/prompts/enhance", authMiddleware(auth), promptHandler{prompts: prompts}.enhance)
+		}
 		if len(adminServices) > 0 && adminServices[0] != nil {
 			adminAPI := adminHandler{admin: adminServices[0]}
 			admin := v1.Group("/admin", authMiddleware(auth), adminMiddleware(auth))
