@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 /// 风格迁移页:选风格 + 强度滑杆 + 保护开关 + 前后对比滑动。
-/// 后端 STYLE_TRANSFER 任务类型未上线,先用 CHARACTER_REFERENCE fallback。
 class StyleTransferPage extends ConsumerStatefulWidget {
   const StyleTransferPage({this.sourceBytes, super.key});
   final Uint8List? sourceBytes;

@@ -71,9 +71,7 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
   void setProtectBackground(bool v) =>
       state = state.copyWith(protectBackground: v, clearError: true);
 
-  /// 提交风格迁移任务。
-  /// 后端 STYLE_TRANSFER 接口尚未上线,这里先 fallback 到 CHARACTER_REFERENCE,
-  /// 把 strength / protect 写入任务 options,后端真实接口可用后切换。
+  /// 上传源图并提交风格迁移任务。
   Future<String?> submit({
     required Uint8List sourceBytes,
     required String prompt,

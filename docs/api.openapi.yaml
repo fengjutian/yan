@@ -344,7 +344,7 @@ components:
       properties:
         type:
           type: string
-          enum: [TEXT_TO_IMAGE, CHARACTER_REFERENCE]
+          enum: [TEXT_TO_IMAGE, CHARACTER_REFERENCE, STYLE_TRANSFER]
         prompt: {type: string, maxLength: 1500}
         source_asset_id: {type: string}
         style_id: {type: string}
@@ -354,6 +354,15 @@ components:
         count: {type: integer, minimum: 1, maximum: 4}
         seed: {type: integer, format: int64}
         prompt_optimizer: {type: boolean}
+        options:
+          $ref: '#/components/schemas/StyleTransferOptions'
+    StyleTransferOptions:
+      type: object
+      properties:
+        strength: {type: number, format: double, minimum: 0, maximum: 1}
+        protect_face: {type: boolean}
+        protect_skin: {type: boolean}
+        protect_background: {type: boolean}
     TaskStatus:
       type: string
       enum: [PENDING, PROCESSING, RETRYING, SUCCEEDED, FAILED, CANCELED]
