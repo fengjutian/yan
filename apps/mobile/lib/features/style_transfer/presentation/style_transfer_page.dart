@@ -167,11 +167,20 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已提交任务,请前往作品库查看进度')),
-    );
+    final taskId = await ref
+        .read(styleTransferControllerProvider.notifier)
+        .submit(
+          sourceBytes: bytes,
+          prompt: '对这张照片进行自然、精细的风格迁移',
+          aspectRatio: '1:1',
+        );
     if (!context.mounted) return;
-    context.go('/history');
+    if (taskId != null && taskId.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('任务已提交，正在生成成片')),
+      );
+      context.go('/task/$taskId');
+    }
   }
 }
 

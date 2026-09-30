@@ -22,8 +22,12 @@ type ImageTask struct {
 	Height            *uint
 	ImageCount        uint8 `gorm:"not null"`
 	Seed              *int64
-	PromptOptimizer   bool      `gorm:"not null"`
-	AIGCWatermark     bool      `gorm:"not null"`
+	PromptOptimizer   bool `gorm:"not null"`
+	AIGCWatermark     bool `gorm:"not null"`
+	StyleStrength     *float64
+	ProtectFace       bool      `gorm:"not null"`
+	ProtectSkin       bool      `gorm:"not null"`
+	ProtectBackground bool      `gorm:"not null"`
 	CreditsReserved   int64     `gorm:"not null"`
 	AttemptCount      uint8     `gorm:"not null"`
 	ErrorCode         *string   `gorm:"size:80"`

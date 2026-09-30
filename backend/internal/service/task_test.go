@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,6 +73,31 @@ func TestCreateTaskBuildsEffectiveStylePrompt(t *testing.T) {
 	}
 	if task.EffectivePrompt == nil || *task.EffectivePrompt == task.Prompt {
 		t.Fatalf("style template was not applied: %+v", task.EffectivePrompt)
+	}
+}
+
+func TestCreateStyleTransferTaskPersistsOptions(t *testing.T) {
+	t.Parallel()
+	repo := &fakeTaskRepository{}
+	styleID := "style-1"
+	assetID := "asset-1"
+	strength := 0.65
+	assets := NewAssetService(fakeAssetRepository{}, nil, "", 0)
+	service := NewTaskService(repo, &fakeImageQueue{}, assets, fakeStyles{})
+	task, err := service.Create(context.Background(), CreateImageTaskInput{
+		UserID: "user-1", IdempotencyKey: "request-transfer", Type: "STYLE_TRANSFER",
+		Prompt: "soft portrait", StyleID: &styleID, SourceAssetID: &assetID,
+		AspectRatio: "1:1", Count: 1, StyleStrength: &strength,
+		ProtectFace: true, ProtectSkin: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Type != "STYLE_TRANSFER" || task.StyleStrength == nil || *task.StyleStrength != strength {
+		t.Fatalf("style transfer options were not persisted: %+v", task)
+	}
+	if task.EffectivePrompt == nil || !strings.Contains(*task.EffectivePrompt, "65%") {
+		t.Fatalf("style transfer guidance was not applied: %+v", task.EffectivePrompt)
 	}
 }
 

@@ -1,6 +1,13 @@
+import 'dart:typed_data';
+
+import 'package:ai_image_studio/features/assets/data/asset_repository.dart';
+import 'package:ai_image_studio/features/assets/presentation/asset_upload_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:uuid/uuid.dart';
 
 @immutable
 class StyleTransferState {
@@ -50,9 +57,12 @@ class StyleTransferState {
 }
 
 class StyleTransferController extends StateNotifier<StyleTransferState> {
-  StyleTransferController(this._ref) : super(const StyleTransferState());
+  StyleTransferController(this._ref, this._assets)
+      : super(const StyleTransferState());
 
   final Ref _ref;
+  final AssetRepository _assets;
+  static const _uuid = Uuid();
 
   void setStyle(String id) =>
       state = state.copyWith(styleId: id, clearError: true);
@@ -68,7 +78,7 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
   /// 后端 STYLE_TRANSFER 接口尚未上线,这里先 fallback 到 CHARACTER_REFERENCE,
   /// 把 strength / protect 写入任务 options,后端真实接口可用后切换。
   Future<String?> submit({
-    required String sourceAssetId,
+    required Uint8List sourceBytes,
     required String prompt,
     required String aspectRatio,
   }) async {
@@ -79,15 +89,27 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
     if (state.submitting) return null;
     state = state.copyWith(submitting: true, clearError: true);
     try {
+      if (sourceBytes.length > maxUploadBytes) {
+        throw StateError('图片不能超过 10 MB');
+      }
+      final source = await _assets.upload(
+        XFile.fromData(sourceBytes,
+            mimeType: 'image/jpeg',
+            name: 'style-${DateTime.now().millisecondsSinceEpoch}.jpg'),
+        onProgress: (_) {},
+      );
       final dio = _ref.read(apiClientProvider).dio;
       final response = await dio.post<Map<String, dynamic>>(
         '/image-tasks',
+        options: Options(headers: {'Idempotency-Key': _uuid.v4()}),
         data: {
-          'type': 'CHARACTER_REFERENCE', // 临时 fallback,真实 STYLE_TRANSFER 上线后替换
+          'type': 'STYLE_TRANSFER',
           'prompt': prompt,
-          'source_asset_id': sourceAssetId,
+          'source_asset_id': source.id,
           'style_id': state.styleId,
           'aspect_ratio': aspectRatio,
+          'count': 1,
+          'prompt_optimizer': true,
           'options': {
             'strength': state.strength,
             'protect_face': state.protectFace,
@@ -108,4 +130,7 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
 
 final styleTransferControllerProvider =
     StateNotifierProvider.autoDispose<StyleTransferController,
-        StyleTransferState>((ref) => StyleTransferController(ref));
+        StyleTransferState>((ref) => StyleTransferController(
+              ref,
+              ref.watch(assetRepositoryProvider),
+            ));

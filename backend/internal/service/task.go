@@ -37,18 +37,22 @@ type TaskService struct {
 }
 
 type CreateImageTaskInput struct {
-	UserID          string
-	IdempotencyKey  string
-	Type            string
-	Prompt          string
-	StyleID         *string
-	SourceAssetID   *string
-	ParentTaskID    *string
-	AspectRatio     string
-	Count           int
-	Seed            *int64
-	PromptOptimizer bool
-	AIGCWatermark   bool
+	UserID            string
+	IdempotencyKey    string
+	Type              string
+	Prompt            string
+	StyleID           *string
+	SourceAssetID     *string
+	ParentTaskID      *string
+	AspectRatio       string
+	Count             int
+	Seed              *int64
+	PromptOptimizer   bool
+	AIGCWatermark     bool
+	StyleStrength     *float64
+	ProtectFace       bool
+	ProtectSkin       bool
+	ProtectBackground bool
 }
 
 type TaskResult struct {
@@ -78,10 +82,13 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 	if input.UserID == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 255 ||
 		input.Prompt == "" || utf8.RuneCountInString(input.Prompt) > 1500 ||
 		input.Count < 1 || input.Count > 4 || !validAspectRatio(input.AspectRatio) ||
-		(input.Type != "TEXT_TO_IMAGE" && input.Type != "CHARACTER_REFERENCE") {
+		(input.Type != "TEXT_TO_IMAGE" && input.Type != "CHARACTER_REFERENCE" && input.Type != "STYLE_TRANSFER") {
 		return nil, ErrInvalidTask
 	}
-	if input.Type == "CHARACTER_REFERENCE" && input.SourceAssetID == nil {
+	if (input.Type == "CHARACTER_REFERENCE" || input.Type == "STYLE_TRANSFER") && input.SourceAssetID == nil {
+		return nil, ErrInvalidTask
+	}
+	if input.Type == "STYLE_TRANSFER" && (input.StyleID == nil || input.StyleStrength == nil || *input.StyleStrength < 0 || *input.StyleStrength > 1) {
 		return nil, ErrInvalidTask
 	}
 	if input.Type == "TEXT_TO_IMAGE" && input.SourceAssetID != nil {
@@ -115,6 +122,18 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 	if input.Type == "CHARACTER_REFERENCE" {
 		effectivePrompt += "\n\nPreserve the referenced character's identity and recognizable facial features."
 	}
+	if input.Type == "STYLE_TRANSFER" {
+		effectivePrompt += fmt.Sprintf("\n\nApply the selected style at %.0f%% intensity.", *input.StyleStrength*100)
+		if input.ProtectFace {
+			effectivePrompt += " Preserve facial identity and facial geometry."
+		}
+		if input.ProtectSkin {
+			effectivePrompt += " Preserve natural skin tone and texture."
+		}
+		if input.ProtectBackground {
+			effectivePrompt += " Preserve the original background composition."
+		}
+	}
 	if utf8.RuneCountInString(effectivePrompt) > 1500 {
 		return nil, ErrInvalidTask
 	}
@@ -127,6 +146,8 @@ func (s *TaskService) Create(ctx context.Context, input CreateImageTaskInput) (*
 		ProviderModel: "image-01", AspectRatio: input.AspectRatio,
 		ImageCount: uint8(input.Count), Seed: input.Seed,
 		PromptOptimizer: input.PromptOptimizer, AIGCWatermark: input.AIGCWatermark,
+		StyleStrength: input.StyleStrength, ProtectFace: input.ProtectFace,
+		ProtectSkin: input.ProtectSkin, ProtectBackground: input.ProtectBackground,
 		CreditsReserved: int64(input.Count * 10), CreatedAt: now, UpdatedAt: now,
 	}
 	task.ParentTaskID = input.ParentTaskID
@@ -214,6 +235,8 @@ func (s *TaskService) Retry(
 		AspectRatio: previous.AspectRatio, Count: int(previous.ImageCount),
 		Seed: previous.Seed, PromptOptimizer: previous.PromptOptimizer,
 		AIGCWatermark: previous.AIGCWatermark,
+		StyleStrength: previous.StyleStrength, ProtectFace: previous.ProtectFace,
+		ProtectSkin: previous.ProtectSkin, ProtectBackground: previous.ProtectBackground,
 	})
 }
 

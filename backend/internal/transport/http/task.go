@@ -13,14 +13,22 @@ import (
 type taskHandler struct{ tasks *service.TaskService }
 
 type createTaskRequest struct {
-	Type            string  `json:"type" binding:"required"`
-	Prompt          string  `json:"prompt" binding:"required"`
-	StyleID         *string `json:"style_id"`
-	SourceAssetID   *string `json:"source_asset_id"`
-	AspectRatio     string  `json:"aspect_ratio" binding:"required"`
-	Count           int     `json:"count" binding:"required"`
-	Seed            *int64  `json:"seed"`
-	PromptOptimizer bool    `json:"prompt_optimizer"`
+	Type            string             `json:"type" binding:"required"`
+	Prompt          string             `json:"prompt" binding:"required"`
+	StyleID         *string            `json:"style_id"`
+	SourceAssetID   *string            `json:"source_asset_id"`
+	AspectRatio     string             `json:"aspect_ratio" binding:"required"`
+	Count           int                `json:"count" binding:"required"`
+	Seed            *int64             `json:"seed"`
+	PromptOptimizer bool               `json:"prompt_optimizer"`
+	Options         taskOptionsRequest `json:"options"`
+}
+
+type taskOptionsRequest struct {
+	Strength          *float64 `json:"strength"`
+	ProtectFace       bool     `json:"protect_face"`
+	ProtectSkin       bool     `json:"protect_skin"`
+	ProtectBackground bool     `json:"protect_background"`
 }
 
 type taskResponse struct {
@@ -50,6 +58,8 @@ func (h taskHandler) create(c *gin.Context) {
 		Type: request.Type, Prompt: request.Prompt, StyleID: request.StyleID,
 		SourceAssetID: request.SourceAssetID, AspectRatio: request.AspectRatio, Count: request.Count,
 		Seed: request.Seed, PromptOptimizer: request.PromptOptimizer, AIGCWatermark: true,
+		StyleStrength: request.Options.Strength, ProtectFace: request.Options.ProtectFace,
+		ProtectSkin: request.Options.ProtectSkin, ProtectBackground: request.Options.ProtectBackground,
 	})
 	if err != nil {
 		writeTaskError(c, err)
