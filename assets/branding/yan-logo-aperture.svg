@@ -1,0 +1,21 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>YAN Studio aperture and inspiration logo</title>
+
+  <!-- Lens body: two continuous concentric rings -->
+  <circle cx="512" cy="512" r="334" stroke="#34252D" stroke-width="64"/>
+  <circle cx="512" cy="512" r="258" stroke="#A86F72" stroke-width="24"/>
+
+  <!-- Six shutter seams curling into the aperture -->
+  <g stroke="#34252D" stroke-width="54" stroke-linecap="round">
+    <path d="M512 254C566 254 618 271 661 302L586 432"/>
+    <path d="M735 383C762 430 771 484 765 537L615 537"/>
+    <path d="M735 641C708 688 665 725 616 747L541 617"/>
+    <path d="M512 770C458 770 406 753 363 722L438 592"/>
+    <path d="M289 641C262 594 253 540 259 487L409 487"/>
+    <path d="M289 383C316 336 359 299 408 277L483 407"/>
+  </g>
+
+  <!-- Inspiration spark in the aperture opening -->
+  <circle cx="512" cy="512" r="108" fill="#FFF8F4"/>
+  <path d="M512 431C522 470 549 502 593 512C549 522 522 554 512 593C502 554 475 522 431 512C475 502 502 470 512 431Z" fill="#A86F72"/>
+</svg>
