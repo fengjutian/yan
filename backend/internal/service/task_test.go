@@ -82,7 +82,14 @@ func TestCreateStyleTransferTaskPersistsOptions(t *testing.T) {
 	styleID := "style-1"
 	assetID := "asset-1"
 	strength := 0.65
-	assets := NewAssetService(fakeAssetRepository{}, nil, "", 0)
+	assetRepo := newMemoryAssets()
+	assetRepo.assets[assetID] = &model.ImageAsset{ID: assetID, UserID: "user-1"}
+	assets, err := NewAssetService(
+		assetRepo, newMemoryObjectStorage(), "test", 1024, 1000, 64, time.Minute,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	service := NewTaskService(repo, &fakeImageQueue{}, assets, fakeStyles{})
 	task, err := service.Create(context.Background(), CreateImageTaskInput{
 		UserID: "user-1", IdempotencyKey: "request-transfer", Type: "STYLE_TRANSFER",

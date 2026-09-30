@@ -159,21 +159,20 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
   }
 
   Future<void> _submit(BuildContext context) async {
-    final bytes = widget.sourceBytes ??
-        ref.read(cameraSessionProvider).selected?.bytes;
+    final bytes =
+        widget.sourceBytes ?? ref.read(cameraSessionProvider).selected?.bytes;
     if (bytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('没有可用的源图,请先在相机或工作室准备一张')),
       );
       return;
     }
-    final taskId = await ref
-        .read(styleTransferControllerProvider.notifier)
-        .submit(
-          sourceBytes: bytes,
-          prompt: '对这张照片进行自然、精细的风格迁移',
-          aspectRatio: '1:1',
-        );
+    final taskId =
+        await ref.read(styleTransferControllerProvider.notifier).submit(
+              sourceBytes: bytes,
+              prompt: '对这张照片进行自然、精细的风格迁移',
+              aspectRatio: '1:1',
+            );
     if (!context.mounted) return;
     if (taskId != null && taskId.isNotEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,13 +190,15 @@ class _StrengthLegend extends StatelessWidget {
         Container(
           width: 8,
           height: 8,
-          decoration: const BoxDecoration(
-              color: Colors.green, shape: BoxShape.circle),
+          decoration:
+              const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
-        const Text('原片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        const Text('原片',
+            style: TextStyle(fontSize: 11, color: AppColors.muted)),
         const Spacer(),
-        const Text('成片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+        const Text('成片',
+            style: TextStyle(fontSize: 11, color: AppColors.muted)),
         const SizedBox(width: 4),
         Container(
           width: 8,
@@ -300,7 +301,8 @@ class _BeforeAfterSlider extends StatelessWidget {
               child: SliderTheme(
                 data: SliderThemeData(
                   trackHeight: 0,
-                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
+                  thumbShape:
+                      const RoundSliderThumbShape(enabledThumbRadius: 0),
                   overlayShape: SliderComponentShape.noOverlay,
                   activeTrackColor: Colors.transparent,
                   inactiveTrackColor: Colors.transparent,
