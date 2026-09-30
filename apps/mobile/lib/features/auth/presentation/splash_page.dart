@@ -80,25 +80,12 @@ class _SplashPageState extends ConsumerState<SplashPage>
           opacity: _opacity,
           child: ScaleTransition(
             scale: _scale,
-            child: const Text(
-              '颜',
-              semanticsLabel: '颜',
-              style: TextStyle(
-                color: AppColors.ink,
-                fontFamily: 'Source Han Serif SC',
-                fontFamilyFallback: [
-                  'Source Han Serif CN',
-                  'Noto Serif CJK SC',
-                  'Noto Serif SC',
-                  'STSong',
-                  'SimSun',
-                  'serif',
-                ],
-                fontSize: 92,
-                height: 1,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 3,
-              ),
+            child: Image.asset(
+              'assets/branding/yan-logo.png',
+              width: 148,
+              height: 148,
+              fit: BoxFit.contain,
+              semanticLabel: '颜 Studio Logo',
             ),
           ),
         ),

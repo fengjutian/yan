@@ -46,7 +46,14 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Icon(Icons.auto_awesome, size: 56),
+                    Center(
+                      child: Image.asset(
+                        'assets/branding/yan-logo.png',
+                        width: 72,
+                        height: 72,
+                        semanticLabel: '颜 Studio Logo',
+                      ),
+                    ),
                     const SizedBox(height: 20),
                     Text(
                       _isRegister ? '创建账号' : '欢迎回来',
