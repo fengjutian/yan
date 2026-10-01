@@ -89,8 +89,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
   (double, double, double)? _lastAcceleration;
   double _brightness = 128;
   List<double> _histogram = List<double>.filled(32, 0);
+  List<double> _redHistogram = List<double>.filled(32, 0);
+  List<double> _greenHistogram = List<double>.filled(32, 0);
+  List<double> _blueHistogram = List<double>.filled(32, 0);
   double _highlightClipping = 0;
   double _shadowClipping = 0;
+  double _highlightThreshold = .95;
   bool _showHistogram = false;
   bool _showFocusPeaking = false;
   bool _lensCleaningHints = true;
@@ -139,6 +143,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _saveOriginalPreference = 'camera.save_original';
   static const _stylePreference = 'camera.photo_style';
   static const _histogramPreference = 'camera.show_histogram';
+  static const _highlightThresholdPreference = 'camera.highlight_threshold';
   static const _smartShutterPreference = 'camera.smart_shutter';
   static const _focusPeakingPreference = 'camera.focus_peaking';
   static const _lensHintsPreference = 'camera.lens_cleaning_hints';
@@ -223,6 +228,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _style = CameraStyle
           .values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
       _showHistogram = preferences.getBool(_histogramPreference) ?? false;
+      final highlightThreshold =
+          preferences.getDouble(_highlightThresholdPreference) ?? .95;
+      _highlightThreshold = const [.90, .95, .98].contains(highlightThreshold)
+          ? highlightThreshold
+          : .95;
       final smartIndex = preferences.getInt(_smartShutterPreference) ?? 0;
       _smartShutterMode = SmartShutterMode
           .values[smartIndex.clamp(0, SmartShutterMode.values.length - 1)];
@@ -389,34 +399,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
           return;
         }
         _lastFrameAt = now;
-        final bytes = image.planes.first.bytes;
-        var total = 0;
-        var count = 0;
-        var highlights = 0;
-        var shadows = 0;
-        final bins = List<int>.filled(32, 0);
-        for (var index = 0; index < bytes.length; index += 80) {
-          final luminance = bytes[index];
-          total += luminance;
-          bins[(luminance * bins.length ~/ 256).clamp(0, bins.length - 1)]++;
-          if (luminance >= 245) highlights++;
-          if (luminance <= 10) shadows++;
-          count++;
-        }
-        if (mounted && count > 0) {
-          final peak = bins.reduce((a, b) => a > b ? a : b);
+        final histogram = _analyzeHistogram(image);
+        if (mounted && histogram.samples > 0) {
           final detail = _analyzeSharpness(
             image,
             controller.description,
             controller.value.deviceOrientation,
           );
           setState(() {
-            _brightness = total / count;
-            _highlightClipping = highlights / count;
-            _shadowClipping = shadows / count;
-            _histogram = peak == 0
-                ? List<double>.filled(bins.length, 0)
-                : bins.map((value) => value / peak).toList(growable: false);
+            _brightness = histogram.brightness;
+            _highlightClipping = histogram.highlightClipping;
+            _shadowClipping = histogram.shadowClipping;
+            _histogram = histogram.luminance;
+            _redHistogram = histogram.red;
+            _greenHistogram = histogram.green;
+            _blueHistogram = histogram.blue;
             _clarityScore = detail.clarity;
             _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
             final normallyLit = _brightness >= 60 && _brightness <= 215;
@@ -451,10 +448,90 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _showHistogram = false;
           _liveAnalysis = null;
           _histogram = const [];
+          _redHistogram = const [];
+          _greenHistogram = const [];
+          _blueHistogram = const [];
           _focusPeaks = const [];
         });
       }
     }
+  }
+
+  _FrameHistogram _analyzeHistogram(CameraImage image) {
+    const binCount = 32;
+    final luminanceBins = List<int>.filled(binCount, 0);
+    final redBins = List<int>.filled(binCount, 0);
+    final greenBins = List<int>.filled(binCount, 0);
+    final blueBins = List<int>.filled(binCount, 0);
+    final plane = image.planes.first;
+    final bytes = plane.bytes;
+    final rowStride = plane.bytesPerRow;
+    final isBgra = image.format.group == ImageFormatGroup.bgra8888;
+    final isNv21 = image.format.group == ImageFormatGroup.nv21;
+    final pixelStride = plane.bytesPerPixel ?? (isBgra ? 4 : 1);
+    final yPlaneSize = rowStride * image.height;
+    final step = math.max(6, math.min(image.width, image.height) ~/ 48);
+    var total = 0;
+    var samples = 0;
+    var highlights = 0;
+    var shadows = 0;
+
+    void addSample(int y, int red, int green, int blue) {
+      total += y;
+      if (y >= (_highlightThreshold * 255).round()) highlights++;
+      if (y <= 10) shadows++;
+      luminanceBins[(y * binCount ~/ 256).clamp(0, binCount - 1)]++;
+      redBins[(red * binCount ~/ 256).clamp(0, binCount - 1)]++;
+      greenBins[(green * binCount ~/ 256).clamp(0, binCount - 1)]++;
+      blueBins[(blue * binCount ~/ 256).clamp(0, binCount - 1)]++;
+      samples++;
+    }
+
+    for (var y = 0; y < image.height; y += step) {
+      for (var x = 0; x < image.width; x += step) {
+        final index = y * rowStride + x * pixelStride;
+        if (isBgra && index + 2 < bytes.length) {
+          final blue = bytes[index];
+          final green = bytes[index + 1];
+          final red = bytes[index + 2];
+          final luma = (.299 * red + .587 * green + .114 * blue).round();
+          addSample(luma, red, green, blue);
+        } else if (isNv21 && index < yPlaneSize && index < bytes.length) {
+          final luma = bytes[index];
+          final uvIndex = yPlaneSize + (y ~/ 2) * rowStride + (x & ~1);
+          if (uvIndex + 1 >= bytes.length) continue;
+          final v = bytes[uvIndex] - 128;
+          final u = bytes[uvIndex + 1] - 128;
+          final red = (luma + 1.402 * v).round().clamp(0, 255);
+          final green = (luma - .344136 * u - .714136 * v).round().clamp(
+            0,
+            255,
+          );
+          final blue = (luma + 1.772 * u).round().clamp(0, 255);
+          addSample(luma, red, green, blue);
+        }
+      }
+    }
+
+    List<double> normalize(List<int> bins, int peak) => peak == 0
+        ? List<double>.filled(binCount, 0)
+        : bins.map((value) => value / peak).toList(growable: false);
+    final luminancePeak = luminanceBins.reduce(math.max);
+    final colorPeak = <int>[
+      ...redBins,
+      ...greenBins,
+      ...blueBins,
+    ].reduce(math.max);
+    return _FrameHistogram(
+      samples: samples,
+      brightness: samples == 0 ? 0 : total / samples,
+      highlightClipping: samples == 0 ? 0 : highlights / samples,
+      shadowClipping: samples == 0 ? 0 : shadows / samples,
+      luminance: normalize(luminanceBins, luminancePeak),
+      red: normalize(redBins, colorPeak),
+      green: normalize(greenBins, colorPeak),
+      blue: normalize(blueBins, colorPeak),
+    );
   }
 
   _FrameSharpness _analyzeSharpness(
@@ -669,6 +746,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
             ),
       )
       .toList(growable: false);
+
+  NativeCameraLens? get _activeNativeLens {
+    final cameraId = _controller?.description.name;
+    if (cameraId == null) return null;
+    for (final lens in _capabilities.lenses) {
+      if (cameraId == lens.id || cameraId.contains(lens.id)) return lens;
+    }
+    return null;
+  }
 
   Future<void> _toggleFlash() async {
     final controller = _controller;
@@ -1319,6 +1405,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
         children: [
           _CapabilitySummary(capabilities: _capabilities),
           const SizedBox(height: 8),
+          _ProfessionalCapabilityPanel(
+            lens: _activeNativeLens,
+            exposure: _exposure,
+            minExposure: _minExposure,
+            maxExposure: _maxExposure,
+            onExposureChanged: (value) => unawaited(_setExposure(value)),
+          ),
+          const SizedBox(height: 10),
           Wrap(
             alignment: WrapAlignment.center,
             spacing: 8,
@@ -1387,6 +1481,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   unawaited(
                     _savePreference(_histogramPreference, _showHistogram),
                   );
+                }),
+              ),
+              _CameraOption(
+                label: '高光 ${(100 * _highlightThreshold).round()}%',
+                icon: Icons.wb_sunny_outlined,
+                selected: _showHistogram,
+                onTap: () => setState(() {
+                  const thresholds = [.90, .95, .98];
+                  final current = thresholds.indexOf(_highlightThreshold);
+                  _highlightThreshold =
+                      thresholds[(current + 1) % thresholds.length];
+                  _showHistogram = true;
+                  unawaited(
+                    _savePreference(
+                      _highlightThresholdPreference,
+                      _highlightThreshold,
+                    ),
+                  );
+                  unawaited(_savePreference(_histogramPreference, true));
                 }),
               ),
               _CameraOption(
@@ -1654,6 +1767,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 top: 42,
                 child: _HistogramOverlay(
                   values: _histogram,
+                  red: _redHistogram,
+                  green: _greenHistogram,
+                  blue: _blueHistogram,
+                  highlightThreshold: _highlightThreshold,
                   highlightClipping: _highlightClipping,
                   shadowClipping: _shadowClipping,
                 ),
@@ -1983,6 +2100,28 @@ class _CameraPageState extends ConsumerState<CameraPage>
       await _startLightMonitoring(controller);
     }
   }
+}
+
+class _FrameHistogram {
+  const _FrameHistogram({
+    required this.samples,
+    required this.brightness,
+    required this.highlightClipping,
+    required this.shadowClipping,
+    required this.luminance,
+    required this.red,
+    required this.green,
+    required this.blue,
+  });
+
+  final int samples;
+  final double brightness;
+  final double highlightClipping;
+  final double shadowClipping;
+  final List<double> luminance;
+  final List<double> red;
+  final List<double> green;
+  final List<double> blue;
 }
 
 class _FrameSharpness {
@@ -2488,18 +2627,26 @@ class _CaptureProgress extends StatelessWidget {
 class _HistogramOverlay extends StatelessWidget {
   const _HistogramOverlay({
     required this.values,
+    required this.red,
+    required this.green,
+    required this.blue,
+    required this.highlightThreshold,
     required this.highlightClipping,
     required this.shadowClipping,
   });
 
   final List<double> values;
+  final List<double> red;
+  final List<double> green;
+  final List<double> blue;
+  final double highlightThreshold;
   final double highlightClipping;
   final double shadowClipping;
 
   @override
   Widget build(BuildContext context) {
     final warning = highlightClipping > .08
-        ? '高光溢出'
+        ? '高光溢出 · ${(highlightThreshold * 100).round()}%'
         : shadowClipping > .22
         ? '暗部丢失'
         : null;
@@ -2517,7 +2664,14 @@ class _HistogramOverlay extends StatelessWidget {
             SizedBox(
               width: 112,
               height: 46,
-              child: CustomPaint(painter: _HistogramPainter(values)),
+              child: CustomPaint(
+                painter: _HistogramPainter(
+                  luminance: values,
+                  red: red,
+                  green: green,
+                  blue: blue,
+                ),
+              ),
             ),
             if (warning != null)
               Text(
@@ -2536,34 +2690,72 @@ class _HistogramOverlay extends StatelessWidget {
 }
 
 class _HistogramPainter extends CustomPainter {
-  const _HistogramPainter(this.values);
+  const _HistogramPainter({
+    required this.luminance,
+    required this.red,
+    required this.green,
+    required this.blue,
+  });
 
-  final List<double> values;
+  final List<double> luminance;
+  final List<double> red;
+  final List<double> green;
+  final List<double> blue;
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (values.isEmpty) return;
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: .88)
-      ..style = PaintingStyle.fill;
-    final barWidth = size.width / values.length;
-    for (var index = 0; index < values.length; index++) {
-      final height = values[index].clamp(0, 1) * size.height;
-      canvas.drawRect(
-        Rect.fromLTWH(
-          index * barWidth,
-          size.height - height,
-          math.max(1, barWidth - .5),
-          height,
-        ),
-        paint,
-      );
+    if (luminance.isEmpty) return;
+    final fill = Path()..moveTo(0, size.height);
+    for (var index = 0; index < luminance.length; index++) {
+      final x = index * size.width / (luminance.length - 1);
+      fill.lineTo(x, size.height * (1 - luminance[index].clamp(0, 1)));
     }
+    fill
+      ..lineTo(size.width, size.height)
+      ..close();
+    canvas.drawPath(
+      fill,
+      Paint()
+        ..color = Colors.white.withValues(alpha: .16)
+        ..style = PaintingStyle.fill,
+    );
+    _drawChannel(canvas, size, red, const Color(0xFFFF453A));
+    _drawChannel(canvas, size, green, const Color(0xFF30D158));
+    _drawChannel(canvas, size, blue, const Color(0xFF0A84FF));
+  }
+
+  void _drawChannel(
+    Canvas canvas,
+    Size size,
+    List<double> values,
+    Color color,
+  ) {
+    if (values.length < 2) return;
+    final path = Path();
+    for (var index = 0; index < values.length; index++) {
+      final point = Offset(
+        index * size.width / (values.length - 1),
+        size.height * (1 - values[index].clamp(0, 1)),
+      );
+      index == 0
+          ? path.moveTo(point.dx, point.dy)
+          : path.lineTo(point.dx, point.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color.withValues(alpha: .9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.25,
+    );
   }
 
   @override
   bool shouldRepaint(covariant _HistogramPainter oldDelegate) =>
-      !listEquals(values, oldDelegate.values);
+      !listEquals(luminance, oldDelegate.luminance) ||
+      !listEquals(red, oldDelegate.red) ||
+      !listEquals(green, oldDelegate.green) ||
+      !listEquals(blue, oldDelegate.blue);
 }
 
 class _FocusPeakingPainter extends CustomPainter {
@@ -2740,6 +2932,129 @@ class _CapabilitySummary extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+class _ProfessionalCapabilityPanel extends StatelessWidget {
+  const _ProfessionalCapabilityPanel({
+    required this.lens,
+    required this.exposure,
+    required this.minExposure,
+    required this.maxExposure,
+    required this.onExposureChanged,
+  });
+
+  final NativeCameraLens? lens;
+  final double exposure;
+  final double minExposure;
+  final double maxExposure;
+  final ValueChanged<double> onExposureChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final currentLens = lens;
+    final hasExposureControl = maxExposure - minExposure > .01;
+    final capabilities = <String>[
+      if (currentLens != null && currentLens.maxIso > 0)
+        'ISO ${currentLens.minIso.round()}–${currentLens.maxIso.round()}',
+      if (currentLens != null && currentLens.maxExposureSeconds > 0)
+        '快门 ${_shutterLabel(currentLens.minExposureSeconds)}–${_shutterLabel(currentLens.maxExposureSeconds)}',
+      if (currentLens?.supportsManualFocus == true) '手动对焦',
+      if (currentLens?.supportsRaw == true) 'RAW/DNG',
+    ];
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF28282B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.tune, size: 15, color: Color(0xFFFFD60A)),
+              const SizedBox(width: 6),
+              const Text(
+                '专业控制',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                currentLens == null ? '能力检测中' : _lensLabel(currentLens),
+                style: const TextStyle(color: Colors.white54, fontSize: 10),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            capabilities.isEmpty ? '当前镜头未报告专业参数' : capabilities.join(' · '),
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
+          ),
+          if (hasExposureControl) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                SizedBox(
+                  width: 48,
+                  child: Text(
+                    'EV ${exposure >= 0 ? '+' : ''}${exposure.toStringAsFixed(1)}',
+                    style: const TextStyle(color: Colors.white70, fontSize: 10),
+                  ),
+                ),
+                Expanded(
+                  child: SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      trackHeight: 2,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 6,
+                      ),
+                      overlayShape: const RoundSliderOverlayShape(
+                        overlayRadius: 12,
+                      ),
+                    ),
+                    child: Slider(
+                      value: exposure.clamp(minExposure, maxExposure),
+                      min: minExposure,
+                      max: maxExposure,
+                      activeColor: const Color(0xFFFFD60A),
+                      inactiveColor: Colors.white24,
+                      onChanged: onExposureChanged,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _lensLabel(NativeCameraLens lens) {
+    final type = switch (lens.type) {
+      'ultra-wide' => '超广角',
+      'telephoto' => '长焦',
+      'front' || 'true-depth' => '前摄',
+      _ => '主摄',
+    };
+    final zoom = lens.nominalZoom.toStringAsFixed(
+      lens.nominalZoom.roundToDouble() == lens.nominalZoom ? 0 : 1,
+    );
+    return '$type $zoom×';
+  }
+
+  static String _shutterLabel(double seconds) {
+    if (seconds <= 0) return '—';
+    if (seconds < 1) return '1/${(1 / seconds).round()}s';
+    return '${seconds.toStringAsFixed(seconds >= 10 ? 0 : 1)}s';
   }
 }
 
