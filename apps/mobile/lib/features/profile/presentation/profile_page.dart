@@ -56,7 +56,7 @@ class ProfilePage extends ConsumerWidget {
             _ProfileTile(
               icon: Icons.auto_awesome_outlined,
               label: 'AI 设置',
-              trailing: 'MiniMax / 本地优先',
+              trailing: 'DeepSeek / MiniMax',
               onTap: () => context.push('/settings/ai'),
             ),
             _ProfileTile(

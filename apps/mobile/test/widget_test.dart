@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_page.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
@@ -81,4 +82,3 @@ void main() {
     expect(find.text('还没有作品，开始第一次创作吧'), findsOneWidget);
   });
 }
-import 'package:ai_image_studio/app/theme.dart';
