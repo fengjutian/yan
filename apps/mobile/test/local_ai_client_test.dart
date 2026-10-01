@@ -11,11 +11,9 @@ void main() {
     final direct = Dio()..httpClientAdapter = _JsonAdapter('本地结果');
     final backend = Dio()..httpClientAdapter = _JsonAdapter('后端结果');
     final client = LocalAIClient(
-      _MemorySettings(const AISettings(
-        enabled: true,
-        preferLocal: true,
-        apiKey: 'secret',
-      )),
+      _MemorySettings(
+        const AISettings(enabled: true, preferLocal: true, apiKey: 'secret'),
+      ),
       backend,
       directClient: direct,
     );
@@ -41,14 +39,16 @@ void main() {
     final adapter = _JsonAdapter('DeepSeek 结果');
     final direct = Dio()..httpClientAdapter = adapter;
     final client = LocalAIClient(
-      _MemorySettings(const AISettings(
-        enabled: true,
-        preferLocal: true,
-        provider: AIProvider.deepSeek,
-        baseUrl: 'https://api.deepseek.com',
-        model: 'deepseek-v4-pro',
-        apiKey: 'secret',
-      )),
+      _MemorySettings(
+        const AISettings(
+          enabled: true,
+          preferLocal: true,
+          provider: AIProvider.deepSeek,
+          baseUrl: 'https://api.deepseek.com',
+          model: 'deepseek-v4-pro',
+          apiKey: 'secret',
+        ),
+      ),
       Dio(),
       directClient: direct,
     );
@@ -62,11 +62,9 @@ void main() {
     final adapter = _JsonAdapter('MiniMax 结果');
     final direct = Dio()..httpClientAdapter = adapter;
     final client = LocalAIClient(
-      _MemorySettings(const AISettings(
-        enabled: true,
-        preferLocal: true,
-        apiKey: 'secret',
-      )),
+      _MemorySettings(
+        const AISettings(enabled: true, preferLocal: true, apiKey: 'secret'),
+      ),
       Dio(),
       directClient: direct,
     );
@@ -110,15 +108,15 @@ class _JsonAdapter implements HttpClientAdapter {
         : {
             'choices': [
               {
-                'message': {'content': content}
-              }
-            ]
+                'message': {'content': content},
+              },
+            ],
           };
     return ResponseBody.fromString(
       jsonEncode(body),
       200,
       headers: {
-        Headers.contentTypeHeader: ['application/json']
+        Headers.contentTypeHeader: ['application/json'],
       },
     );
   }

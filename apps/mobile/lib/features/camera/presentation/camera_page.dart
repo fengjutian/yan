@@ -72,6 +72,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
   LiveCameraAnalysis? _liveAnalysis;
   bool _showRealtimeGuidance = true;
+  bool _showCameraOptions = false;
 
   @override
   void initState() {
@@ -443,10 +444,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Widget build(BuildContext context) {
     if (_capturedImage != null) return _buildReview();
     return Scaffold(
-      backgroundColor: const Color(0xFF171615),
+      backgroundColor: Colors.black,
       body: SafeArea(
         child: Column(children: [
           _buildTopBar(),
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _showCameraOptions
+                ? _buildCameraOptions()
+                : const SizedBox.shrink(),
+          ),
           if (_templateId != null)
             _TemplateChip(
                 templateId: _templateId!, initialPrompt: _initialPrompt),
@@ -454,11 +461,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
               child: Center(
                   child: AspectRatio(
                       aspectRatio: _aspectRatio,
-                      child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: ClipRRect(
-                              borderRadius: BorderRadius.circular(28),
-                              child: _buildPreview()))))),
+                      child: ClipRect(child: _buildPreview())))),
           _buildControls(),
         ]),
       ),
@@ -466,16 +469,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Widget _buildTopBar() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
         child: Row(children: [
           IconButton(
+              tooltip: '闪光灯',
               onPressed: _toggleFlash,
               icon: Icon(_flashIcon, color: Colors.white)),
           const Spacer(),
-          TextButton(
-              onPressed: () => setState(() => _showGuide = !_showGuide),
-              child: Text(_showGuide ? _guideName : '构图线关闭',
-                  style: const TextStyle(color: Colors.white))),
+          _CameraCircleButton(
+              tooltip: '相机设置',
+              onTap: () => setState(
+                  () => _showCameraOptions = !_showCameraOptions),
+              icon: _showCameraOptions
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded),
           const Spacer(),
           IconButton(
               tooltip: '实时姿态指导',
@@ -487,13 +494,61 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   _showRealtimeGuidance
                       ? Icons.accessibility_new
                       : Icons.accessibility_new_outlined,
-                  color:
-                      _showRealtimeGuidance ? Colors.amber : Colors.white70)),
+                  color: _showRealtimeGuidance
+                      ? const Color(0xFFFFD60A)
+                      : Colors.white70)),
           IconButton(
-              onPressed: _switchCamera,
-              icon:
-                  const Icon(Icons.cameraswitch_outlined, color: Colors.white)),
+              tooltip: '构图线',
+              onPressed: () => setState(() => _showGuide = !_showGuide),
+              icon: Icon(Icons.grid_3x3,
+                  color: _showGuide
+                      ? const Color(0xFFFFD60A)
+                      : Colors.white70)),
         ]),
+      );
+
+  Widget _buildCameraOptions() => Container(
+        key: const ValueKey('camera-options'),
+        margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1C1C1E),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final ratio in const [
+              ('1:1', 1.0),
+              ('3:4', .75),
+              ('9:16', .5625),
+            ])
+              _CameraOption(
+                label: ratio.$1,
+                selected: _aspectRatio == ratio.$2,
+                onTap: () => setState(() => _aspectRatio = ratio.$2),
+              ),
+            for (final seconds in const [0, 3, 10])
+              _CameraOption(
+                label: seconds == 0 ? '定时关闭' : '$seconds 秒',
+                icon: seconds == 0 ? Icons.timer_off_outlined : Icons.timer_outlined,
+                selected: _countdownSeconds == seconds,
+                onTap: () => setState(() => _countdownSeconds = seconds),
+              ),
+            _CameraOption(
+              label: _guideName,
+              icon: Icons.grid_3x3,
+              selected: _showGuide,
+              onTap: () => setState(() {
+                _showGuide = true;
+                _guide = CompositionGuide.values[
+                    (_guide.index + 1) % CompositionGuide.values.length];
+              }),
+            ),
+          ],
+        ),
       );
 
   Widget _buildPreview() {
@@ -591,42 +646,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Widget _buildControls() => Padding(
-        padding: const EdgeInsets.fromLTRB(22, 14, 22, 18),
+        padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
         child: Column(children: [
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            for (final ratio in const [
-              ('1:1', 1.0),
-              ('3:4', .75),
-              ('9:16', .5625)
-            ])
-              Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: ChoiceChip(
-                      label: Text(ratio.$1),
-                      selected: _aspectRatio == ratio.$2,
-                      onSelected: (_) =>
-                          setState(() => _aspectRatio = ratio.$2))),
-            const SizedBox(width: 6),
-            ChoiceChip(
-                label: Text(_burstCount == 1 ? '单拍' : '连拍 5 张'),
-                selected: _burstCount == 5,
-                onSelected: (_) =>
-                    setState(() => _burstCount = _burstCount == 1 ? 5 : 1)),
+            _CameraModeLabel(
+              label: '单拍',
+              selected: _burstCount == 1,
+              onTap: () => setState(() => _burstCount = 1),
+            ),
+            const SizedBox(width: 30),
+            _CameraModeLabel(
+              label: '连拍',
+              selected: _burstCount == 5,
+              onTap: () => setState(() => _burstCount = 5),
+            ),
           ]),
-          const SizedBox(height: 8),
-          Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [0, 3, 10]
-                  .map((seconds) => Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 4),
-                      child: ChoiceChip(
-                          label: Text(seconds == 0 ? '关闭' : '$seconds 秒'),
-                          selected: _countdownSeconds == seconds,
-                          onSelected: (_) =>
-                              setState(() => _countdownSeconds = seconds))))
-                  .toList()),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+          const SizedBox(height: 10),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             _RoundAction(
                 icon: Icons.photo_library_outlined,
                 label: '相册',
@@ -635,21 +671,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 onTap: _capture,
                 child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
-                    width: 74,
-                    height: 74,
-                    padding: const EdgeInsets.all(5),
+                    width: 78,
+                    height: 78,
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2)),
+                        border: Border.all(color: Colors.white, width: 3)),
                     child: DecoratedBox(
                         decoration: BoxDecoration(
                             color: _capturing ? Colors.white38 : Colors.white,
                             shape: BoxShape.circle)))),
             _RoundAction(
-                icon: Icons.grid_3x3,
-                label: '切换构图',
-                onTap: () => setState(() => _guide = CompositionGuide.values[
-                    (_guide.index + 1) % CompositionGuide.values.length])),
+                icon: Icons.cameraswitch_rounded,
+                label: '翻转',
+                onTap: _switchCamera),
           ]),
         ]),
       );
@@ -827,6 +862,109 @@ class _TemplateChip extends StatelessWidget {
       ]),
     );
   }
+}
+
+class _CameraCircleButton extends StatelessWidget {
+  const _CameraCircleButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: tooltip,
+        child: InkResponse(
+          onTap: onTap,
+          radius: 24,
+          child: Container(
+            width: 36,
+            height: 36,
+            decoration: const BoxDecoration(
+              color: Color(0xFF2C2C2E),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: Colors.white, size: 23),
+          ),
+        ),
+      );
+}
+
+class _CameraOption extends StatelessWidget {
+  const _CameraOption({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final IconData? icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(99),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? Colors.white : const Color(0xFF303033),
+            borderRadius: BorderRadius.circular(99),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (icon != null) ...[
+              Icon(icon,
+                  color: selected ? Colors.black : Colors.white70, size: 15),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.black : Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ]),
+        ),
+      );
+}
+
+class _CameraModeLabel extends StatelessWidget {
+  const _CameraModeLabel({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? const Color(0xFFFFD60A) : Colors.white70,
+              fontSize: 13,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              letterSpacing: .5,
+            ),
+          ),
+        ),
+      );
 }
 
 class _RoundAction extends StatelessWidget {
