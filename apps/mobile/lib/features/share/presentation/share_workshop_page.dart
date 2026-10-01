@@ -230,7 +230,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (url == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _exportImage(
+      final bytes = _exportImage(
         await _downloadImage(url),
         ref.read(shareConfigProvider),
       );
@@ -263,7 +263,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (url == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _exportImage(
+      final bytes = _exportImage(
         await _downloadImage(url),
         ref.read(shareConfigProvider),
       );
@@ -334,11 +334,11 @@ Uint8List _exportImage(Uint8List bytes, ShareConfig config) {
   if (config.watermark != WatermarkPosition.hidden) {
     const label = 'YAN AI';
     final font = img.arial24;
-    final padding = (image.width * 0.015).round().clamp(8, 24);
+    final padding = (image.width * 0.015).round().clamp(8, 24).toInt();
     final textWidth = label.length * 14;
     final boxWidth = textWidth + padding * 2;
     final boxHeight = 24 + padding * 2;
-    final margin = (image.width * 0.025).round().clamp(12, 40);
+    final margin = (image.width * 0.025).round().clamp(12, 40).toInt();
     final (x, y) = switch (config.watermark) {
       WatermarkPosition.bottomLeft => (margin, image.height - boxHeight - margin),
       WatermarkPosition.bottomRight =>
