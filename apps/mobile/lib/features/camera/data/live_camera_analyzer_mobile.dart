@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
+import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
@@ -18,6 +19,8 @@ class LiveCameraAnalysis {
     required this.sceneConfidence,
     required this.smileDetected,
     required this.gestureDetected,
+    this.barcodeValue,
+    this.barcodeType,
   });
 
   /// 关键点坐标已归一化，并按前置摄像头完成镜像，可直接用于预览叠加。
@@ -27,6 +30,8 @@ class LiveCameraAnalysis {
   final double sceneConfidence;
   final bool smileDetected;
   final bool gestureDetected;
+  final String? barcodeValue;
+  final String? barcodeType;
 }
 
 class LiveCameraAnalyzer {
@@ -46,11 +51,13 @@ class LiveCameraAnalyzer {
           enableClassification: true,
           minFaceSize: .15,
         ),
-      );
+      ),
+      _barcodeScanner = BarcodeScanner();
 
   final PoseDetector _poseDetector;
   final ImageLabeler _labeler;
   final FaceDetector _faceDetector;
+  final BarcodeScanner _barcodeScanner;
   bool _processing = false;
   bool _closed = false;
   int _frameNumber = 0;
@@ -58,12 +65,15 @@ class LiveCameraAnalyzer {
   double _sceneConfidence = 0;
   Map<String, Offset> _smoothed = const {};
   bool _smileDetected = false;
+  String? _barcodeValue;
+  String? _barcodeType;
 
   Future<LiveCameraAnalysis?> process(
     CameraImage image,
     CameraDescription camera,
-    DeviceOrientation deviceOrientation,
-  ) async {
+    DeviceOrientation deviceOrientation, {
+    bool scanBarcodes = false,
+  }) async {
     if (_processing || _closed || image.planes.length != 1) return null;
     final rotation = _inputRotation(camera, deviceOrientation);
     if (rotation == null) return null;
@@ -85,6 +95,20 @@ class LiveCameraAnalyzer {
           (face) => (face.smilingProbability ?? 0) >= .75,
         );
       }
+      if (scanBarcodes && _frameNumber % 2 == 0) {
+        final barcodes = await _barcodeScanner.processImage(input);
+        if (barcodes.isEmpty) {
+          _barcodeValue = null;
+          _barcodeType = null;
+        } else {
+          final barcode = barcodes.first;
+          _barcodeValue = barcode.rawValue ?? barcode.displayValue;
+          _barcodeType = barcode.type.name;
+        }
+      } else if (!scanBarcodes) {
+        _barcodeValue = null;
+        _barcodeType = null;
+      }
       final landmarks = poses.isEmpty
           ? <String, Offset>{}
           : _normalize(poses.first, image, camera, rotation);
@@ -96,6 +120,8 @@ class LiveCameraAnalyzer {
         sceneConfidence: _sceneConfidence,
         smileDetected: _smileDetected,
         gestureDetected: _hasRaisedHand(_smoothed),
+        barcodeValue: _barcodeValue,
+        barcodeType: _barcodeType,
       );
     } catch (_) {
       // 部分设备不支持流格式时不影响拍照主流程。
@@ -250,6 +276,7 @@ class LiveCameraAnalyzer {
       _poseDetector.close(),
       _labeler.close(),
       _faceDetector.close(),
+      _barcodeScanner.close(),
     ]);
   }
 }

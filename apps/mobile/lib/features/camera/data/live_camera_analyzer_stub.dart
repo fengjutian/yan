@@ -11,6 +11,8 @@ class LiveCameraAnalysis {
     this.sceneConfidence = 0,
     this.smileDetected = false,
     this.gestureDetected = false,
+    this.barcodeValue,
+    this.barcodeType,
   });
 
   final Map<String, Offset> landmarks;
@@ -19,14 +21,17 @@ class LiveCameraAnalysis {
   final double sceneConfidence;
   final bool smileDetected;
   final bool gestureDetected;
+  final String? barcodeValue;
+  final String? barcodeType;
 }
 
 class LiveCameraAnalyzer {
   Future<LiveCameraAnalysis?> process(
     CameraImage image,
     CameraDescription camera,
-    DeviceOrientation deviceOrientation,
-  ) async => null;
+    DeviceOrientation deviceOrientation, {
+    bool scanBarcodes = false,
+  }) async => null;
 
   Future<void> close() async {}
 }

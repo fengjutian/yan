@@ -11,6 +11,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
     show
         DeviceOrientation,
+        Clipboard,
+        ClipboardData,
         HapticFeedback,
         MethodChannel,
         MissingPluginException,
@@ -22,12 +24,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 enum CompositionGuide { thirds, center, symmetry }
 
 enum CameraStyle { standard, vivid, warm, cool, mono }
 
 enum SmartShutterMode { off, smile, gesture }
+
+enum CaptureEnhancement { standard, multiFrameHdr, nightDenoise }
 
 class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({super.key, this.templateParams});
@@ -96,6 +101,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   DateTime? _goodPoseSince;
   double _aspectRatio = 3 / 4;
   int _burstCount = 1;
+  bool _scanMode = false;
   int _activeIndex = 0;
   int _initializationToken = 0;
   String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
@@ -113,8 +119,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _saveOriginalCopy = false;
   CameraStyle _style = CameraStyle.standard;
   SmartShutterMode _smartShutterMode = SmartShutterMode.off;
+  CaptureEnhancement _captureEnhancement = CaptureEnhancement.standard;
   int _smartSignalFrames = 0;
   DateTime _lastSmartCapture = DateTime.fromMillisecondsSinceEpoch(0);
+  String? _barcodeValue;
+  String? _barcodeType;
+  DateTime _lastBarcodeAt = DateTime.fromMillisecondsSinceEpoch(0);
   CameraCapabilities _capabilities = const CameraCapabilities.fallback();
   bool _permissionPermanentlyDenied = false;
   String? _processingStatus;
@@ -132,6 +142,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _smartShutterPreference = 'camera.smart_shutter';
   static const _focusPeakingPreference = 'camera.focus_peaking';
   static const _lensHintsPreference = 'camera.lens_cleaning_hints';
+  static const _enhancementPreference = 'camera.capture_enhancement';
 
   @override
   void initState() {
@@ -217,6 +228,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
           .values[smartIndex.clamp(0, SmartShutterMode.values.length - 1)];
       _showFocusPeaking = preferences.getBool(_focusPeakingPreference) ?? false;
       _lensCleaningHints = preferences.getBool(_lensHintsPreference) ?? true;
+      final enhancementIndex = preferences.getInt(_enhancementPreference) ?? 0;
+      _captureEnhancement =
+          CaptureEnhancement.values[enhancementIndex.clamp(
+            0,
+            CaptureEnhancement.values.length - 1,
+          )];
     });
   }
 
@@ -412,7 +429,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
             }
           });
         }
-        if (_showRealtimeGuidance) {
+        if (_showRealtimeGuidance ||
+            _scanMode ||
+            _smartShutterMode != SmartShutterMode.off) {
           unawaited(
             _analyzeFrame(
               image,
@@ -528,22 +547,33 @@ class _CameraPageState extends ConsumerState<CameraPage>
       image,
       camera,
       deviceOrientation,
+      scanBarcodes: _scanMode,
     );
-    if (!mounted || result == null || !_showRealtimeGuidance) return;
+    if (!mounted || result == null) return;
     final goodPose = result.suggestion.startsWith('姿态很好');
     final now = DateTime.now();
-    if (goodPose) {
+    if (_showRealtimeGuidance && goodPose) {
       _goodPoseSince ??= now;
     } else {
       _goodPoseSince = null;
     }
     setState(() {
       _liveAnalysis = result;
-      _compositionSuggestion = result.suggestion;
-      _guidanceOpacity =
-          goodPose && now.difference(_goodPoseSince!).inMilliseconds > 1800
-          ? 0
-          : 1;
+      if (_showRealtimeGuidance) {
+        _compositionSuggestion = result.suggestion;
+        _guidanceOpacity =
+            goodPose && now.difference(_goodPoseSince!).inMilliseconds > 1800
+            ? 0
+            : 1;
+      }
+      if (_scanMode && result.barcodeValue != null) {
+        _barcodeValue = result.barcodeValue;
+        _barcodeType = result.barcodeType;
+        _lastBarcodeAt = now;
+      } else if (now.difference(_lastBarcodeAt) > const Duration(seconds: 2)) {
+        _barcodeValue = null;
+        _barcodeType = null;
+      }
     });
     _handleSmartShutter(result);
   }
@@ -562,6 +592,24 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _lastSmartCapture = now;
     unawaited(HapticFeedback.mediumImpact());
     unawaited(_capture());
+  }
+
+  Future<void> _copyBarcode() async {
+    final value = _barcodeValue;
+    if (value == null) return;
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) _showMessage('扫码内容已复制');
+  }
+
+  Future<void> _openBarcodeLink() async {
+    final value = _barcodeValue;
+    final uri = value == null ? null : Uri.tryParse(value);
+    if (uri == null || (uri.scheme != 'https' && uri.scheme != 'http')) {
+      _showMessage('仅支持安全打开 HTTP/HTTPS 链接');
+      return;
+    }
+    final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+    if (!opened && mounted) _showMessage('无法打开此链接');
   }
 
   @override
@@ -641,6 +689,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _processingProgress = 0;
     });
     unawaited(HapticFeedback.mediumImpact());
+    final startingExposure = _exposure;
+    final startingFlash = _flashMode;
     try {
       final timerSeconds = continuous ? 0 : _countdownSeconds;
       for (var value = timerSeconds; value > 0; value--) {
@@ -654,11 +704,31 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await controller.stopImageStream();
       }
       final values = <Uint8List>[];
+      final rawFrames = <Uint8List>[];
       Uint8List? firstOriginal;
       XFile? analysisFile;
+      final enhancement = !continuous && _burstCount == 1 && !_scanMode
+          ? _captureEnhancement
+          : CaptureEnhancement.standard;
+      if (enhancement != CaptureEnhancement.standard) {
+        await controller.setFlashMode(FlashMode.off);
+      }
       // Keep a conservative cap to avoid high-resolution JPEGs exhausting
       // memory on mid-range Android devices.
-      final requestedCount = continuous ? 8 : _burstCount;
+      final requestedCount = continuous
+          ? 8
+          : enhancement == CaptureEnhancement.standard
+          ? _burstCount
+          : 3;
+      final exposureSpan = math.min(
+        1.0,
+        math
+            .min(
+              _maxExposure - startingExposure,
+              startingExposure - _minExposure,
+            )
+            .abs(),
+      );
       for (var index = 0; index < requestedCount; index++) {
         if (continuous && !_continuousBurst && index > 0) break;
         if (mounted) {
@@ -668,26 +738,41 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _processingProgress = index / requestedCount;
           });
         }
+        if (enhancement == CaptureEnhancement.multiFrameHdr) {
+          final offset = <double>[-exposureSpan, 0, exposureSpan][index];
+          await _setExposure(
+            (startingExposure + offset).clamp(_minExposure, _maxExposure),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        } else if (enhancement == CaptureEnhancement.nightDenoise) {
+          await _setExposure(
+            (startingExposure + .45).clamp(_minExposure, _maxExposure),
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+        }
         final file = await controller.takePicture();
         if (mounted) setState(() => _shutterFlash = false);
         analysisFile ??= file;
         final bytes = await file.readAsBytes();
         firstOriginal ??= bytes;
+        rawFrames.add(bytes);
         final mirror =
             _mirrorSelfies &&
             controller.description.lensDirection == CameraLensDirection.front;
-        values.add(
-          await compute(_processPhoto, (
-            bytes,
-            _aspectRatio,
-            mirror,
-            _style.index,
-          )),
-        );
+        if (enhancement == CaptureEnhancement.standard) {
+          values.add(
+            await compute(_processPhoto, (
+              bytes,
+              _aspectRatio,
+              mirror,
+              _style.index,
+            )),
+          );
+        }
         if (mounted) {
           setState(() {
-            _burstTaken = values.length;
-            _processingProgress = values.length / requestedCount;
+            _burstTaken = rawFrames.length;
+            _processingProgress = rawFrames.length / requestedCount;
           });
         }
         if (index + 1 < requestedCount) {
@@ -695,6 +780,29 @@ class _CameraPageState extends ConsumerState<CameraPage>
             Duration(milliseconds: continuous ? 120 : 220),
           );
         }
+      }
+      await _setExposure(startingExposure);
+      if (enhancement != CaptureEnhancement.standard && rawFrames.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _processingStatus = enhancement == CaptureEnhancement.multiFrameHdr
+                ? '正在合成多帧 HDR'
+                : '正在进行夜景降噪';
+            _processingProgress = null;
+          });
+        }
+        final mirror =
+            _mirrorSelfies &&
+            controller.description.lensDirection == CameraLensDirection.front;
+        values.add(
+          await compute(_mergeAndProcessPhotos, (
+            rawFrames,
+            _aspectRatio,
+            mirror,
+            _style.index,
+            enhancement.index,
+          )),
+        );
       }
       if (mounted && values.isNotEmpty) {
         setState(() => _capturedImage = values.first);
@@ -739,6 +847,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // MLKit 失败、文件 IO 失败等都兜到这里,不裸露异常。
       if (mounted) _showMessage(_cameraError(error));
     } finally {
+      if ((_exposure - startingExposure).abs() > .01) {
+        await _setExposure(startingExposure);
+      }
+      if (controller.value.isInitialized) {
+        try {
+          await controller.setFlashMode(startingFlash);
+        } on CameraException {
+          // Camera may already be closing after a lifecycle transition.
+        }
+      }
       if (mounted) {
         setState(() {
           _capturing = false;
@@ -1313,6 +1431,33 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     unawaited(_savePreference(_stylePreference, _style.index));
                   }),
                 ),
+              for (final option in const [
+                (
+                  '标准拍摄',
+                  CaptureEnhancement.standard,
+                  Icons.camera_alt_outlined,
+                ),
+                ('多帧 HDR', CaptureEnhancement.multiFrameHdr, Icons.hdr_on),
+                (
+                  '夜景降噪',
+                  CaptureEnhancement.nightDenoise,
+                  Icons.nightlight_outlined,
+                ),
+              ])
+                _CameraOption(
+                  label: option.$1,
+                  icon: option.$3,
+                  selected: _captureEnhancement == option.$2,
+                  onTap: () => setState(() {
+                    _captureEnhancement = option.$2;
+                    unawaited(
+                      _savePreference(
+                        _enhancementPreference,
+                        _captureEnhancement.index,
+                      ),
+                    );
+                  }),
+                ),
               _CameraOption(
                 label: '自动存相册',
                 icon: Icons.save_alt,
@@ -1500,21 +1645,35 @@ class _CameraPageState extends ConsumerState<CameraPage>
                       : '已识别举手',
                 ),
               ),
-            Positioned(
-              bottom: 18,
-              left: 18,
-              right: 18,
-              child: AnimatedOpacity(
-                opacity: _brightness < 58 ? 1 : _guidanceOpacity,
-                duration: const Duration(milliseconds: 450),
-                child: _CameraTip(
-                  zoom: _zoom,
-                  brightness: _brightness,
-                  motionLevel: _motionLevel,
-                  suggestion: _compositionSuggestion,
+            if (!_scanMode)
+              Positioned(
+                bottom: 18,
+                left: 18,
+                right: 18,
+                child: AnimatedOpacity(
+                  opacity: _brightness < 58 ? 1 : _guidanceOpacity,
+                  duration: const Duration(milliseconds: 450),
+                  child: _CameraTip(
+                    zoom: _zoom,
+                    brightness: _brightness,
+                    motionLevel: _motionLevel,
+                    suggestion: _compositionSuggestion,
+                  ),
                 ),
               ),
-            ),
+            if (_scanMode) const Center(child: _ScanFrame()),
+            if (_scanMode && _barcodeValue != null)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 16,
+                child: _BarcodeResultCard(
+                  value: _barcodeValue!,
+                  type: _barcodeType,
+                  onCopy: _copyBarcode,
+                  onOpen: _openBarcodeLink,
+                ),
+              ),
             if (_shutterFlash)
               const Positioned.fill(
                 child: IgnorePointer(child: ColoredBox(color: Colors.white)),
@@ -1539,14 +1698,31 @@ class _CameraPageState extends ConsumerState<CameraPage>
           children: [
             _CameraModeLabel(
               label: '单拍',
-              selected: _burstCount == 1,
-              onTap: () => setState(() => _burstCount = 1),
+              selected: !_scanMode && _burstCount == 1,
+              onTap: () => setState(() {
+                _scanMode = false;
+                _burstCount = 1;
+                _barcodeValue = null;
+              }),
             ),
-            const SizedBox(width: 30),
+            const SizedBox(width: 18),
             _CameraModeLabel(
               label: '连拍',
-              selected: _burstCount == 5,
-              onTap: () => setState(() => _burstCount = 5),
+              selected: !_scanMode && _burstCount == 5,
+              onTap: () => setState(() {
+                _scanMode = false;
+                _burstCount = 5;
+                _barcodeValue = null;
+              }),
+            ),
+            const SizedBox(width: 18),
+            _CameraModeLabel(
+              label: '扫码',
+              selected: _scanMode,
+              onTap: () => setState(() {
+                _scanMode = true;
+                _burstCount = 1;
+              }),
             ),
           ],
         ),
@@ -1784,9 +1960,84 @@ class _FrameSharpness {
 Uint8List _processPhoto((Uint8List, double, bool, int) input) {
   final decoded = img.decodeImage(input.$1);
   if (decoded == null) return input.$1;
-  var image = img.bakeOrientation(decoded);
-  if (input.$3) image = img.flipHorizontal(image);
-  final target = input.$2;
+  return _finishPhoto(
+    img.bakeOrientation(decoded),
+    aspectRatio: input.$2,
+    mirror: input.$3,
+    styleIndex: input.$4,
+  );
+}
+
+Uint8List _mergeAndProcessPhotos(
+  (List<Uint8List>, double, bool, int, int) input,
+) {
+  final decoded = <img.Image>[];
+  for (final bytes in input.$1) {
+    final raw = img.decodeImage(bytes);
+    if (raw == null) continue;
+    var frame = img.bakeOrientation(raw);
+    if (frame.width > 1800) {
+      frame = img.copyResize(frame, width: 1800);
+    }
+    decoded.add(frame);
+  }
+  if (decoded.isEmpty) return Uint8List(0);
+  final first = decoded.first;
+  final frames = <img.Image>[first];
+  for (final frame in decoded.skip(1)) {
+    frames.add(
+      frame.width == first.width && frame.height == first.height
+          ? frame
+          : img.copyResize(frame, width: first.width, height: first.height),
+    );
+  }
+  final merged = img.copyResize(
+    first,
+    width: first.width,
+    height: first.height,
+  );
+  final enhancement = CaptureEnhancement
+      .values[input.$5.clamp(0, CaptureEnhancement.values.length - 1)];
+  for (var y = 0; y < merged.height; y++) {
+    for (var x = 0; x < merged.width; x++) {
+      var red = 0.0;
+      var green = 0.0;
+      var blue = 0.0;
+      var weightTotal = 0.0;
+      for (final frame in frames) {
+        final pixel = frame.getPixel(x, y);
+        final luminance = .299 * pixel.r + .587 * pixel.g + .114 * pixel.b;
+        final weight = enhancement == CaptureEnhancement.multiFrameHdr
+            ? (1 - (luminance - 128).abs() / 160).clamp(.2, 1.0)
+            : 1.0;
+        red += pixel.r * weight;
+        green += pixel.g * weight;
+        blue += pixel.b * weight;
+        weightTotal += weight;
+      }
+      final output = merged.getPixel(x, y);
+      output.r = (red / weightTotal).clamp(0, 255);
+      output.g = (green / weightTotal).clamp(0, 255);
+      output.b = (blue / weightTotal).clamp(0, 255);
+      output.a = 255;
+    }
+  }
+  return _finishPhoto(
+    merged,
+    aspectRatio: input.$2,
+    mirror: input.$3,
+    styleIndex: input.$4,
+  );
+}
+
+Uint8List _finishPhoto(
+  img.Image source, {
+  required double aspectRatio,
+  required bool mirror,
+  required int styleIndex,
+}) {
+  var image = mirror ? img.flipHorizontal(source) : source;
+  final target = aspectRatio;
   final current = image.width / image.height;
   var width = image.width;
   var height = image.height;
@@ -1803,7 +2054,7 @@ Uint8List _processPhoto((Uint8List, double, bool, int) input) {
     height: height,
   );
   final style =
-      CameraStyle.values[input.$4.clamp(0, CameraStyle.values.length - 1)];
+      CameraStyle.values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
   switch (style) {
     case CameraStyle.standard:
       break;
@@ -1989,6 +2240,101 @@ class _FocusRing extends StatelessWidget {
         ),
     ],
   );
+}
+
+class _ScanFrame extends StatelessWidget {
+  const _ScanFrame();
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+    child: Container(
+      width: 230,
+      height: 230,
+      decoration: BoxDecoration(
+        border: Border.all(color: const Color(0xFFFFD60A), width: 2),
+        borderRadius: BorderRadius.circular(22),
+      ),
+      alignment: Alignment.topCenter,
+      child: const Padding(
+        padding: EdgeInsets.only(top: 10),
+        child: Text(
+          '将二维码或条形码放入框内',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 11,
+            shadows: [Shadow(color: Colors.black, blurRadius: 4)],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+class _BarcodeResultCard extends StatelessWidget {
+  const _BarcodeResultCard({
+    required this.value,
+    required this.type,
+    required this.onCopy,
+    required this.onOpen,
+  });
+
+  final String value;
+  final String? type;
+  final VoidCallback onCopy;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final uri = Uri.tryParse(value);
+    final isLink =
+        uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: const Color(0xF21C1C1E),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+        child: Row(
+          children: [
+            const Icon(Icons.qr_code_2, color: Color(0xFFFFD60A)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    type == null ? '已识别' : '已识别 · $type',
+                    style: const TextStyle(color: Colors.white60, fontSize: 10),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              tooltip: '复制',
+              onPressed: onCopy,
+              icon: const Icon(Icons.copy, color: Colors.white),
+            ),
+            if (isLink)
+              IconButton(
+                tooltip: '安全打开',
+                onPressed: onOpen,
+                icon: const Icon(Icons.open_in_new, color: Color(0xFFFFD60A)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _LevelIndicator extends StatelessWidget {
