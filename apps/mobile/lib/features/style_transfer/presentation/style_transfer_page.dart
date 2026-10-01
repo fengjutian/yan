@@ -1,8 +1,8 @@
 import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
-import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
+import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/style_transfer/presentation/style_transfer_controller.dart';
 import 'package:ai_image_studio/features/styles/presentation/styles_controller.dart';
 import 'package:flutter/material.dart';
@@ -33,7 +33,7 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         _showErrorMessage(message);
       },
     );
-    ref.listen<AsyncValue<dynamic>>(stylesProvider, (previous, next) {
+    ref.listen(stylesProvider, (previous, next) {
       next.whenOrNull(
         error: (error, _) {
           if (previous is AsyncError && previous.error == error) return;
