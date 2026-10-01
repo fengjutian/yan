@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/app/theme_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +12,7 @@ class ProfilePage extends ConsumerWidget {
     final state = ref.watch(authControllerProvider);
     final user = state.user;
     final isGuest = user?.id.startsWith('guest_') ?? true;
+    final themeMode = ref.watch(themeModeProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('我的')),
@@ -46,12 +48,10 @@ class ProfilePage extends ConsumerWidget {
               onTap: () => _showMembershipDialog(context),
             ),
             _ProfileTile(
-              icon: Icons.tune,
-              label: '偏好设置',
-              trailing: '默认 1:1 / 4 张',
-              onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('敬请期待')),
-              ),
+              icon: Icons.brightness_6_outlined,
+              label: '主题设置',
+              trailing: themeMode.label,
+              onTap: () => _showThemeSheet(context, ref, themeMode),
             ),
             _ProfileTile(
               icon: Icons.auto_awesome_outlined,
@@ -105,6 +105,51 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 
+  void _showThemeSheet(
+    BuildContext context,
+    WidgetRef ref,
+    ThemeMode selectedMode,
+  ) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Text(
+                  '主题设置',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              for (final mode in ThemeMode.values)
+                RadioListTile<ThemeMode>(
+                  value: mode,
+                  groupValue: selectedMode,
+                  title: Text(mode.label),
+                  secondary: Icon(switch (mode) {
+                    ThemeMode.system => Icons.settings_brightness_outlined,
+                    ThemeMode.light => Icons.light_mode_outlined,
+                    ThemeMode.dark => Icons.dark_mode_outlined,
+                  }),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    ref.read(themeModeProvider.notifier).setThemeMode(value);
+                    Navigator.of(sheetContext).pop();
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showPrivacySheet(BuildContext context) {
     showModalBottomSheet<void>(
       context: context,
@@ -114,8 +159,10 @@ class ProfilePage extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('隐私与协议',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+            Text(
+              '隐私与协议',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+            ),
             SizedBox(height: 12),
             Text('· 默认不公开作品,不使用用户照片训练模型'),
             SizedBox(height: 4),
@@ -156,56 +203,77 @@ class _HeaderCard extends StatelessWidget {
         ),
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Row(children: [
-        CircleAvatar(
-          radius: 36,
-          backgroundColor: const Color(0xFF7B5152),
-          child: Text(
-            nickname.isEmpty ? '颜' : nickname.characters.first,
-            style: const TextStyle(
-                color: Colors.white, fontSize: 24, fontWeight: FontWeight.w700),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 36,
+            backgroundColor: const Color(0xFF7B5152),
+            child: Text(
+              nickname.isEmpty ? '颜' : nickname.characters.first,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(children: [
-                Flexible(
-                  child: Text(nickname,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleLarge),
-                ),
-                const SizedBox(width: 6),
-                if (isGuest)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.black12,
-                      borderRadius: BorderRadius.circular(8),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        nickname,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
                     ),
-                    child: const Text('游客', style: TextStyle(fontSize: 10)),
-                  ),
-              ]),
-              const SizedBox(height: 4),
-              Text(email,
+                    const SizedBox(width: 6),
+                    if (isGuest)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black12,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text('游客', style: TextStyle(fontSize: 10)),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 8),
-              Row(children: [
-                const Icon(Icons.brightness_5_rounded,
-                    size: 14, color: Color(0xFFE6A33A)),
-                const SizedBox(width: 4),
-                Text('剩余 $credits 次',
-                    style: const TextStyle(fontWeight: FontWeight.w700)),
-              ]),
-            ],
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.brightness_5_rounded,
+                      size: 14,
+                      color: Color(0xFFE6A33A),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '剩余 $credits 次',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 }
@@ -215,9 +283,9 @@ class _SectionTitle extends StatelessWidget {
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
-        child: Text(text, style: Theme.of(context).textTheme.titleSmall),
-      );
+    padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  );
 }
 
 class _ProfileTile extends StatelessWidget {
@@ -235,20 +303,22 @@ class _ProfileTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListTile(
-        contentPadding: EdgeInsets.zero,
-        leading: Icon(icon),
-        title: Text(label),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (trailing != null)
-              Text(trailing!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.outline,
-                      )),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
-        onTap: onTap,
-      );
+    contentPadding: EdgeInsets.zero,
+    leading: Icon(icon),
+    title: Text(label),
+    trailing: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (trailing != null)
+          Text(
+            trailing!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.outline,
+            ),
+          ),
+        const Icon(Icons.chevron_right),
+      ],
+    ),
+    onTap: onTap,
+  );
 }
