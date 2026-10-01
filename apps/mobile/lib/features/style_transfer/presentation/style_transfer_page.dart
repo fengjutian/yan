@@ -36,7 +36,10 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
     ref.listen(stylesProvider, (previous, next) {
       next.whenOrNull(
         error: (error, _) {
-          if (previous is AsyncError && previous.error == error) return;
+          final previousError = previous?.whenOrNull(
+            error: (previousError, _) => previousError,
+          );
+          if (previousError == error) return;
           _showErrorMessage('加载风格失败，请稍后重试');
         },
       );
