@@ -14,6 +14,7 @@ class ImageAsset {
   final int width;
   final int height;
   final int byteSize;
+  bool get isLocal => id.startsWith('local-');
   factory ImageAsset.fromJson(Map<String, dynamic> json) => ImageAsset(
         id: (json['id'] as String?) ?? '',
         url: (json['url'] as String?) ?? '',

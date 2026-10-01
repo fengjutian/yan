@@ -1,6 +1,7 @@
 import 'package:ai_image_studio/features/assets/data/asset_repository.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -54,11 +55,12 @@ class StyleTransferState {
 }
 
 class StyleTransferController extends StateNotifier<StyleTransferState> {
-  StyleTransferController(this._ref, this._assets)
+  StyleTransferController(this._ref, this._assets, {required this.localOnly})
       : super(const StyleTransferState());
 
   final Ref _ref;
   final AssetRepository _assets;
+  final bool localOnly;
   static const _uuid = Uuid();
 
   void setStyle(String id) =>
@@ -79,6 +81,12 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
   }) async {
     if (state.styleId == null) {
       state = state.copyWith(errorMessage: '请先选择风格');
+      return null;
+    }
+    if (localOnly) {
+      state = state.copyWith(
+        errorMessage: 'AI 风格迁移需要后端服务，请在「我的」中关闭“优先本地运行”',
+      );
       return null;
     }
     if (state.submitting) return null;
@@ -128,4 +136,6 @@ final styleTransferControllerProvider = StateNotifierProvider.autoDispose<
     (ref) => StyleTransferController(
           ref,
           ref.watch(assetRepositoryProvider),
+          localOnly: ref.watch(aiSettingsControllerProvider
+              .select((state) => state.settings.preferLocal)),
         ));

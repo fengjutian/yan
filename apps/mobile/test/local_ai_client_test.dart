@@ -21,14 +21,31 @@ void main() {
     expect(await client.complete('测试'), '本地结果');
   });
 
-  test('本地 AI 未启用时使用服务端', () async {
+  test('本地模式未配置 API 时使用设备内基础结果且不访问后端', () async {
     final directAdapter = _JsonAdapter('不应调用');
     final direct = Dio()..httpClientAdapter = directAdapter;
-    final backend = Dio()..httpClientAdapter = _JsonAdapter('后端结果');
+    final backendAdapter = _JsonAdapter('不应调用');
+    final backend = Dio()..httpClientAdapter = backendAdapter;
     final client = LocalAIClient(
       _MemorySettings(const AISettings(apiKey: 'secret')),
       backend,
       directClient: direct,
+    );
+
+    expect(await client.complete('测试'), contains('测试'));
+    expect(directAdapter.calls, 0);
+    expect(backendAdapter.calls, 0);
+  });
+
+  test('关闭本地模式后才使用服务端', () async {
+    final directAdapter = _JsonAdapter('不应调用');
+    final backend = Dio()..httpClientAdapter = _JsonAdapter('后端结果');
+    final client = LocalAIClient(
+      _MemorySettings(
+        const AISettings(preferLocal: false, apiKey: 'secret'),
+      ),
+      backend,
+      directClient: Dio()..httpClientAdapter = directAdapter,
     );
 
     expect(await client.complete('测试'), '后端结果');

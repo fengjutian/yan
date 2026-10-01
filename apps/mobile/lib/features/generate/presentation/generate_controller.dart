@@ -9,6 +9,8 @@ final generateRepositoryProvider = Provider<GenerateRepository>(
     (ref) => GenerateRepository(
           ref.watch(apiClientProvider),
           ref.watch(localAIClientProvider),
+          localOnly: ref.watch(aiSettingsControllerProvider
+              .select((state) => state.settings.preferLocal)),
         ));
 final generateControllerProvider =
     StateNotifierProvider.autoDispose<GenerateController, GenerateState>(

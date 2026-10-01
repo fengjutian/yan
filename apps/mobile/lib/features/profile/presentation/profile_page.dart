@@ -1,5 +1,6 @@
 import 'package:ai_image_studio/app/theme_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ class ProfilePage extends ConsumerWidget {
     final user = state.user;
     final isGuest = user?.id.startsWith('guest_') ?? true;
     final themeMode = ref.watch(themeModeProvider);
+    final aiSettings = ref.watch(aiSettingsControllerProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('我的')),
@@ -33,6 +35,20 @@ class ProfilePage extends ConsumerWidget {
               icon: Icons.favorite_outline,
               label: '我的收藏',
               onTap: () => context.push('/me/favorites'),
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              secondary: const Icon(Icons.offline_bolt_outlined),
+              title: const Text('优先本地运行'),
+              subtitle: Text(aiSettings.settings.preferLocal
+                  ? '已开启 · 图片留在设备，后端服务停用'
+                  : '已关闭 · 上传与 AI 任务使用后端服务'),
+              value: aiSettings.settings.preferLocal,
+              onChanged: aiSettings.loading
+                  ? null
+                  : ref
+                      .read(aiSettingsControllerProvider.notifier)
+                      .setPreferLocal,
             ),
             _ProfileTile(
               icon: Icons.edit_note,

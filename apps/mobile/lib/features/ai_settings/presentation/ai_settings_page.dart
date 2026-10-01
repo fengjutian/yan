@@ -94,12 +94,12 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('优先本地调用 AI'),
-                  subtitle: const Text('APP 直连优先，服务端作为备用'),
+                  title: const Text('优先本地运行'),
+                  subtitle: const Text('默认不访问后端；关闭后才使用后端服务'),
                   value: state.settings.preferLocal,
-                  onChanged: state.settings.enabled
-                      ? (value) => _update(preferLocal: value)
-                      : null,
+                  onChanged: (value) => ref
+                      .read(aiSettingsControllerProvider.notifier)
+                      .setPreferLocal(value),
                 ),
                 TextField(
                   controller: _apiKey,

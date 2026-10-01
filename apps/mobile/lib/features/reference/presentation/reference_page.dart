@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:ai_image_studio/features/reference/presentation/reference_controller.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,6 +34,8 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(referenceControllerProvider);
+    final localOnly = ref.watch(aiSettingsControllerProvider
+        .select((value) => value.settings.preferLocal));
     final controller = ref.read(referenceControllerProvider.notifier);
     return Scaffold(
       appBar: AppBar(title: const Text('人物参考创作')),
@@ -59,7 +62,9 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
         OutlinedButton.icon(
             onPressed: state.busy ? null : controller.selectAndUpload,
             icon: const Icon(Icons.photo_library_outlined),
-            label: Text(state.sourceAsset == null ? '选择并上传参考图' : '更换参考图')),
+            label: Text(state.sourceAsset == null
+                ? (localOnly ? '选择本地参考图' : '选择并上传参考图')
+                : '更换参考图')),
         if (state.busy && state.sourceAsset == null)
           LinearProgressIndicator(
               value: state.uploadProgress == 0 ? null : state.uploadProgress),

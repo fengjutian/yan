@@ -80,6 +80,16 @@ class AISettingsController extends StateNotifier<AISettingsState> {
   void update(AISettings value) =>
       state = state.copyWith(settings: value, clearMessage: true);
 
+  Future<void> setPreferLocal(bool value) async {
+    final settings = state.settings.copyWith(preferLocal: value);
+    state = state.copyWith(settings: settings, clearMessage: true);
+    try {
+      await _store.save(settings);
+    } catch (error) {
+      state = state.copyWith(message: error.toString(), isError: true);
+    }
+  }
+
   Future<bool> save() async {
     final value = state.settings;
     if (value.enabled &&

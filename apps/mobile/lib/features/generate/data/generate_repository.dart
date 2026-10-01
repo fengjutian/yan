@@ -6,9 +6,11 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 class GenerateRepository {
-  GenerateRepository(this._apiClient, this._localAIClient);
+  GenerateRepository(this._apiClient, this._localAIClient,
+      {this.localOnly = true});
   final ApiClient _apiClient;
   final LocalAIClient _localAIClient;
+  final bool localOnly;
   static const _uuid = Uuid();
 
   Future<String> enhancePrompt(String prompt) async {
@@ -24,6 +26,7 @@ class GenerateRepository {
       required String aspectRatio,
       required int count,
       required bool promptOptimizer}) async {
+    _requireBackend('AI 图像生成');
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/image-tasks',
@@ -48,6 +51,7 @@ class GenerateRepository {
     required String styleId,
     required String aspectRatio,
   }) async {
+    _requireBackend('人物参考生成');
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/image-tasks',
@@ -69,6 +73,7 @@ class GenerateRepository {
   }
 
   Future<ImageTask> get(String taskId) async {
+    _requireBackend('任务查询');
     try {
       final response = await _apiClient.dio
           .get<Map<String, dynamic>>('/image-tasks/$taskId');
@@ -79,6 +84,9 @@ class GenerateRepository {
   }
 
   Future<ImageTaskPage> list({String cursor = '', int limit = 20}) async {
+    if (localOnly) {
+      return const ImageTaskPage(tasks: [], nextCursor: '');
+    }
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
         '/image-tasks',
@@ -102,6 +110,7 @@ class GenerateRepository {
   }
 
   Future<void> cancel(String taskId) async {
+    _requireBackend('取消任务');
     try {
       await _apiClient.dio.post<void>('/image-tasks/$taskId/cancel');
     } on DioException catch (error) {
@@ -110,6 +119,7 @@ class GenerateRepository {
   }
 
   Future<ImageTask> retry(String taskId) async {
+    _requireBackend('重试任务');
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/image-tasks/$taskId/retry',
@@ -118,6 +128,12 @@ class GenerateRepository {
       return ImageTask.fromJson(response.data!);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
+    }
+  }
+
+  void _requireBackend(String feature) {
+    if (localOnly) {
+      throw StateError('$feature需要后端服务，请在「我的」中关闭“优先本地运行”');
     }
   }
 }

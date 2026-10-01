@@ -18,14 +18,11 @@ class LocalAIClient {
     String systemMessage = promptSystemMessage,
   }) async {
     final settings = await _settings.load();
-    if (settings.canCallLocally) {
-      try {
-        return await _callProvider(settings, prompt, systemMessage);
-      } on DioException {
-        // 国内线路不可用时保留服务端降级能力。
-      } on FormatException {
-        // 上游响应不完整时同样回退。
+    if (settings.preferLocal) {
+      if (settings.canCallLocally) {
+        return _callProvider(settings, prompt, systemMessage);
       }
+      return _localFallback(prompt, systemMessage);
     }
     final response = await _backend.post<Map<String, dynamic>>(
       '/prompts/enhance',
@@ -36,6 +33,16 @@ class LocalAIClient {
       throw const FormatException('AI 返回内容为空');
     }
     return result.trim();
+  }
+
+  String _localFallback(String prompt, String systemMessage) {
+    final value = prompt.trim();
+    if (systemMessage.contains('社交媒体')) {
+      final subject = value.length > 18 ? value.substring(0, 18) : value;
+      return '记录此刻\n$subject，光影和情绪都刚刚好。\n#随手拍 #生活记录 #今日份美好';
+    }
+    return '$value，主体细节清晰，自然光影，层次丰富，构图平衡，'
+        '色彩协调，真实细腻质感，高质量摄影画面';
   }
 
   Future<String> test(AISettings settings) => _callProvider(

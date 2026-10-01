@@ -2,13 +2,17 @@ import 'dart:typed_data';
 import 'package:ai_image_studio/features/assets/data/asset_model.dart';
 import 'package:ai_image_studio/features/assets/data/asset_repository.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 const maxUploadBytes = 10 * 1024 * 1024;
 final imagePickerProvider = Provider<ImagePicker>((ref) => ImagePicker());
-final assetRepositoryProvider = Provider<AssetRepository>(
-    (ref) => AssetRepository(ref.watch(apiClientProvider)));
+final assetRepositoryProvider = Provider<AssetRepository>((ref) {
+  final localOnly = ref.watch(aiSettingsControllerProvider
+      .select((state) => state.settings.preferLocal));
+  return AssetRepository(ref.watch(apiClientProvider), localOnly: localOnly);
+});
 final assetUploadControllerProvider =
     StateNotifierProvider.autoDispose<AssetUploadController, AssetUploadState>(
   (ref) => AssetUploadController(
