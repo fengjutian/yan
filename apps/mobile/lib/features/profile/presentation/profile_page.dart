@@ -127,22 +127,30 @@ class ProfilePage extends ConsumerWidget {
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
               ),
-              for (final mode in ThemeMode.values)
-                RadioListTile<ThemeMode>(
-                  value: mode,
-                  groupValue: selectedMode,
-                  title: Text(mode.label),
-                  secondary: Icon(switch (mode) {
-                    ThemeMode.system => Icons.settings_brightness_outlined,
-                    ThemeMode.light => Icons.light_mode_outlined,
-                    ThemeMode.dark => Icons.dark_mode_outlined,
-                  }),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    ref.read(themeModeProvider.notifier).setThemeMode(value);
-                    Navigator.of(sheetContext).pop();
-                  },
+              RadioGroup<ThemeMode>(
+                groupValue: selectedMode,
+                onChanged: (value) {
+                  if (value == null) return;
+                  ref.read(themeModeProvider.notifier).setThemeMode(value);
+                  Navigator.of(sheetContext).pop();
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final mode in ThemeMode.values)
+                      RadioListTile<ThemeMode>(
+                        value: mode,
+                        title: Text(mode.label),
+                        secondary: Icon(switch (mode) {
+                          ThemeMode.system =>
+                            Icons.settings_brightness_outlined,
+                          ThemeMode.light => Icons.light_mode_outlined,
+                          ThemeMode.dark => Icons.dark_mode_outlined,
+                        }),
+                      ),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
