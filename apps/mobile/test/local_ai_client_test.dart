@@ -88,6 +88,28 @@ void main() {
     expect(adapter.lastPath, 'https://api.minimaxi.com/v1/chat/completions');
     expect(adapter.lastData?['model'], 'MiniMax-M3');
   });
+
+  test('本地风格迁移直接调用 MiniMax 图片接口', () async {
+    final adapter = _JsonAdapter('unused');
+    final client = LocalAIClient(
+      _MemorySettings(
+        const AISettings(enabled: true, preferLocal: true, apiKey: 'secret'),
+      ),
+      Dio(),
+      directClient: Dio()..httpClientAdapter = adapter,
+    );
+
+    final result = await client.styleTransfer(
+      sourceBytes: Uint8List.fromList([1, 2, 3]),
+      prompt: '自然人像',
+      aspectRatio: '1:1',
+    );
+
+    expect(result, [4, 5, 6]);
+    expect(adapter.lastPath, 'https://api.minimaxi.com/v1/image_generation');
+    expect(adapter.lastData?['model'], 'image-01');
+    expect(adapter.lastData?['subject_reference'], isNotEmpty);
+  });
 }
 
 class _MemorySettings implements AISettingsStore {
@@ -118,7 +140,13 @@ class _JsonAdapter implements HttpClientAdapter {
     lastPath = options.uri.toString();
     lastData = options.data as Map<String, dynamic>?;
     final isBackend = options.path.endsWith('/prompts/enhance');
-    final body = isBackend
+    final isImage = options.path.endsWith('/image_generation');
+    final body = isImage
+        ? {
+            'data': {'image_base64': [base64Encode([4, 5, 6])]},
+            'base_resp': {'status_code': 0, 'status_msg': 'success'},
+          }
+        : isBackend
         ? {'prompt': content}
         : {
             'choices': [

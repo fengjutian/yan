@@ -89,7 +89,10 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
     if (state.submitting) return null;
     state = state.copyWith(submitting: true, clearError: true);
     try {
-      if (localOnly) {
+      final aiSettings = _ref.read(aiSettingsControllerProvider).settings;
+      final hasDirectProvider =
+          aiSettings.enabled && aiSettings.apiKey.trim().isNotEmpty;
+      if (localOnly || hasDirectProvider) {
         final styleName = switch (state.styleId) {
           'local-natural' => '自然人像',
           'local-film' => '柔和胶片',
@@ -144,7 +147,8 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       final id = (response.data?['id'] as String?) ?? '';
       state = state.copyWith(submitting: false, taskId: id);
       return id;
-    } catch (e) {
+    } catch (e, stackTrace) {
+      debugPrint('Style transfer failed: $e\n$stackTrace');
       state = state.copyWith(
         submitting: false,
         errorMessage: _friendlyError(e),
@@ -167,7 +171,8 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       if (error.response?.statusCode == 401) return 'API Key 无效，请检查 AI 设置';
       return '连接大模型失败，请检查网络和 AI 设置';
     }
-    return '风格迁移失败，请稍后重试';
+    final detail = error.toString().trim();
+    return detail.isEmpty ? '风格迁移失败，请稍后重试' : '风格迁移失败：$detail';
   }
 }
 
