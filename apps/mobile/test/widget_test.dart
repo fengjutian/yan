@@ -43,7 +43,7 @@ void main() {
     await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pump();
     expect(find.text('从相册选择'), findsOneWidget);
-    expect(find.text('上传图片'), findsOneWidget);
+    expect(find.text('使用本地图片'), findsOneWidget);
   });
 
   testWidgets('shows text to image form', (tester) async {
@@ -67,7 +67,7 @@ void main() {
     expect(find.text('人物参考创作'), findsOneWidget);
     await tester.drag(find.byType(ListView), const Offset(0, -450));
     await tester.pump();
-    expect(find.text('选择并上传参考图'), findsOneWidget);
+    expect(find.text('选择本地参考图'), findsOneWidget);
     expect(find.text('场景描述'), findsOneWidget);
   });
 
