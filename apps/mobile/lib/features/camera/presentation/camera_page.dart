@@ -1099,8 +1099,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
   @override
   Widget build(BuildContext context) {
     if (_reviewing && _capturedImage != null) return _buildReview();
-    final landscape =
-        MediaQuery.orientationOf(context) == Orientation.landscape;
+    // Use the Flutter view instead of an inherited MediaQuery orientation.
+    // Some Android camera/rotation combinations briefly leave MediaQuery with
+    // the sensor orientation, which puts the landscape controls halfway up a
+    // portrait screen.
+    final viewSize = View.of(context).physicalSize;
+    final landscape = viewSize.width > viewSize.height;
     return Scaffold(
       backgroundColor: Colors.black,
       body: landscape ? _buildLandscapeLayout() : _buildPortraitLayout(),
@@ -1145,8 +1149,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
               : const SizedBox.shrink(),
         ),
       ),
-      Align(
-        alignment: Alignment.bottomCenter,
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
         child: DecoratedBox(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
