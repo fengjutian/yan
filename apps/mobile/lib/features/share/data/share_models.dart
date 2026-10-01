@@ -21,23 +21,17 @@ class ShareConfig {
   const ShareConfig({
     this.platform = SharePlatform.square,
     this.watermark = WatermarkPosition.bottomLeft,
-    this.showMetadata = true,
   });
 
   final SharePlatform platform;
   final WatermarkPosition watermark;
-  /// 分享图片里是否保留 EXIF 位置/设备信息。
-  final bool showMetadata;
-
   ShareConfig copyWith({
     SharePlatform? platform,
     WatermarkPosition? watermark,
-    bool? showMetadata,
   }) =>
       ShareConfig(
         platform: platform ?? this.platform,
         watermark: watermark ?? this.watermark,
-        showMetadata: showMetadata ?? this.showMetadata,
       );
 }
 

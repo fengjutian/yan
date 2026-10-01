@@ -146,5 +146,6 @@ class _AuthInterceptor extends QueuedInterceptor {
   bool _isPublicAuthPath(String path) =>
       path.endsWith('/auth/login') ||
       path.endsWith('/auth/register') ||
+      path.endsWith('/auth/guest') ||
       path.endsWith('/auth/refresh');
 }

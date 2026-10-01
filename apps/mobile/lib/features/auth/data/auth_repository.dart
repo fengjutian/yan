@@ -47,10 +47,10 @@ class AuthRepository {
           data: {'refresh_token': refreshToken},
         );
       }
-      await _tokenStorage.clear();
     } on DioException {
-      // 网络失败时不清本地 token,避免服务器侧 refresh_token 还活着却被强制踢出。
-      // 重启 app 后会自动用 refresh_token 续期。
+      // 注销服务端会话是尽力而为；用户明确退出后，本地凭据必须移除。
+    } finally {
+      await _tokenStorage.clear();
     }
   }
 

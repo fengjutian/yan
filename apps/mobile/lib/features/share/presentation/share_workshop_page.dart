@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:share_plus/share_plus.dart';
@@ -140,13 +141,11 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
                 config.copyWith(watermark: w),
           ),
           const SizedBox(height: 8),
-          SwitchListTile(
+          const ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('保留位置/设备信息'),
-            subtitle: const Text('关闭后将剥离 EXIF 中的敏感元数据'),
-            value: config.showMetadata,
-            onChanged: (v) => ref.read(shareConfigProvider.notifier).state =
-                config.copyWith(showMetadata: v),
+            leading: Icon(Icons.privacy_tip_outlined),
+            title: Text('隐私保护'),
+            subtitle: Text('导出时会自动移除 EXIF 中的位置和设备信息'),
           ),
           const Divider(height: 32),
           Text('AI 文案', style: Theme.of(context).textTheme.titleMedium),
@@ -231,7 +230,10 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (url == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _downloadImage(url);
+      final bytes = await _exportImage(
+        await _downloadImage(url),
+        ref.read(shareConfigProvider),
+      );
       final result = await SaverGallery.saveImage(
         bytes,
         fileName: 'yan-${DateTime.now().millisecondsSinceEpoch}',
@@ -261,13 +263,16 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (url == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _downloadImage(url);
+      final bytes = await _exportImage(
+        await _downloadImage(url),
+        ref.read(shareConfigProvider),
+      );
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.png');
       await file.writeAsBytes(bytes, flush: true);
       final text = ref.read(shareControllerProvider.notifier).exportText();
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'image/jpeg')],
+        [XFile(file.path, mimeType: 'image/png')],
         text: text,
         subject: ref.read(shareControllerProvider).title,
       );
@@ -288,6 +293,80 @@ Future<Uint8List> _downloadImage(String url) async {
     throw Exception('下载图片失败：HTTP ${response.statusCode}');
   }
   return response.bodyBytes;
+}
+
+/// 将预览中的裁剪比例和水印真正烘焙到导出文件中。
+/// PNG 重编码同时会移除原图 EXIF，避免位置和设备信息被意外分享。
+Uint8List _exportImage(Uint8List bytes, ShareConfig config) {
+  var image = img.decodeImage(bytes);
+  if (image == null) throw const FormatException('无法解析图片');
+
+  final targetRatio = switch (config.platform) {
+    SharePlatform.original => null,
+    SharePlatform.square => 1.0,
+    SharePlatform.portrait3x4 => 3 / 4,
+    SharePlatform.portrait4x5 => 4 / 5,
+    SharePlatform.story9x16 => 9 / 16,
+  };
+  if (targetRatio != null) {
+    final sourceRatio = image.width / image.height;
+    if (sourceRatio > targetRatio) {
+      final width = (image.height * targetRatio).round();
+      image = img.copyCrop(
+        image,
+        x: (image.width - width) ~/ 2,
+        y: 0,
+        width: width,
+        height: image.height,
+      );
+    } else if (sourceRatio < targetRatio) {
+      final height = (image.width / targetRatio).round();
+      image = img.copyCrop(
+        image,
+        x: 0,
+        y: (image.height - height) ~/ 2,
+        width: image.width,
+        height: height,
+      );
+    }
+  }
+
+  if (config.watermark != WatermarkPosition.hidden) {
+    const label = 'YAN AI';
+    final font = img.arial24;
+    final padding = (image.width * 0.015).round().clamp(8, 24);
+    final textWidth = label.length * 14;
+    final boxWidth = textWidth + padding * 2;
+    final boxHeight = 24 + padding * 2;
+    final margin = (image.width * 0.025).round().clamp(12, 40);
+    final (x, y) = switch (config.watermark) {
+      WatermarkPosition.bottomLeft => (margin, image.height - boxHeight - margin),
+      WatermarkPosition.bottomRight =>
+        (image.width - boxWidth - margin, image.height - boxHeight - margin),
+      WatermarkPosition.center =>
+        ((image.width - boxWidth) ~/ 2, (image.height - boxHeight) ~/ 2),
+      WatermarkPosition.hidden => (0, 0),
+    };
+    img.fillRect(
+      image,
+      x1: x,
+      y1: y,
+      x2: x + boxWidth,
+      y2: y + boxHeight,
+      color: img.ColorRgba8(0, 0, 0, 150),
+      radius: 8,
+    );
+    img.drawString(
+      image,
+      label,
+      font: font,
+      x: x + padding,
+      y: y + padding,
+      color: img.ColorRgb8(255, 255, 255),
+    );
+  }
+
+  return Uint8List.fromList(img.encodePng(image));
 }
 
 class _PreviewCanvas extends StatelessWidget {
