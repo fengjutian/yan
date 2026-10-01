@@ -30,16 +30,48 @@ ThemeData buildAppTheme() {
     colorScheme: scheme,
     useMaterial3: true,
     scaffoldBackgroundColor: AppColors.cream,
-    fontFamilyFallback: const ['PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC'],
+    fontFamilyFallback: const [
+      'PingFang SC',
+      'Microsoft YaHei',
+      'Noto Sans CJK SC',
+    ],
   );
   return base.copyWith(
     textTheme: base.textTheme.copyWith(
-      headlineLarge: const TextStyle(fontSize: 34, height: 1.15, fontWeight: FontWeight.w800, letterSpacing: -1.2, color: AppColors.ink),
-      headlineMedium: const TextStyle(fontSize: 28, height: 1.2, fontWeight: FontWeight.w800, letterSpacing: -0.8, color: AppColors.ink),
-      titleLarge: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.ink),
-      titleMedium: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.ink),
-      bodyLarge: const TextStyle(fontSize: 16, height: 1.55, color: AppColors.muted),
-      bodyMedium: const TextStyle(fontSize: 14, height: 1.5, color: AppColors.muted),
+      headlineLarge: const TextStyle(
+        fontSize: 34,
+        height: 1.15,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -1.2,
+        color: AppColors.ink,
+      ),
+      headlineMedium: const TextStyle(
+        fontSize: 28,
+        height: 1.2,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.8,
+        color: AppColors.ink,
+      ),
+      titleLarge: const TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      ),
+      titleMedium: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+      ),
+      bodyLarge: const TextStyle(
+        fontSize: 16,
+        height: 1.55,
+        color: AppColors.muted,
+      ),
+      bodyMedium: const TextStyle(
+        fontSize: 14,
+        height: 1.5,
+        color: AppColors.muted,
+      ),
     ),
     appBarTheme: const AppBarTheme(
       backgroundColor: AppColors.cream,
@@ -47,22 +79,58 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
-      titleTextStyle: TextStyle(color: AppColors.ink, fontSize: 20, fontWeight: FontWeight.w800),
+      titleTextStyle: TextStyle(
+        color: AppColors.ink,
+        fontSize: 20,
+        fontWeight: FontWeight.w800,
+      ),
     ),
     cardTheme: CardThemeData(
       color: Colors.white,
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: AppColors.line)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: const BorderSide(color: AppColors.line),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
+      labelStyle: const TextStyle(
+        color: AppColors.muted,
+        fontSize: 14,
+        fontWeight: FontWeight.w600,
+      ),
+      floatingLabelStyle: const TextStyle(
+        color: AppColors.rose,
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+      ),
+      hintStyle: const TextStyle(
+        color: AppColors.muted,
+        fontSize: 14,
+        height: 1.5,
+      ),
+      helperStyle: const TextStyle(
+        color: AppColors.muted,
+        fontSize: 12,
+        height: 1.4,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: AppColors.line)),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: AppColors.line)),
-      focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: const BorderSide(color: AppColors.rose, width: 1.5)),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: AppColors.line),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: AppColors.line),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: const BorderSide(color: AppColors.rose, width: 1.5),
+      ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
@@ -85,9 +153,22 @@ ThemeData buildAppTheme() {
     chipTheme: base.chipTheme.copyWith(
       backgroundColor: Colors.white,
       selectedColor: AppColors.blush,
+      disabledColor: const Color(0xFFF0EDE7),
+      checkmarkColor: AppColors.rose,
+      deleteIconColor: AppColors.muted,
       side: const BorderSide(color: AppColors.line),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      labelStyle: const TextStyle(fontWeight: FontWeight.w600),
+      labelStyle: const TextStyle(
+        color: AppColors.ink,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        color: AppColors.rose,
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+      ),
+      iconTheme: const IconThemeData(color: AppColors.muted, size: 18),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
     ),
     navigationBarTheme: NavigationBarThemeData(
@@ -96,14 +177,24 @@ ThemeData buildAppTheme() {
       surfaceTintColor: Colors.transparent,
       indicatorColor: AppColors.blush,
       elevation: 0,
-      labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
-        color: states.contains(WidgetState.selected) ? AppColors.rose : AppColors.muted,
-        fontSize: 12,
-        fontWeight: states.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
-      )),
-      iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
-        color: states.contains(WidgetState.selected) ? AppColors.rose : AppColors.muted,
-      )),
+      labelTextStyle: WidgetStateProperty.resolveWith(
+        (states) => TextStyle(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.rose
+              : AppColors.muted,
+          fontSize: 12,
+          fontWeight: states.contains(WidgetState.selected)
+              ? FontWeight.w700
+              : FontWeight.w500,
+        ),
+      ),
+      iconTheme: WidgetStateProperty.resolveWith(
+        (states) => IconThemeData(
+          color: states.contains(WidgetState.selected)
+              ? AppColors.rose
+              : AppColors.muted,
+        ),
+      ),
     ),
     dividerTheme: const DividerThemeData(color: AppColors.line),
   );

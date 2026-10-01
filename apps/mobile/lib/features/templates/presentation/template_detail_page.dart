@@ -3,6 +3,7 @@ import 'package:ai_image_studio/features/templates/data/template_models.dart';
 import 'package:ai_image_studio/features/templates/presentation/templates_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 /// 模板详情:
@@ -65,7 +66,10 @@ class _Body extends StatelessWidget {
           height: 220,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: [t.coverColor, Color.lerp(t.coverColor, Colors.white, .4)!],
+              colors: [
+                t.coverColor,
+                Color.lerp(t.coverColor, Colors.white, .4)!,
+              ],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
@@ -78,12 +82,16 @@ class _Body extends StatelessWidget {
         const SizedBox(height: 20),
         Text(t.title, style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 6),
-        Text(t.subtitle,
-            style: const TextStyle(color: AppColors.muted, fontSize: 14)),
+        Text(
+          t.subtitle,
+          style: const TextStyle(color: AppColors.muted, fontSize: 14),
+        ),
         const SizedBox(height: 16),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final tag in t.tags) Chip(label: Text(tag)),
-        ]),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [for (final tag in t.tags) _Pill(label: '# $tag')],
+        ),
         const SizedBox(height: 24),
         _SectionTitle('构图与机位'),
         _InfoRow(
@@ -110,34 +118,82 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         _SectionTitle('推荐风格'),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final s in t.recommendedStyles) Chip(label: Text(s)),
-        ]),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final s in t.recommendedStyles)
+              _Pill(label: _styleLabel(s), emphasized: true),
+          ],
+        ),
         const SizedBox(height: 24),
         _SectionTitle('示例 Prompt'),
         Container(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 16),
           decoration: BoxDecoration(
-            color: AppColors.cream,
-            borderRadius: BorderRadius.circular(14),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.line),
           ),
-          child: SelectableText(t.examplePrompt,
-              style: const TextStyle(fontSize: 13, height: 1.5)),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      '可直接使用',
+                      style: TextStyle(
+                        color: AppColors.rose,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: '复制提示词',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.copy_rounded, size: 19),
+                    onPressed: () async {
+                      await Clipboard.setData(
+                        ClipboardData(text: t.examplePrompt),
+                      );
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(
+                        context,
+                      ).showSnackBar(const SnackBar(content: Text('提示词已复制')));
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              SelectableText(
+                t.examplePrompt,
+                style: const TextStyle(
+                  color: AppColors.ink,
+                  fontSize: 14,
+                  height: 1.7,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 24),
         FilledButton.icon(
           icon: const Icon(Icons.camera_alt_outlined),
           label: const Text('用此模板拍'),
-          style: FilledButton.styleFrom(
-            minimumSize: const Size.fromHeight(54),
-          ),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(54)),
           onPressed: () {
-            context.push('/camera', extra: {
-              'templateId': t.id,
-              'prompt': t.examplePrompt,
-              'composition': t.compositionRule.name,
-              'angle': t.cameraAngle.name,
-            });
+            context.push(
+              '/camera',
+              extra: {
+                'templateId': t.id,
+                'prompt': t.examplePrompt,
+                'composition': t.compositionRule.name,
+                'angle': t.cameraAngle.name,
+              },
+            );
           },
         ),
       ],
@@ -145,14 +201,59 @@ class _Body extends StatelessWidget {
   }
 }
 
+class _Pill extends StatelessWidget {
+  const _Pill({required this.label, this.emphasized = false});
+
+  final String label;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+      decoration: BoxDecoration(
+        color: emphasized ? AppColors.blush : Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: emphasized
+              ? AppColors.rose.withValues(alpha: .22)
+              : AppColors.line,
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: emphasized ? AppColors.rose : AppColors.ink,
+          fontSize: 13,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+String _styleLabel(String id) => switch (id) {
+  'film-soft' => '柔和胶片',
+  'cream-portrait' => '奶油人像',
+  'lifestyle' => '自然生活感',
+  'cafe-warm' => '咖啡暖调',
+  'cinematic-blue' => '电影蓝调',
+  'travel-cine' => '旅行电影感',
+  'film-warm' => '暖色胶片',
+  'food-warm' => '暖调美食',
+  'food-clean' => '清透美食',
+  'life-soft' => '柔光生活感',
+  _ => id,
+};
+
 class _SectionTitle extends StatelessWidget {
   const _SectionTitle(this.text);
   final String text;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Text(text, style: Theme.of(context).textTheme.titleSmall),
-      );
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
+  );
 }
 
 class _InfoRow extends StatelessWidget {
@@ -178,15 +279,19 @@ class _InfoRow extends StatelessWidget {
           const SizedBox(width: 10),
           SizedBox(
             width: 64,
-            child: Text(label,
-                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            child: Text(
+              label,
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
           ),
           Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    fontSize: 13,
-                    fontWeight:
-                        expanded ? FontWeight.w500 : FontWeight.w700)),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: expanded ? FontWeight.w500 : FontWeight.w700,
+              ),
+            ),
           ),
         ],
       ),

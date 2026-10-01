@@ -8,6 +8,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('shared controls keep readable foreground colors', () {
+    final theme = buildAppTheme();
+
+    expect(theme.chipTheme.labelStyle?.color, AppColors.ink);
+    expect(theme.chipTheme.secondaryLabelStyle?.color, AppColors.rose);
+    expect(theme.chipTheme.checkmarkColor, AppColors.rose);
+    expect(theme.inputDecorationTheme.hintStyle?.color, AppColors.muted);
+    expect(
+      theme.inputDecorationTheme.floatingLabelStyle?.color,
+      AppColors.rose,
+    );
+  });
+
   testWidgets('shows login form', (tester) async {
     await tester.pumpWidget(
       const ProviderScope(
@@ -68,3 +81,4 @@ void main() {
     expect(find.text('还没有作品，开始第一次创作吧'), findsOneWidget);
   });
 }
+import 'package:ai_image_studio/app/theme.dart';

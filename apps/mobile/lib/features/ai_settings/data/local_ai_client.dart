@@ -6,14 +6,13 @@ class LocalAIClient {
       : _direct = directClient ?? Dio();
 
   static const promptSystemMessage =
-      '你是专业的AI绘画提示词编辑。依据用户原意补充主体细节、环境、光线、构图、色彩和材质。'
-      '不要改变主体，不要解释，不要使用标题或Markdown，只输出一段可直接用于图片生成的中文提示词，控制在80到220字。';
+      '你是专业的 AI 绘画提示词编辑。依据用户原意补充主体细节、环境、光线、构图、色彩和材质。'
+      '不要改变主体，不要解释，不要使用标题或 Markdown，只输出一段可直接用于图片生成的中文提示词，控制在 80 到 120 字。';
 
   final AISettingsStore _settings;
   final Dio _backend;
   final Dio _direct;
 
-  /// 已启用本地配置时优先由 APP 直连 MiniMax；直连失败时回退现有后端。
   Future<String> complete(
     String prompt, {
     String systemMessage = promptSystemMessage,
@@ -21,9 +20,9 @@ class LocalAIClient {
     final settings = await _settings.load();
     if (settings.canCallLocally) {
       try {
-        return await _callMiniMax(settings, prompt, systemMessage);
+        return await _callProvider(settings, prompt, systemMessage);
       } on DioException {
-        // 国内线路偶发不可用时保留服务端降级能力。
+        // 国内线路不可用时保留服务端降级能力。
       } on FormatException {
         // 上游响应不完整时同样回退。
       }
@@ -39,19 +38,24 @@ class LocalAIClient {
     return result.trim();
   }
 
-  Future<String> test(AISettings settings) => _callMiniMax(
+  Future<String> test(AISettings settings) => _callProvider(
         settings,
         '一只在窗边晒太阳的猫',
         '请简短优化用户的图片生成提示词，只返回优化结果。',
       );
 
-  Future<String> _callMiniMax(
+  Future<String> _callProvider(
     AISettings settings,
     String prompt,
     String systemMessage,
   ) async {
+    final baseUrl = settings.baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    final versionPath = settings.provider == AIProvider.miniMax &&
+            !baseUrl.endsWith('/v1')
+        ? '/v1'
+        : '';
     final response = await _direct.post<Map<String, dynamic>>(
-      '${settings.baseUrl.trim().replaceFirst(RegExp(r'/+$'), '')}/v1/chat/completions',
+      '$baseUrl$versionPath/chat/completions',
       options: Options(
         headers: {
           'Authorization': 'Bearer ${settings.apiKey.trim()}',
@@ -72,12 +76,12 @@ class LocalAIClient {
     );
     final choices = response.data?['choices'];
     if (choices is! List || choices.isEmpty) {
-      throw const FormatException('MiniMax 返回格式无效');
+      throw FormatException('${settings.provider.label} 返回格式无效');
     }
     final message = choices.first['message'];
     var content = message is Map ? message['content'] : null;
     if (content is! String || content.trim().isEmpty) {
-      throw const FormatException('MiniMax 返回内容为空');
+      throw FormatException('${settings.provider.label} 返回内容为空');
     }
     content = content.trim();
     final thinkEnd = content.lastIndexOf('</think>');
