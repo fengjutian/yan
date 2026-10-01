@@ -422,8 +422,19 @@ class _CameraPageState extends ConsumerState<CameraPage>
           );
         }
       });
-    } on CameraException {
-      // Some web cameras do not expose an image stream.
+    } catch (_) {
+      // 部分 Android 设备无法同时绑定预览、拍照和图像分析三个
+      // CameraX use case。实时分析属于增强能力，绑定失败时保留
+      // 已经可用的预览与拍照，不让整个相机页面进入错误状态。
+      if (mounted) {
+        setState(() {
+          _showRealtimeGuidance = false;
+          _showHistogram = false;
+          _liveAnalysis = null;
+          _histogram = const [];
+          _focusPeaks = const [];
+        });
+      }
     }
   }
 
@@ -900,6 +911,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
     );
 
   String _cameraError(Object error) {
+    final details = error.toString();
+    if (details.contains('No supported surface combination') ||
+        details.contains('UseCaseAdapter') ||
+        details.contains('bind too many use cases')) {
+      return '当前设备无法同时启用实时分析与拍照，请重试；应用会自动使用兼容模式。';
+    }
     if (error is CameraException) {
       if (error.code == 'CameraAccessDenied' ||
           error.code == 'CameraAccessDeniedWithoutPrompt') {
@@ -1345,6 +1362,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 Text(
                   _error!,
                   textAlign: TextAlign.center,
+                  maxLines: 5,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: Colors.white70),
                 ),
                 const SizedBox(height: 18),
