@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
@@ -51,19 +53,15 @@ class _SplashPageState extends ConsumerState<SplashPage>
   }
 
   Future<void> _start() async {
+    // Session restoration/guest creation may be delayed by a slow or unreachable
+    // network. It must not keep the splash visible after its animation.
+    unawaited(ref.read(authControllerProvider.notifier).initialize());
     try {
-      // 显式标注 <void>,因为 _controller.forward() 返回 TickerFuture (extends Future<void>),
-      // 不加类型参数 Future.wait 会推断失败。
-      await Future.wait<void>(<Future<void>>[
-        _controller.forward(),
-        ref.read(authControllerProvider.notifier).initialize(),
-      ]);
+      await _controller.forward();
     } catch (_) {
-      // 即使动画或 initialize() 抛错,也要把用户带离 splash,避免永久卡住。
+      // 即使动画抛错,也要把用户带离 splash,避免永久卡住。
     }
     if (!mounted) return;
-    // 即使 initialize 失败,AuthController 也会把 initialized=true 写回 state,
-    // 用户只是以 guest/匿名身份进入 /home。
     context.go('/home');
   }
 

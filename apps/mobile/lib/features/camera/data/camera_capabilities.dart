@@ -10,11 +10,11 @@ class CameraCapabilities {
   });
 
   const CameraCapabilities.fallback()
-      : platform = 'unknown',
-        lensTypes = const [],
-        extensionModes = const [],
-        hasFlash = false,
-        supportsMultiCamera = false;
+    : platform = 'unknown',
+      lensTypes = const [],
+      extensionModes = const [],
+      hasFlash = false,
+      supportsMultiCamera = false;
 
   final String platform;
   final List<String> lensTypes;

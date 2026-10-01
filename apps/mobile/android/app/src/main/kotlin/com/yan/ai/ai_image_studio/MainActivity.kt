@@ -5,11 +5,15 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraExtensionCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
+import android.view.KeyEvent
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
+    private var cameraControlsActive = false
+    private var cameraControlsChannel: MethodChannel? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(
@@ -24,6 +28,30 @@ class MainActivity : FlutterActivity() {
                 .onSuccess(result::success)
                 .onFailure { result.error("camera-capabilities", it.message, null) }
         }
+        cameraControlsChannel = MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "yan.camera/controls",
+        ).also { channel ->
+            channel.setMethodCallHandler { call, result ->
+                if (call.method == "setActive") {
+                    cameraControlsActive = call.arguments as? Boolean ?: false
+                    result.success(null)
+                } else {
+                    result.notImplemented()
+                }
+            }
+        }
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (cameraControlsActive &&
+            event.repeatCount == 0 &&
+            (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)
+        ) {
+            cameraControlsChannel?.invokeMethod("shutter", null)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     private fun cameraCapabilities(): Map<String, Any> {

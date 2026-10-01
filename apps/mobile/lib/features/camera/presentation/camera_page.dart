@@ -9,7 +9,12 @@ import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'
-    show DeviceOrientation, HapticFeedback, PlatformException;
+    show
+        DeviceOrientation,
+        HapticFeedback,
+        MethodChannel,
+        MissingPluginException,
+        PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
@@ -48,6 +53,7 @@ class TemplateParams {
 
 class _CameraPageState extends ConsumerState<CameraPage>
     with WidgetsBindingObserver {
+  static const _hardwareControls = MethodChannel('yan.camera/controls');
   final _picker = ImagePicker();
   CameraController? _controller;
   List<CameraDescription> _cameras = const [];
@@ -62,6 +68,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   int _countdownSeconds = 0;
   int _countdown = 0;
   bool _cancelCountdown = false;
+  bool _continuousBurst = false;
+  int _burstTaken = 0;
   double _baseZoom = 1;
   double _zoom = 1;
   double _minZoom = 1;
@@ -109,9 +117,34 @@ class _CameraPageState extends ConsumerState<CameraPage>
           if (mounted) setState(() => _levelAngle = angle.clamp(-45, 45));
         }, onError: (_) {});
     _applyTemplateParams();
+    unawaited(_activateHardwareControls());
     unawaited(_loadPreferences());
     unawaited(_loadCapabilities());
     unawaited(_loadCameras());
+  }
+
+  Future<void> _activateHardwareControls() async {
+    _hardwareControls.setMethodCallHandler((call) async {
+      if (call.method == 'shutter' && mounted) _handleShutterTap();
+    });
+    try {
+      await _hardwareControls.invokeMethod<void>('setActive', true);
+    } on MissingPluginException {
+      // iOS and desktop currently use the on-screen shutter.
+    } on PlatformException {
+      // Hardware key integration is optional.
+    }
+  }
+
+  Future<void> _deactivateHardwareControls() async {
+    _hardwareControls.setMethodCallHandler(null);
+    try {
+      await _hardwareControls.invokeMethod<void>('setActive', false);
+    } on MissingPluginException {
+      // Optional platform integration.
+    } on PlatformException {
+      // Optional platform integration.
+    }
   }
 
   Future<void> _loadCapabilities() async {
@@ -374,16 +407,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
   }
 
-  Future<void> _capture() async {
+  Future<void> _capture({bool continuous = false}) async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _capturing) {
       return;
     }
     _cancelCountdown = false;
-    setState(() => _capturing = true);
+    setState(() {
+      _capturing = true;
+      _burstTaken = 0;
+    });
     unawaited(HapticFeedback.mediumImpact());
     try {
-      for (var value = _countdownSeconds; value > 0; value--) {
+      final timerSeconds = continuous ? 0 : _countdownSeconds;
+      for (var value = timerSeconds; value > 0; value--) {
         if (!mounted) return;
         setState(() => _countdown = value);
         await Future<void>.delayed(const Duration(seconds: 1));
@@ -395,7 +432,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       }
       final values = <Uint8List>[];
       XFile? analysisFile;
-      for (var index = 0; index < _burstCount; index++) {
+      // Keep a conservative cap to avoid high-resolution JPEGs exhausting
+      // memory on mid-range Android devices.
+      final requestedCount = continuous ? 8 : _burstCount;
+      for (var index = 0; index < requestedCount; index++) {
+        if (continuous && !_continuousBurst && index > 0) break;
         if (mounted) setState(() => _shutterFlash = true);
         final file = await controller.takePicture();
         if (mounted) setState(() => _shutterFlash = false);
@@ -412,8 +453,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _style.index,
           )),
         );
-        if (index + 1 < _burstCount) {
-          await Future<void>.delayed(const Duration(milliseconds: 220));
+        if (mounted) setState(() => _burstTaken = values.length);
+        if (index + 1 < requestedCount) {
+          await Future<void>.delayed(
+            Duration(milliseconds: continuous ? 120 : 220),
+          );
         }
       }
       if (mounted && values.isNotEmpty) {
@@ -447,6 +491,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _capturing = false;
           _shutterFlash = false;
           _countdown = 0;
+          _continuousBurst = false;
         });
       }
       if (controller.value.isInitialized &&
@@ -463,6 +508,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
       return;
     }
     unawaited(_capture());
+  }
+
+  void _startContinuousBurst() {
+    if (_capturing) return;
+    setState(() => _continuousBurst = true);
+    unawaited(HapticFeedback.heavyImpact());
+    unawaited(_capture(continuous: true));
+  }
+
+  void _stopContinuousBurst() {
+    if (!_continuousBurst) return;
+    setState(() => _continuousBurst = false);
   }
 
   Future<void> _saveToGallery(Uint8List bytes) async {
@@ -631,6 +688,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
     unawaited(_liveAnalyzer.close());
+    unawaited(_deactivateHardwareControls());
     final controller = _controller;
     _controller = null; // 先置 null,避免 didChangeAppLifecycleState 二次 dispose
     unawaited(controller?.dispose());
@@ -640,37 +698,79 @@ class _CameraPageState extends ConsumerState<CameraPage>
   @override
   Widget build(BuildContext context) {
     if (_reviewing && _capturedImage != null) return _buildReview();
+    final landscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildTopBar(),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              child: _showCameraOptions
-                  ? _buildCameraOptions()
-                  : const SizedBox.shrink(),
-            ),
-            if (_templateId != null)
-              _TemplateChip(
-                templateId: _templateId!,
-                initialPrompt: _initialPrompt,
-              ),
-            Expanded(
-              child: Center(
-                child: AspectRatio(
-                  aspectRatio: _aspectRatio,
-                  child: ClipRect(child: _buildPreview()),
-                ),
-              ),
-            ),
-            _buildControls(),
-          ],
-        ),
+        child: landscape ? _buildLandscapeLayout() : _buildPortraitLayout(),
       ),
     );
   }
+
+  Widget _buildPortraitLayout() => Column(
+    children: [
+      _buildTopBar(),
+      AnimatedSwitcher(
+        duration: const Duration(milliseconds: 180),
+        child: _showCameraOptions
+            ? _buildCameraOptions(maxHeight: 230)
+            : const SizedBox.shrink(),
+      ),
+      if (_templateId != null)
+        _TemplateChip(templateId: _templateId!, initialPrompt: _initialPrompt),
+      Expanded(child: _buildCameraViewport()),
+      _buildControls(),
+    ],
+  );
+
+  Widget _buildLandscapeLayout() => Column(
+    children: [
+      _buildTopBar(),
+      Expanded(
+        child: Row(
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Positioned.fill(child: _buildCameraViewport()),
+                  if (_templateId != null)
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      child: _TemplateChip(
+                        templateId: _templateId!,
+                        initialPrompt: _initialPrompt,
+                      ),
+                    ),
+                  if (_showCameraOptions)
+                    Positioned(
+                      left: 10,
+                      top: 10,
+                      width: 360,
+                      child: _buildCameraOptions(maxHeight: 220),
+                    ),
+                ],
+              ),
+            ),
+            SizedBox(
+              width: 220,
+              child: SingleChildScrollView(
+                child: _buildControls(compact: true),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  Widget _buildCameraViewport() => Center(
+    child: AspectRatio(
+      aspectRatio: _aspectRatio,
+      child: ClipRect(child: _buildPreview()),
+    ),
+  );
 
   Widget _buildTopBar() => Padding(
     padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
@@ -729,110 +829,118 @@ class _CameraPageState extends ConsumerState<CameraPage>
     ),
   );
 
-  Widget _buildCameraOptions() => Container(
+  Widget _buildCameraOptions({required double maxHeight}) => Container(
     key: const ValueKey('camera-options'),
     margin: const EdgeInsets.fromLTRB(14, 0, 14, 10),
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    constraints: BoxConstraints(maxHeight: maxHeight),
     decoration: BoxDecoration(
       color: const Color(0xFF1C1C1E),
       borderRadius: BorderRadius.circular(18),
     ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _CapabilitySummary(capabilities: _capabilities),
-        const SizedBox(height: 8),
-        Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-        for (final ratio in const [('1:1', 1.0), ('4:3', .75), ('16:9', .5625)])
-          _CameraOption(
-            label: ratio.$1,
-            selected: _aspectRatio == ratio.$2,
-            onTap: () => setState(() {
-              _aspectRatio = ratio.$2;
-              unawaited(_savePreference(_aspectPreference, _aspectRatio));
-            }),
+    child: SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _CapabilitySummary(capabilities: _capabilities),
+          const SizedBox(height: 8),
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final ratio in const [
+                ('1:1', 1.0),
+                ('4:3', .75),
+                ('16:9', .5625),
+              ])
+                _CameraOption(
+                  label: ratio.$1,
+                  selected: _aspectRatio == ratio.$2,
+                  onTap: () => setState(() {
+                    _aspectRatio = ratio.$2;
+                    unawaited(_savePreference(_aspectPreference, _aspectRatio));
+                  }),
+                ),
+              for (final seconds in const [0, 3, 5, 10])
+                _CameraOption(
+                  label: seconds == 0 ? '定时关闭' : '$seconds 秒',
+                  icon: seconds == 0
+                      ? Icons.timer_off_outlined
+                      : Icons.timer_outlined,
+                  selected: _countdownSeconds == seconds,
+                  onTap: () => setState(() {
+                    _countdownSeconds = seconds;
+                    unawaited(_savePreference(_timerPreference, seconds));
+                  }),
+                ),
+              for (final option in const [
+                ('闪光关', FlashMode.off, Icons.flash_off),
+                ('闪光自动', FlashMode.auto, Icons.flash_auto),
+                ('闪光开', FlashMode.always, Icons.flash_on),
+              ])
+                _CameraOption(
+                  label: option.$1,
+                  icon: option.$3,
+                  selected: _flashMode == option.$2,
+                  onTap: () => _setFlashMode(option.$2),
+                ),
+              _CameraOption(
+                label: _guideName,
+                icon: Icons.grid_3x3,
+                selected: _showGuide,
+                onTap: () => setState(() {
+                  _showGuide = true;
+                  _guide =
+                      CompositionGuide.values[(_guide.index + 1) %
+                          CompositionGuide.values.length];
+                  unawaited(_savePreference(_guidePreference, true));
+                }),
+              ),
+              _CameraOption(
+                label: '曝光归零',
+                icon: Icons.exposure_zero,
+                selected: _exposure.abs() < .05,
+                onTap: () => _setExposure(0),
+              ),
+              _CameraOption(
+                label: '镜像自拍',
+                icon: Icons.flip,
+                selected: _mirrorSelfies,
+                onTap: () => setState(() {
+                  _mirrorSelfies = !_mirrorSelfies;
+                  unawaited(_savePreference(_mirrorPreference, _mirrorSelfies));
+                }),
+              ),
+              for (final option in const [
+                ('标准', CameraStyle.standard),
+                ('鲜明', CameraStyle.vivid),
+                ('暖色', CameraStyle.warm),
+                ('冷色', CameraStyle.cool),
+                ('黑白', CameraStyle.mono),
+              ])
+                _CameraOption(
+                  label: option.$1,
+                  icon: Icons.filter_vintage_outlined,
+                  selected: _style == option.$2,
+                  onTap: () => setState(() {
+                    _style = option.$2;
+                    unawaited(_savePreference(_stylePreference, _style.index));
+                  }),
+                ),
+              _CameraOption(
+                label: '自动存相册',
+                icon: Icons.save_alt,
+                selected: _autoSave,
+                onTap: () => setState(() {
+                  _autoSave = !_autoSave;
+                  unawaited(_savePreference(_autoSavePreference, _autoSave));
+                }),
+              ),
+            ],
           ),
-        for (final seconds in const [0, 3, 5, 10])
-          _CameraOption(
-            label: seconds == 0 ? '定时关闭' : '$seconds 秒',
-            icon: seconds == 0
-                ? Icons.timer_off_outlined
-                : Icons.timer_outlined,
-            selected: _countdownSeconds == seconds,
-            onTap: () => setState(() {
-              _countdownSeconds = seconds;
-              unawaited(_savePreference(_timerPreference, seconds));
-            }),
-          ),
-        for (final option in const [
-          ('闪光关', FlashMode.off, Icons.flash_off),
-          ('闪光自动', FlashMode.auto, Icons.flash_auto),
-          ('闪光开', FlashMode.always, Icons.flash_on),
-        ])
-          _CameraOption(
-            label: option.$1,
-            icon: option.$3,
-            selected: _flashMode == option.$2,
-            onTap: () => _setFlashMode(option.$2),
-          ),
-            _CameraOption(
-          label: _guideName,
-          icon: Icons.grid_3x3,
-          selected: _showGuide,
-          onTap: () => setState(() {
-            _showGuide = true;
-            _guide = CompositionGuide
-                .values[(_guide.index + 1) % CompositionGuide.values.length];
-            unawaited(_savePreference(_guidePreference, true));
-          }),
-        ),
-        _CameraOption(
-          label: '曝光归零',
-          icon: Icons.exposure_zero,
-          selected: _exposure.abs() < .05,
-          onTap: () => _setExposure(0),
-        ),
-        _CameraOption(
-          label: '镜像自拍',
-          icon: Icons.flip,
-          selected: _mirrorSelfies,
-          onTap: () => setState(() {
-            _mirrorSelfies = !_mirrorSelfies;
-            unawaited(_savePreference(_mirrorPreference, _mirrorSelfies));
-          }),
-        ),
-        for (final option in const [
-          ('标准', CameraStyle.standard),
-          ('鲜明', CameraStyle.vivid),
-          ('暖色', CameraStyle.warm),
-          ('冷色', CameraStyle.cool),
-          ('黑白', CameraStyle.mono),
-        ])
-          _CameraOption(
-            label: option.$1,
-            icon: Icons.filter_vintage_outlined,
-            selected: _style == option.$2,
-            onTap: () => setState(() {
-              _style = option.$2;
-              unawaited(_savePreference(_stylePreference, _style.index));
-            }),
-          ),
-        _CameraOption(
-          label: '自动存相册',
-          icon: Icons.save_alt,
-          selected: _autoSave,
-          onTap: () => setState(() {
-            _autoSave = !_autoSave;
-            unawaited(_savePreference(_autoSavePreference, _autoSave));
-          }),
-            ),
-          ],
-        ),
-      ],
+        ],
+      ),
     ),
   );
 
@@ -881,6 +989,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     return LayoutBuilder(
       builder: (context, constraints) => GestureDetector(
         onTapDown: (details) => _focus(details, constraints),
+        onDoubleTap: _switchCamera,
         onLongPressStart: (details) => _lockFocus(details, constraints),
         onScaleStart: (_) => _baseZoom = _zoom,
         onScaleUpdate: _handleScaleUpdate,
@@ -949,8 +1058,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
     );
   }
 
-  Widget _buildControls() => Padding(
-    padding: const EdgeInsets.fromLTRB(24, 10, 24, 16),
+  Widget _buildControls({bool compact = false}) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      compact ? 10 : 24,
+      compact ? 4 : 10,
+      compact ? 10 : 24,
+      compact ? 8 : 16,
+    ),
     child: Column(
       children: [
         Row(
@@ -990,21 +1104,57 @@ class _CameraPageState extends ConsumerState<CameraPage>
             ),
             GestureDetector(
               onTap: _handleShutterTap,
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                width: 78,
-                height: 78,
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 3),
-                ),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: _capturing ? Colors.white38 : Colors.white,
-                    shape: BoxShape.circle,
+              onLongPressStart: (_) => _startContinuousBurst(),
+              onLongPressEnd: (_) => _stopContinuousBurst(),
+              child: Stack(
+                clipBehavior: Clip.none,
+                alignment: Alignment.center,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    width: _continuousBurst ? 70 : 78,
+                    height: _continuousBurst ? 70 : 78,
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 3),
+                    ),
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: _continuousBurst
+                            ? const Color(0xFFFFD60A)
+                            : _capturing
+                            ? Colors.white38
+                            : Colors.white,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                   ),
-                ),
+                  if (_continuousBurst || _burstTaken > 1)
+                    Positioned(
+                      top: -22,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFFD60A),
+                          borderRadius: BorderRadius.circular(99),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          child: Text(
+                            '$_burstTaken',
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             _RoundAction(
