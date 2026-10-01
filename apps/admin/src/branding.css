@@ -1,0 +1,74 @@
+:root {
+  --brand-deep: #1f514b;
+  --brand: #286c61;
+  --brand-mid: #78afa4;
+  --brand-soft: #b8c9bd;
+  --brand-pale: #dce9e2;
+}
+
+.brand-mark,
+.logo > img {
+  display: block;
+  width: 42px;
+  height: 42px;
+  flex: none;
+  object-fit: cover;
+  border: 0;
+  border-radius: 13px;
+  background: var(--brand-soft);
+}
+
+.primary {
+  background: var(--brand) !important;
+  box-shadow: 0 5px 14px #286c612b;
+}
+
+nav a.active {
+  color: var(--brand-deep);
+  background: var(--brand-pale);
+}
+
+.avatar,
+.stat-icon {
+  color: var(--brand-deep);
+  background: var(--brand-pale);
+}
+
+.welcome {
+  background: linear-gradient(120deg, #fff 40%, #e7efe9);
+}
+
+.tag,
+.spark,
+.actions button {
+  color: var(--brand);
+}
+
+.tag {
+  background: var(--brand-pale);
+}
+
+.form-grid input:focus,
+.form-grid textarea:focus,
+.login-form input:focus {
+  border-color: var(--brand-mid);
+  box-shadow: 0 0 0 3px #78afa426;
+}
+
+.login-art {
+  background: linear-gradient(145deg, #173f3a, #397d73);
+}
+
+.login-art p,
+.eyebrow {
+  color: #dce9e2;
+}
+
+.orb {
+  background: radial-gradient(
+    circle at 30% 30%,
+    #b8c9bd,
+    #579386 50%,
+    transparent 70%
+  );
+}

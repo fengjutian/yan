@@ -47,11 +47,14 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Center(
-                      child: Image.asset(
-                        'assets/branding/yan-logo.png',
-                        width: 72,
-                        height: 72,
-                        semanticLabel: '颜 Studio Logo',
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Image.asset(
+                          'assets/branding/yan-logo.png',
+                          width: 72,
+                          height: 72,
+                          semanticLabel: '颜 Studio Logo',
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),

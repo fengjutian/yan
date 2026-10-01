@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 abstract final class AppColors {
   static const ink = Color(0xFF292725);
   static const muted = Color(0xFF77716B);
-  static const rose = Color(0xFF7B5152);
-  static const blush = Color(0xFFF1E8E1);
-  static const lavender = Color(0xFFE5E9E1);
-  static const cream = Color(0xFFF8F6F1);
-  static const line = Color(0xFFE5DED6);
+  static const rose = Color(0xFF286C61);
+  static const blush = Color(0xFFDCE9E2);
+  static const lavender = Color(0xFFC8D8CE);
+  static const cream = Color(0xFFEEF2EE);
+  static const line = Color(0xFFCFD9D2);
+  static const brandBackground = Color(0xFFB8C9BD);
 }
 
 ThemeData buildAppTheme() {
@@ -15,8 +16,8 @@ ThemeData buildAppTheme() {
     primary: AppColors.rose,
     onPrimary: Colors.white,
     primaryContainer: AppColors.blush,
-    onPrimaryContainer: Color(0xFF4E3031),
-    secondary: Color(0xFF687267),
+    onPrimaryContainer: Color(0xFF183D37),
+    secondary: Color(0xFF4F7168),
     secondaryContainer: AppColors.lavender,
     onSecondaryContainer: Color(0xFF343B34),
     surface: Colors.white,

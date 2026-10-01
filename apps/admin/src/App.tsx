@@ -59,7 +59,11 @@ function Login() {
   return (
     <main className="login">
       <section className="login-art">
-        <div className="brand-mark">AI</div>
+        <img
+          className="brand-mark"
+          src="/branding/yan-logo.png"
+          alt="颜 Studio"
+        />
         <div>
           <span className="eyebrow">AI IMAGE STUDIO</span>
           <h1>
@@ -110,7 +114,7 @@ function Shell({ user }: { user: CurrentUser }) {
     <div className="shell">
       <aside>
         <div className="logo">
-          <b>AI</b>
+          <img src="/branding/yan-logo.png" alt="颜 Studio" />
           <span>
             Image Studio<small>运营管理后台</small>
           </span>
