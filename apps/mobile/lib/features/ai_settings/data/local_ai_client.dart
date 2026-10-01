@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:ai_image_studio/features/ai_settings/data/ai_settings_repository.dart';
 import 'package:dio/dio.dart';
 
@@ -47,6 +50,61 @@ class LocalAIClient {
 
   Future<String> test(AISettings settings) =>
       _callProvider(settings, '一只在窗边晒太阳的猫', '请简短优化用户的图片生成提示词，只返回优化结果。');
+
+  Future<Uint8List> styleTransfer({
+    required Uint8List sourceBytes,
+    required String prompt,
+    required String aspectRatio,
+  }) async {
+    final settings = await _settings.load();
+    if (!settings.enabled || settings.apiKey.trim().isEmpty) {
+      throw StateError('请先在 AI 设置中启用 MiniMax 并填写 API Key');
+    }
+    if (settings.provider != AIProvider.miniMax) {
+      throw StateError('DeepSeek 暂不支持图片生成，请切换到 MiniMax');
+    }
+    final baseUrl = settings.baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
+    final versionPath = baseUrl.endsWith('/v1') ? '' : '/v1';
+    final response = await _direct.post<Map<String, dynamic>>(
+      '$baseUrl$versionPath/image_generation',
+      options: Options(
+        headers: {
+          'Authorization': 'Bearer ${settings.apiKey.trim()}',
+          'Content-Type': 'application/json',
+        },
+        sendTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(minutes: 3),
+      ),
+      data: {
+        'model': 'image-01',
+        'prompt': prompt,
+        'response_format': 'base64',
+        'n': 1,
+        'prompt_optimizer': true,
+        'aspect_ratio': aspectRatio,
+        'aigc_watermark': false,
+        'subject_reference': [
+          {
+            'type': 'character',
+            'image_file':
+                'data:image/jpeg;base64,${base64Encode(sourceBytes)}',
+          },
+        ],
+      },
+    );
+    final baseResponse = response.data?['base_resp'];
+    if (baseResponse is Map && baseResponse['status_code'] != 0) {
+      throw StateError(baseResponse['status_msg']?.toString() ?? '图片生成失败');
+    }
+    final data = response.data?['data'];
+    final images = data is Map ? data['image_base64'] : null;
+    if (images is! List || images.isEmpty || images.first is! String) {
+      throw const FormatException('MiniMax 未返回生成图片');
+    }
+    var encoded = images.first as String;
+    if (encoded.startsWith('data:')) encoded = encoded.split(',').last;
+    return base64Decode(encoded);
+  }
 
   Future<String> _callProvider(
     AISettings settings,

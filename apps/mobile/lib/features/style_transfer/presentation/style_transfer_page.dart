@@ -20,6 +20,7 @@ class StyleTransferPage extends ConsumerStatefulWidget {
 
 class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
   double _sliderPosition = 0.5; // 前后对比滑动条
+  bool _retryingStyles = false;
 
   @override
   Widget build(BuildContext context) {
@@ -33,14 +34,10 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         _showErrorMessage(message);
       },
     );
-    ref.listen(stylesProvider, (previous, next) {
+    ref.listen(stylesProvider, (_, next) {
       next.whenOrNull(
         error: (error, _) {
-          final previousError = previous?.whenOrNull(
-            error: (previousError, _) => previousError,
-          );
-          if (previousError == error) return;
-          _showErrorMessage('加载风格失败，请稍后重试');
+          _showErrorMessage('加载风格失败：$error');
         },
       );
     });
@@ -67,6 +64,7 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                 children: [
                   _BeforeAfterSlider(
                     sourceBytes: widget.sourceBytes,
+                    resultBytes: state.resultBytes,
                     position: _sliderPosition,
                     onChanged: (v) => setState(() => _sliderPosition = v),
                   ),
@@ -76,6 +74,7 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                   Text('选择风格', style: Theme.of(context).textTheme.titleSmall),
                   const SizedBox(height: 8),
                   stylesAsync.when(
+                    skipLoadingOnRefresh: false,
                     data: (styles) => _StyleChips(
                       styles: styles,
                       selected: state.styleId,
@@ -88,11 +87,16 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                       child: Center(child: CircularProgressIndicator()),
                     ),
                     error: (_, _) => Center(
-                      child: TextButton.icon(
-                        onPressed: () => ref.invalidate(stylesProvider),
-                        icon: const Icon(Icons.refresh),
-                        label: const Text('重新加载风格'),
-                      ),
+                      child: _retryingStyles
+                          ? const Padding(
+                              padding: EdgeInsets.all(20),
+                              child: CircularProgressIndicator(),
+                            )
+                          : TextButton.icon(
+                              onPressed: _retryStyles,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('重新加载风格'),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -183,6 +187,19 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
     );
   }
 
+  Future<void> _retryStyles() async {
+    if (_retryingStyles) return;
+    setState(() => _retryingStyles = true);
+    try {
+      ref.invalidate(stylesProvider);
+      await ref.read(stylesProvider.future);
+    } catch (_) {
+      // stylesProvider 的监听器统一负责展示具体错误信息。
+    } finally {
+      if (mounted) setState(() => _retryingStyles = false);
+    }
+  }
+
   void _showErrorMessage(String message) {
     final needsBackend = message.contains('后端服务');
     final messenger = ScaffoldMessenger.of(context);
@@ -192,6 +209,11 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         SnackBar(
           content: Text(message),
           behavior: SnackBarBehavior.floating,
+          width: 360,
+          backgroundColor: const Color(0xEE242424),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           action: needsBackend
               ? SnackBarAction(
                   label: '立即开启',
@@ -221,6 +243,19 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
           aspectRatio: '1:1',
         );
     if (!context.mounted) return;
+    if (taskId == null &&
+        ref.read(styleTransferControllerProvider).resultBytes != null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('风格迁移完成'),
+            behavior: SnackBarBehavior.floating,
+            width: 220,
+          ),
+        );
+      return;
+    }
     if (taskId != null && taskId.isNotEmpty) {
       ScaffoldMessenger.of(
         context,
@@ -264,10 +299,12 @@ class _StrengthLegend extends StatelessWidget {
 class _BeforeAfterSlider extends StatelessWidget {
   const _BeforeAfterSlider({
     required this.sourceBytes,
+    required this.resultBytes,
     required this.position,
     required this.onChanged,
   });
   final Uint8List? sourceBytes;
+  final Uint8List? resultBytes;
   final double position;
   final ValueChanged<double> onChanged;
 
@@ -305,19 +342,21 @@ class _BeforeAfterSlider extends StatelessWidget {
                         end: Alignment.bottomRight,
                       ),
                     ),
-                    child: const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(16),
-                        child: Text(
-                          '成片预览 · 提交后可见',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
+                    child: resultBytes == null
+                        ? const Center(
+                            child: Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Text(
+                                '成片预览 · 提交后可见',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          )
+                        : Image.memory(resultBytes!, fit: BoxFit.cover),
                   ),
                 ),
               ),

@@ -1,5 +1,4 @@
 import 'package:ai_image_studio/core/network/api_client.dart';
-import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/features/styles/data/style_model.dart';
 import 'package:dio/dio.dart';
 
@@ -45,8 +44,10 @@ class StyleRepository {
           .whereType<Map<String, dynamic>>()
           .map(StylePreset.fromJson)
           .toList();
-    } on DioException catch (error) {
-      throw ApiException.fromDio(error);
+    } on DioException {
+      // 风格选择不应因后端暂时不可用而完全阻塞；使用内置预设兜底。
+      // 提交生成任务时仍会走后端并向用户展示真实连接错误。
+      return localPresets;
     }
   }
 }

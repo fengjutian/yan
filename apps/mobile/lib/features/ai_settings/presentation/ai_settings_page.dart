@@ -98,12 +98,12 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('使用后端 AI 服务'),
-                  subtitle: const Text('开启后支持风格迁移、图片生成等云端能力'),
-                  value: !state.settings.preferLocal,
+                  title: const Text('本地直连大模型'),
+                  subtitle: const Text('使用本机保存的 API Key 直接请求服务商'),
+                  value: state.settings.preferLocal,
                   onChanged: (value) => ref
                       .read(aiSettingsControllerProvider.notifier)
-                      .setPreferLocal(!value),
+                      .setPreferLocal(value),
                 ),
                 TextField(
                   controller: _apiKey,

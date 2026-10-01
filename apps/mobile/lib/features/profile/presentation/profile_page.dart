@@ -39,18 +39,18 @@ class ProfilePage extends ConsumerWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.offline_bolt_outlined),
-              title: const Text('使用后端 AI 服务'),
+              title: const Text('本地直连大模型'),
               subtitle: Text(
                 aiSettings.settings.preferLocal
-                    ? '已关闭 · 图片留在设备'
-                    : '已开启 · 支持风格迁移与 AI 生成',
+                    ? '已开启 · 使用本机 API Key 直连服务商'
+                    : '已关闭 · 上传与 AI 任务使用后端服务',
               ),
-              value: !aiSettings.settings.preferLocal,
+              value: aiSettings.settings.preferLocal,
               onChanged: aiSettings.loading
                   ? null
                   : (value) => ref
                         .read(aiSettingsControllerProvider.notifier)
-                        .setPreferLocal(!value),
+                        .setPreferLocal(value),
             ),
             _ProfileTile(
               icon: Icons.edit_note,
