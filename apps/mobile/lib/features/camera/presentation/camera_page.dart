@@ -649,6 +649,27 @@ class _CameraPageState extends ConsumerState<CameraPage>
     await _initializeCamera(_activeIndex);
   }
 
+  Future<void> _selectPhysicalLens(NativeCameraLens lens) async {
+    if (_initializing) return;
+    final index = _cameras.indexWhere(
+      (camera) => camera.name == lens.id || camera.name.contains(lens.id),
+    );
+    if (index < 0 || index == _activeIndex) return;
+    _activeIndex = index;
+    await _initializeCamera(index);
+  }
+
+  List<NativeCameraLens> get _selectableBackLenses => _capabilities.lenses
+      .where(
+        (lens) =>
+            lens.isBack &&
+            _cameras.any(
+              (camera) =>
+                  camera.name == lens.id || camera.name.contains(lens.id),
+            ),
+      )
+      .toList(growable: false);
+
   Future<void> _toggleFlash() async {
     final controller = _controller;
     if (controller == null) return;
@@ -1733,6 +1754,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
           ],
         ),
         const SizedBox(height: 8),
+        if (_selectableBackLenses.length > 1) ...[
+          _PhysicalLensSelector(
+            lenses: _selectableBackLenses,
+            activeId: _controller?.description.name,
+            onSelected: _selectPhysicalLens,
+          ),
+          const SizedBox(height: 8),
+        ],
         _ZoomSelector(
           zoom: _zoom,
           minZoom: _minZoom,
@@ -2850,6 +2879,55 @@ class _ZoomSelector extends StatelessWidget {
       ],
     );
   }
+}
+
+class _PhysicalLensSelector extends StatelessWidget {
+  const _PhysicalLensSelector({
+    required this.lenses,
+    required this.activeId,
+    required this.onSelected,
+  });
+
+  final List<NativeCameraLens> lenses;
+  final String? activeId;
+  final ValueChanged<NativeCameraLens> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final sorted = [...lenses]
+      ..sort((a, b) => a.nominalZoom.compareTo(b.nominalZoom));
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final lens in sorted)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3),
+            child: ChoiceChip(
+              label: Text('${_zoomLabel(lens.nominalZoom)}×'),
+              selected:
+                  activeId == lens.id || activeId?.contains(lens.id) == true,
+              onSelected: (_) => onSelected(lens),
+              selectedColor: const Color(0xFFFFD60A),
+              backgroundColor: const Color(0xFF2C2C2E),
+              labelStyle: TextStyle(
+                color:
+                    activeId == lens.id || activeId?.contains(lens.id) == true
+                    ? Colors.black
+                    : Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+              side: BorderSide.none,
+              visualDensity: VisualDensity.compact,
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _zoomLabel(double zoom) => zoom >= 1 && zoom.roundToDouble() == zoom
+      ? zoom.toStringAsFixed(0)
+      : zoom.toStringAsFixed(1);
 }
 
 class _CameraThumbnail extends StatelessWidget {

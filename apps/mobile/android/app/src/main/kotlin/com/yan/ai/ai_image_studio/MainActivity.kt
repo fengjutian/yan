@@ -69,6 +69,7 @@ class MainActivity : FlutterActivity() {
         val manager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val lensTypes = linkedSetOf<String>()
         val extensionModes = linkedSetOf<String>()
+        val lenses = mutableListOf<Map<String, Any>>()
         var hasFlash = false
         var supportsMultiCamera = false
 
@@ -84,6 +85,52 @@ class MainActivity : FlutterActivity() {
             val capabilities = characteristics.get(
                 CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES,
             ) ?: intArrayOf()
+            val facing = when (characteristics.get(CameraCharacteristics.LENS_FACING)) {
+                CameraCharacteristics.LENS_FACING_FRONT -> "front"
+                CameraCharacteristics.LENS_FACING_BACK -> "back"
+                CameraCharacteristics.LENS_FACING_EXTERNAL -> "external"
+                else -> "unknown"
+            }
+            val focalLengths = characteristics.get(
+                CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS,
+            )?.map { it.toDouble() } ?: emptyList()
+            val sensorWidth = characteristics.get(
+                CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE,
+            )?.width?.toDouble() ?: 0.0
+            val equivalentFocalLength = if (sensorWidth > 0 && focalLengths.isNotEmpty()) {
+                focalLengths.min() / sensorWidth * 36.0
+            } else 24.0
+            val isoRange = characteristics.get(
+                CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE,
+            )
+            val exposureRange = characteristics.get(
+                CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE,
+            )
+            lenses += mapOf(
+                "id" to cameraId,
+                "facing" to facing,
+                "type" to when {
+                    facing == "front" -> "front"
+                    equivalentFocalLength < 20 -> "ultra-wide"
+                    equivalentFocalLength > 45 -> "telephoto"
+                    else -> "wide"
+                },
+                "focalLengths" to focalLengths,
+                "minIso" to (isoRange?.lower?.toDouble() ?: 0.0),
+                "maxIso" to (isoRange?.upper?.toDouble() ?: 0.0),
+                "minExposureSeconds" to
+                    ((exposureRange?.lower?.toDouble() ?: 0.0) / 1_000_000_000.0),
+                "maxExposureSeconds" to
+                    ((exposureRange?.upper?.toDouble() ?: 0.0) / 1_000_000_000.0),
+                "minimumFocusDistance" to
+                    (characteristics.get(
+                        CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE,
+                    )?.toDouble() ?: 0.0),
+                "nominalZoom" to (equivalentFocalLength / 24.0).coerceIn(0.5, 10.0),
+                "supportsRaw" to capabilities.contains(
+                    CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW,
+                ),
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                 capabilities.contains(
                     CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA,
@@ -113,6 +160,7 @@ class MainActivity : FlutterActivity() {
             "extensionModes" to extensionModes.toList(),
             "hasFlash" to hasFlash,
             "supportsMultiCamera" to supportsMultiCamera,
+            "lenses" to lenses,
         )
     }
 }
