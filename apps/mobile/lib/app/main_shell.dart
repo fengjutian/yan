@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 class MainShell extends StatelessWidget {
-  const MainShell({required this.navigationShell, super.key});
+  const MainShell({required this.currentIndex, required this.child, super.key});
 
-  final StatefulNavigationShell navigationShell;
+  final int currentIndex;
+  final Widget child;
+
+  static const _locations = ['/home', '/camera', '/studio', '/profile'];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: navigationShell,
+      body: child,
       bottomNavigationBar: DecoratedBox(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -18,11 +21,10 @@ class MainShell extends StatelessWidget {
         child: SafeArea(
           top: false,
           child: NavigationBar(
-            selectedIndex: navigationShell.currentIndex,
-            onDestinationSelected: (index) => navigationShell.goBranch(
-              index,
-              initialLocation: index == navigationShell.currentIndex,
-            ),
+            selectedIndex: currentIndex,
+            onDestinationSelected: (index) {
+              if (index != currentIndex) context.go(_locations[index]);
+            },
             destinations: const [
               NavigationDestination(
                 icon: Icon(Icons.explore_outlined),

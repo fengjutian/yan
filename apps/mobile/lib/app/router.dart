@@ -48,10 +48,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ),
     routes: [
-      GoRoute(
-        path: '/splash',
-        builder: (context, state) => const SplashPage(),
-      ),
+      GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
       GoRoute(
         path: '/login',
         builder: (context, state) => const AuthPage(mode: AuthMode.login),
@@ -60,44 +57,41 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/register',
         builder: (context, state) => const AuthPage(mode: AuthMode.register),
       ),
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) => MainShell(
-          navigationShell: navigationShell,
-        ),
-        branches: [
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/home', builder: (_, __) => const HomePage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(
+      GoRoute(
+        path: '/home',
+        builder: (_, __) => const MainShell(currentIndex: 0, child: HomePage()),
+      ),
+      GoRoute(
         path: '/camera',
         builder: (context, state) {
           final extra = state.extra;
-          if (extra is Map<String, dynamic>) {
-            return CameraPage(
-              templateParams: TemplateParams(
-                templateId: (extra['templateId'] as String?) ?? '',
-                prompt: (extra['prompt'] as String?) ?? '',
-                composition: (extra['composition'] as String?) ?? 'thirds',
-                angle: (extra['angle'] as String?) ?? 'eyeLevel',
-              ),
-            );
-          }
-          return const CameraPage();
+          final page = extra is Map<String, dynamic>
+              ? CameraPage(
+                  templateParams: TemplateParams(
+                    templateId: (extra['templateId'] as String?) ?? '',
+                    prompt: (extra['prompt'] as String?) ?? '',
+                    composition: (extra['composition'] as String?) ?? 'thirds',
+                    angle: (extra['angle'] as String?) ?? 'eyeLevel',
+                  ),
+                )
+              : const CameraPage();
+          return MainShell(currentIndex: 1, child: page);
         },
       ),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/studio', builder: (_, __) => const StudioPage()),
-          ]),
-          StatefulShellBranch(routes: [
-            GoRoute(path: '/profile', builder: (_, __) => const ProfilePage()),
-          ]),
-        ],
+      GoRoute(
+        path: '/studio',
+        builder: (_, __) =>
+            const MainShell(currentIndex: 2, child: StudioPage()),
       ),
       GoRoute(
-          path: '/assets/upload',
-          builder: (context, state) => const AssetUploadPage()),
+        path: '/profile',
+        builder: (_, __) =>
+            const MainShell(currentIndex: 3, child: ProfilePage()),
+      ),
+      GoRoute(
+        path: '/assets/upload',
+        builder: (context, state) => const AssetUploadPage(),
+      ),
       GoRoute(
         path: '/create/text-to-image',
         builder: (_, __) => const GeneratePage(),
@@ -118,33 +112,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) =>
             ShareWorkshopPage(taskId: state.uri.queryParameters['taskId']),
       ),
-      GoRoute(
-        path: '/me/favorites',
-        builder: (_, __) => const FavoritesPage(),
-      ),
-      GoRoute(
-        path: '/me/drafts',
-        builder: (_, __) => const DraftsPage(),
-      ),
-      GoRoute(
-        path: '/settings/ai',
-        builder: (_, __) => const AISettingsPage(),
-      ),
+      GoRoute(path: '/me/favorites', builder: (_, __) => const FavoritesPage()),
+      GoRoute(path: '/me/drafts', builder: (_, __) => const DraftsPage()),
+      GoRoute(path: '/settings/ai', builder: (_, __) => const AISettingsPage()),
       GoRoute(
         path: '/templates',
         builder: (_, __) => const TemplatesHomePage(),
       ),
       GoRoute(
         path: '/templates/:templateId',
-        builder: (context, state) => TemplateDetailPage(
-            templateId: state.pathParameters['templateId']!),
+        builder: (context, state) =>
+            TemplateDetailPage(templateId: state.pathParameters['templateId']!),
       ),
       GoRoute(
         path: '/editor',
         builder: (context, state) {
           final bytes = state.extra;
-          return EditorPage(
-              sourceBytes: bytes is Uint8List ? bytes : null);
+          return EditorPage(sourceBytes: bytes is Uint8List ? bytes : null);
         },
       ),
       GoRoute(
@@ -152,7 +136,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           final bytes = state.extra;
           return StyleTransferPage(
-              sourceBytes: bytes is Uint8List ? bytes : null);
+            sourceBytes: bytes is Uint8List ? bytes : null,
+          );
         },
       ),
     ],
