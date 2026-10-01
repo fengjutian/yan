@@ -9,12 +9,16 @@ class LiveCameraAnalysis {
     this.suggestion = '将人物放在构图线交叉点附近',
     this.scene = '通用场景',
     this.sceneConfidence = 0,
+    this.smileDetected = false,
+    this.gestureDetected = false,
   });
 
   final Map<String, Offset> landmarks;
   final String suggestion;
   final String scene;
   final double sceneConfidence;
+  final bool smileDetected;
+  final bool gestureDetected;
 }
 
 class LiveCameraAnalyzer {

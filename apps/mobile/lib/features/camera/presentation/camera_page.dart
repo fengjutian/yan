@@ -27,6 +27,8 @@ enum CompositionGuide { thirds, center, symmetry }
 
 enum CameraStyle { standard, vivid, warm, cool, mono }
 
+enum SmartShutterMode { off, smile, gesture }
+
 class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({super.key, this.templateParams});
 
@@ -78,7 +80,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _minExposure = 0;
   double _maxExposure = 0;
   double _levelAngle = 0;
+  double _motionLevel = 0;
+  (double, double, double)? _lastAcceleration;
   double _brightness = 128;
+  List<double> _histogram = List<double>.filled(32, 0);
+  double _highlightClipping = 0;
+  double _shadowClipping = 0;
+  bool _showHistogram = false;
+  double _guidanceOpacity = 1;
+  DateTime? _goodPoseSince;
   double _aspectRatio = 3 / 4;
   int _burstCount = 1;
   int _activeIndex = 0;
@@ -97,6 +107,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _autoSave = false;
   bool _saveOriginalCopy = false;
   CameraStyle _style = CameraStyle.standard;
+  SmartShutterMode _smartShutterMode = SmartShutterMode.off;
+  int _smartSignalFrames = 0;
+  DateTime _lastSmartCapture = DateTime.fromMillisecondsSinceEpoch(0);
   CameraCapabilities _capabilities = const CameraCapabilities.fallback();
   bool _permissionPermanentlyDenied = false;
   String? _processingStatus;
@@ -110,6 +123,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _autoSavePreference = 'camera.auto_save';
   static const _saveOriginalPreference = 'camera.save_original';
   static const _stylePreference = 'camera.photo_style';
+  static const _histogramPreference = 'camera.show_histogram';
+  static const _smartShutterPreference = 'camera.smart_shutter';
 
   @override
   void initState() {
@@ -120,7 +135,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
           samplingPeriod: const Duration(milliseconds: 120),
         ).listen((event) {
           final angle = math.atan2(event.x, event.y) * 180 / math.pi;
-          if (mounted) setState(() => _levelAngle = angle.clamp(-45, 45));
+          final previous = _lastAcceleration;
+          _lastAcceleration = (event.x, event.y, event.z);
+          final movement = previous == null
+              ? 0.0
+              : math.sqrt(
+                  math.pow(event.x - previous.$1, 2) +
+                      math.pow(event.y - previous.$2, 2) +
+                      math.pow(event.z - previous.$3, 2),
+                );
+          if (mounted) {
+            setState(() {
+              _levelAngle = angle.clamp(-45, 45);
+              _motionLevel = _motionLevel * .72 + movement * .28;
+            });
+          }
         }, onError: (_) {});
     _applyTemplateParams();
     unawaited(_activateHardwareControls());
@@ -175,6 +204,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
       final styleIndex = preferences.getInt(_stylePreference) ?? 0;
       _style = CameraStyle
           .values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
+      _showHistogram = preferences.getBool(_histogramPreference) ?? false;
+      final smartIndex = preferences.getInt(_smartShutterPreference) ?? 0;
+      _smartShutterMode = SmartShutterMode
+          .values[smartIndex.clamp(0, SmartShutterMode.values.length - 1)];
     });
   }
 
@@ -333,11 +366,28 @@ class _CameraPageState extends ConsumerState<CameraPage>
         final bytes = image.planes.first.bytes;
         var total = 0;
         var count = 0;
+        var highlights = 0;
+        var shadows = 0;
+        final bins = List<int>.filled(32, 0);
         for (var index = 0; index < bytes.length; index += 80) {
-          total += bytes[index];
+          final luminance = bytes[index];
+          total += luminance;
+          bins[(luminance * bins.length ~/ 256).clamp(0, bins.length - 1)]++;
+          if (luminance >= 245) highlights++;
+          if (luminance <= 10) shadows++;
           count++;
         }
-        if (mounted && count > 0) setState(() => _brightness = total / count);
+        if (mounted && count > 0) {
+          final peak = bins.reduce((a, b) => a > b ? a : b);
+          setState(() {
+            _brightness = total / count;
+            _highlightClipping = highlights / count;
+            _shadowClipping = shadows / count;
+            _histogram = peak == 0
+                ? List<double>.filled(bins.length, 0)
+                : bins.map((value) => value / peak).toList(growable: false);
+          });
+        }
         if (_showRealtimeGuidance) {
           unawaited(
             _analyzeFrame(
@@ -364,10 +414,38 @@ class _CameraPageState extends ConsumerState<CameraPage>
       deviceOrientation,
     );
     if (!mounted || result == null || !_showRealtimeGuidance) return;
+    final goodPose = result.suggestion.startsWith('姿态很好');
+    final now = DateTime.now();
+    if (goodPose) {
+      _goodPoseSince ??= now;
+    } else {
+      _goodPoseSince = null;
+    }
     setState(() {
       _liveAnalysis = result;
       _compositionSuggestion = result.suggestion;
+      _guidanceOpacity =
+          goodPose && now.difference(_goodPoseSince!).inMilliseconds > 1800
+          ? 0
+          : 1;
     });
+    _handleSmartShutter(result);
+  }
+
+  void _handleSmartShutter(LiveCameraAnalysis analysis) {
+    final detected = switch (_smartShutterMode) {
+      SmartShutterMode.off => false,
+      SmartShutterMode.smile => analysis.smileDetected,
+      SmartShutterMode.gesture => analysis.gestureDetected,
+    };
+    _smartSignalFrames = detected ? _smartSignalFrames + 1 : 0;
+    if (_smartSignalFrames < 3 || _capturing) return;
+    final now = DateTime.now();
+    if (now.difference(_lastSmartCapture) < const Duration(seconds: 6)) return;
+    _smartSignalFrames = 0;
+    _lastSmartCapture = now;
+    unawaited(HapticFeedback.mediumImpact());
+    unawaited(_capture());
   }
 
   @override
@@ -785,75 +863,120 @@ class _CameraPageState extends ConsumerState<CameraPage>
         MediaQuery.orientationOf(context) == Orientation.landscape;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: landscape ? _buildLandscapeLayout() : _buildPortraitLayout(),
-      ),
+      body: landscape ? _buildLandscapeLayout() : _buildPortraitLayout(),
     );
   }
 
-  Widget _buildPortraitLayout() => Column(
+  Widget _buildPortraitLayout() => Stack(
+    fit: StackFit.expand,
     children: [
-      _buildTopBar(),
-      AnimatedSwitcher(
-        duration: const Duration(milliseconds: 180),
-        child: _showCameraOptions
-            ? _buildCameraOptions(maxHeight: 230)
-            : const SizedBox.shrink(),
+      _buildCameraViewport(),
+      Align(
+        alignment: Alignment.topCenter,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.black87, Colors.transparent],
+            ),
+          ),
+          child: SafeArea(bottom: false, child: _buildTopBar()),
+        ),
       ),
       if (_templateId != null)
-        _TemplateChip(templateId: _templateId!, initialPrompt: _initialPrompt),
-      Expanded(child: _buildCameraViewport()),
-      _buildControls(),
-    ],
-  );
-
-  Widget _buildLandscapeLayout() => Column(
-    children: [
-      _buildTopBar(),
-      Expanded(
-        child: Row(
-          children: [
-            Expanded(
-              child: Stack(
-                children: [
-                  Positioned.fill(child: _buildCameraViewport()),
-                  if (_templateId != null)
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      child: _TemplateChip(
-                        templateId: _templateId!,
-                        initialPrompt: _initialPrompt,
-                      ),
-                    ),
-                  if (_showCameraOptions)
-                    Positioned(
-                      left: 10,
-                      top: 10,
-                      width: 360,
-                      child: _buildCameraOptions(maxHeight: 220),
-                    ),
-                ],
-              ),
+        Positioned(
+          top: MediaQuery.paddingOf(context).top + 62,
+          left: 0,
+          right: 0,
+          child: _TemplateChip(
+            templateId: _templateId!,
+            initialPrompt: _initialPrompt,
+          ),
+        ),
+      Positioned(
+        top: MediaQuery.paddingOf(context).top + 62,
+        left: 0,
+        right: 0,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 180),
+          child: _showCameraOptions
+              ? _buildCameraOptions(maxHeight: 230)
+              : const SizedBox.shrink(),
+        ),
+      ),
+      Align(
+        alignment: Alignment.bottomCenter,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.transparent, Colors.black87],
             ),
-            SizedBox(
-              width: 220,
-              child: SingleChildScrollView(
-                child: _buildControls(compact: true),
-              ),
-            ),
-          ],
+          ),
+          child: SafeArea(top: false, child: _buildControls()),
         ),
       ),
     ],
   );
 
-  Widget _buildCameraViewport() => Center(
-    child: AspectRatio(
-      aspectRatio: _aspectRatio,
-      child: ClipRect(child: _buildPreview()),
-    ),
+  Widget _buildLandscapeLayout() => Stack(
+    fit: StackFit.expand,
+    children: [
+      _buildCameraViewport(),
+      Align(
+        alignment: Alignment.topCenter,
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Colors.black87, Colors.transparent],
+            ),
+          ),
+          child: SafeArea(bottom: false, child: _buildTopBar()),
+        ),
+      ),
+      if (_templateId != null)
+        Positioned(
+          left: MediaQuery.paddingOf(context).left + 10,
+          top: MediaQuery.paddingOf(context).top + 62,
+          child: _TemplateChip(
+            templateId: _templateId!,
+            initialPrompt: _initialPrompt,
+          ),
+        ),
+      if (_showCameraOptions)
+        Positioned(
+          left: MediaQuery.paddingOf(context).left + 10,
+          top: MediaQuery.paddingOf(context).top + 62,
+          width: 360,
+          child: _buildCameraOptions(maxHeight: 220),
+        ),
+      Align(
+        alignment: Alignment.centerRight,
+        child: SafeArea(
+          left: false,
+          child: SizedBox(
+            width: 220,
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.black87],
+                ),
+              ),
+              child: SingleChildScrollView(
+                child: _buildControls(compact: true),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
   );
+
+  Widget _buildCameraViewport() => ClipRect(child: _buildPreview());
 
   Widget _buildTopBar() => Padding(
     padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
@@ -884,6 +1007,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           onPressed: () => setState(() {
             _showRealtimeGuidance = !_showRealtimeGuidance;
             if (!_showRealtimeGuidance) _liveAnalysis = null;
+            _guidanceOpacity = 1;
+            _goodPoseSince = null;
             unawaited(
               _savePreference(_guidancePreference, _showRealtimeGuidance),
             );
@@ -986,6 +1111,37 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 selected: _exposure.abs() < .05,
                 onTap: () => _setExposure(0),
               ),
+              _CameraOption(
+                label: '直方图',
+                icon: Icons.bar_chart,
+                selected: _showHistogram,
+                onTap: () => setState(() {
+                  _showHistogram = !_showHistogram;
+                  unawaited(
+                    _savePreference(_histogramPreference, _showHistogram),
+                  );
+                }),
+              ),
+              for (final option in const [
+                ('智能快门关', SmartShutterMode.off, Icons.touch_app_outlined),
+                ('笑脸快门', SmartShutterMode.smile, Icons.sentiment_satisfied_alt),
+                ('举手快门', SmartShutterMode.gesture, Icons.back_hand_outlined),
+              ])
+                _CameraOption(
+                  label: option.$1,
+                  icon: option.$3,
+                  selected: _smartShutterMode == option.$2,
+                  onTap: () => setState(() {
+                    _smartShutterMode = option.$2;
+                    _smartSignalFrames = 0;
+                    unawaited(
+                      _savePreference(
+                        _smartShutterPreference,
+                        _smartShutterMode.index,
+                      ),
+                    );
+                  }),
+                ),
               _CameraOption(
                 label: '镜像自拍',
                 icon: Icons.flip,
@@ -1096,8 +1252,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
             if (_showRealtimeGuidance &&
                 _liveAnalysis?.landmarks.isNotEmpty == true)
               IgnorePointer(
-                child: CustomPaint(
-                  painter: _PosePainter(_liveAnalysis!.landmarks),
+                child: AnimatedOpacity(
+                  opacity: _guidanceOpacity,
+                  duration: const Duration(milliseconds: 450),
+                  child: CustomPaint(
+                    painter: _PosePainter(_liveAnalysis!.landmarks),
+                  ),
                 ),
               ),
             if (_showGuide)
@@ -1157,14 +1317,43 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   confidence: _liveAnalysis!.sceneConfidence,
                 ),
               ),
+            if (_showHistogram)
+              Positioned(
+                right: 12,
+                top: 42,
+                child: _HistogramOverlay(
+                  values: _histogram,
+                  highlightClipping: _highlightClipping,
+                  shadowClipping: _shadowClipping,
+                ),
+              ),
+            if (_smartShutterMode != SmartShutterMode.off &&
+                ((_smartShutterMode == SmartShutterMode.smile &&
+                        _liveAnalysis?.smileDetected == true) ||
+                    (_smartShutterMode == SmartShutterMode.gesture &&
+                        _liveAnalysis?.gestureDetected == true)))
+              Positioned(
+                left: 14,
+                top: 72,
+                child: _SmartShutterChip(
+                  label: _smartShutterMode == SmartShutterMode.smile
+                      ? '保持微笑'
+                      : '已识别举手',
+                ),
+              ),
             Positioned(
               bottom: 18,
               left: 18,
               right: 18,
-              child: _CameraTip(
-                zoom: _zoom,
-                brightness: _brightness,
-                suggestion: _compositionSuggestion,
+              child: AnimatedOpacity(
+                opacity: _brightness < 58 ? 1 : _guidanceOpacity,
+                duration: const Duration(milliseconds: 450),
+                child: _CameraTip(
+                  zoom: _zoom,
+                  brightness: _brightness,
+                  motionLevel: _motionLevel,
+                  suggestion: _compositionSuggestion,
+                ),
               ),
             ),
             if (_shutterFlash)
@@ -1661,10 +1850,12 @@ class _CameraTip extends StatelessWidget {
   const _CameraTip({
     required this.zoom,
     required this.brightness,
+    required this.motionLevel,
     required this.suggestion,
   });
   final double zoom;
   final double brightness;
+  final double motionLevel;
   final String suggestion;
   @override
   Widget build(BuildContext context) => Container(
@@ -1679,7 +1870,11 @@ class _CameraTip extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            brightness < 58 ? '光线较暗，建议靠近光源或开启闪光灯' : suggestion,
+            brightness < 58 && motionLevel > .45
+                ? '低光环境请保持手机稳定，正在等待更清晰的拍摄时机'
+                : brightness < 58
+                ? '光线较暗，建议靠近光源或开启闪光灯'
+                : suggestion,
             style: const TextStyle(color: Colors.white, fontSize: 12),
           ),
         ),
@@ -1741,6 +1936,87 @@ class _CaptureProgress extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _HistogramOverlay extends StatelessWidget {
+  const _HistogramOverlay({
+    required this.values,
+    required this.highlightClipping,
+    required this.shadowClipping,
+  });
+
+  final List<double> values;
+  final double highlightClipping;
+  final double shadowClipping;
+
+  @override
+  Widget build(BuildContext context) {
+    final warning = highlightClipping > .08
+        ? '高光溢出'
+        : shadowClipping > .22
+        ? '暗部丢失'
+        : null;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white24),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 112,
+              height: 46,
+              child: CustomPaint(painter: _HistogramPainter(values)),
+            ),
+            if (warning != null)
+              Text(
+                warning,
+                style: const TextStyle(
+                  color: Color(0xFFFFD60A),
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _HistogramPainter extends CustomPainter {
+  const _HistogramPainter(this.values);
+
+  final List<double> values;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (values.isEmpty) return;
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: .88)
+      ..style = PaintingStyle.fill;
+    final barWidth = size.width / values.length;
+    for (var index = 0; index < values.length; index++) {
+      final height = values[index].clamp(0, 1) * size.height;
+      canvas.drawRect(
+        Rect.fromLTWH(
+          index * barWidth,
+          size.height - height,
+          math.max(1, barWidth - .5),
+          height,
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HistogramPainter oldDelegate) =>
+      !listEquals(values, oldDelegate.values);
 }
 
 class _TemplateChip extends StatelessWidget {
@@ -2122,6 +2398,38 @@ class _SceneChip extends StatelessWidget {
           style: const TextStyle(color: Colors.white, fontSize: 10),
         ),
       ],
+    ),
+  );
+}
+
+class _SmartShutterChip extends StatelessWidget {
+  const _SmartShutterChip({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: const Color(0xFFFFD60A),
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.camera_alt, color: Colors.black, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

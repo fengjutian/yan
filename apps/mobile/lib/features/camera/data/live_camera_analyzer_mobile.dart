@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:google_mlkit_image_labeling/google_mlkit_image_labeling.dart';
 import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
@@ -15,6 +16,8 @@ class LiveCameraAnalysis {
     required this.suggestion,
     required this.scene,
     required this.sceneConfidence,
+    required this.smileDetected,
+    required this.gestureDetected,
   });
 
   /// 关键点坐标已归一化，并按前置摄像头完成镜像，可直接用于预览叠加。
@@ -22,6 +25,8 @@ class LiveCameraAnalysis {
   final String suggestion;
   final String scene;
   final double sceneConfidence;
+  final bool smileDetected;
+  final bool gestureDetected;
 }
 
 class LiveCameraAnalyzer {
@@ -34,16 +39,25 @@ class LiveCameraAnalyzer {
       ),
       _labeler = ImageLabeler(
         options: ImageLabelerOptions(confidenceThreshold: .55),
+      ),
+      _faceDetector = FaceDetector(
+        options: FaceDetectorOptions(
+          performanceMode: FaceDetectorMode.fast,
+          enableClassification: true,
+          minFaceSize: .15,
+        ),
       );
 
   final PoseDetector _poseDetector;
   final ImageLabeler _labeler;
+  final FaceDetector _faceDetector;
   bool _processing = false;
   bool _closed = false;
   int _frameNumber = 0;
   String _scene = '识别场景中';
   double _sceneConfidence = 0;
   Map<String, Offset> _smoothed = const {};
+  bool _smileDetected = false;
 
   Future<LiveCameraAnalysis?> process(
     CameraImage image,
@@ -65,6 +79,12 @@ class LiveCameraAnalyzer {
         _scene = scene.$1;
         _sceneConfidence = scene.$2;
       }
+      if (_frameNumber % 3 == 0) {
+        final faces = await _faceDetector.processImage(input);
+        _smileDetected = faces.any(
+          (face) => (face.smilingProbability ?? 0) >= .75,
+        );
+      }
       final landmarks = poses.isEmpty
           ? <String, Offset>{}
           : _normalize(poses.first, image, camera, rotation);
@@ -74,6 +94,8 @@ class LiveCameraAnalyzer {
         suggestion: _poseSuggestion(_smoothed),
         scene: _scene,
         sceneConfidence: _sceneConfidence,
+        smileDetected: _smileDetected,
+        gestureDetected: _hasRaisedHand(_smoothed),
       );
     } catch (_) {
       // 部分设备不支持流格式时不影响拍照主流程。
@@ -81,6 +103,19 @@ class LiveCameraAnalyzer {
     } finally {
       _processing = false;
     }
+  }
+
+  bool _hasRaisedHand(Map<String, Offset> points) {
+    final leftWrist = points['leftWrist'];
+    final rightWrist = points['rightWrist'];
+    final leftShoulder = points['leftShoulder'];
+    final rightShoulder = points['rightShoulder'];
+    return (leftWrist != null &&
+            leftShoulder != null &&
+            leftWrist.dy < leftShoulder.dy - .06) ||
+        (rightWrist != null &&
+            rightShoulder != null &&
+            rightWrist.dy < rightShoulder.dy - .06);
   }
 
   InputImageRotation? _inputRotation(
@@ -211,6 +246,10 @@ class LiveCameraAnalyzer {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
-    await Future.wait([_poseDetector.close(), _labeler.close()]);
+    await Future.wait([
+      _poseDetector.close(),
+      _labeler.close(),
+      _faceDetector.close(),
+    ]);
   }
 }

@@ -75,7 +75,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   ),
                 )
               : const CameraPage();
-          return MainShell(currentIndex: 1, child: page);
+          return page;
         },
       ),
       GoRoute(
