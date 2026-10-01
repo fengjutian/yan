@@ -87,6 +87,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _highlightClipping = 0;
   double _shadowClipping = 0;
   bool _showHistogram = false;
+  bool _showFocusPeaking = false;
+  bool _lensCleaningHints = true;
+  List<Offset> _focusPeaks = const [];
+  double _clarityScore = 0;
+  int _softFrameCount = 0;
   double _guidanceOpacity = 1;
   DateTime? _goodPoseSince;
   double _aspectRatio = 3 / 4;
@@ -125,6 +130,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _stylePreference = 'camera.photo_style';
   static const _histogramPreference = 'camera.show_histogram';
   static const _smartShutterPreference = 'camera.smart_shutter';
+  static const _focusPeakingPreference = 'camera.focus_peaking';
+  static const _lensHintsPreference = 'camera.lens_cleaning_hints';
 
   @override
   void initState() {
@@ -208,6 +215,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       final smartIndex = preferences.getInt(_smartShutterPreference) ?? 0;
       _smartShutterMode = SmartShutterMode
           .values[smartIndex.clamp(0, SmartShutterMode.values.length - 1)];
+      _showFocusPeaking = preferences.getBool(_focusPeakingPreference) ?? false;
+      _lensCleaningHints = preferences.getBool(_lensHintsPreference) ?? true;
     });
   }
 
@@ -379,6 +388,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
         }
         if (mounted && count > 0) {
           final peak = bins.reduce((a, b) => a > b ? a : b);
+          final detail = _analyzeSharpness(
+            image,
+            controller.description,
+            controller.value.deviceOrientation,
+          );
           setState(() {
             _brightness = total / count;
             _highlightClipping = highlights / count;
@@ -386,6 +400,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _histogram = peak == 0
                 ? List<double>.filled(bins.length, 0)
                 : bins.map((value) => value / peak).toList(growable: false);
+            _clarityScore = detail.clarity;
+            _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
+            final normallyLit = _brightness >= 60 && _brightness <= 215;
+            if (_lensCleaningHints && normallyLit && detail.clarity < 6) {
+              _softFrameCount = _softFrameCount >= 12
+                  ? 12
+                  : _softFrameCount + 1;
+            } else {
+              _softFrameCount = _softFrameCount <= 2 ? 0 : _softFrameCount - 2;
+            }
           });
         }
         if (_showRealtimeGuidance) {
@@ -401,6 +425,87 @@ class _CameraPageState extends ConsumerState<CameraPage>
     } on CameraException {
       // Some web cameras do not expose an image stream.
     }
+  }
+
+  _FrameSharpness _analyzeSharpness(
+    CameraImage image,
+    CameraDescription camera,
+    DeviceOrientation orientation,
+  ) {
+    if (image.planes.isEmpty || image.width < 20 || image.height < 20) {
+      return const _FrameSharpness(clarity: 0, peaks: []);
+    }
+    final plane = image.planes.first;
+    final bytes = plane.bytes;
+    final pixelStride = plane.bytesPerPixel ?? 1;
+    final rowStride = plane.bytesPerRow;
+    const step = 12;
+    var edgeTotal = 0.0;
+    var samples = 0;
+    final peaks = <Offset>[];
+
+    int luminanceAt(int x, int y) {
+      final index = y * rowStride + x * pixelStride;
+      if (index < 0 || index >= bytes.length) return 0;
+      if (pixelStride >= 3 && index + 2 < bytes.length) {
+        return (.114 * bytes[index] +
+                .587 * bytes[index + 1] +
+                .299 * bytes[index + 2])
+            .round();
+      }
+      return bytes[index];
+    }
+
+    for (var y = step; y < image.height - step; y += step) {
+      for (var x = step; x < image.width - step; x += step) {
+        final center = luminanceAt(x, y);
+        final gradient =
+            (center - luminanceAt(x + step, y)).abs() +
+            (center - luminanceAt(x, y + step)).abs();
+        edgeTotal += gradient;
+        samples++;
+        if (gradient > 58 && peaks.length < 420) {
+          peaks.add(
+            _rotateAnalysisPoint(
+              Offset(x / image.width, y / image.height),
+              camera,
+              orientation,
+            ),
+          );
+        }
+      }
+    }
+    return _FrameSharpness(
+      clarity: samples == 0 ? 0 : edgeTotal / samples,
+      peaks: peaks,
+    );
+  }
+
+  Offset _rotateAnalysisPoint(
+    Offset point,
+    CameraDescription camera,
+    DeviceOrientation orientation,
+  ) {
+    const deviceDegrees = <DeviceOrientation, int>{
+      DeviceOrientation.portraitUp: 0,
+      DeviceOrientation.landscapeLeft: 90,
+      DeviceOrientation.portraitDown: 180,
+      DeviceOrientation.landscapeRight: 270,
+    };
+    final device = deviceDegrees[orientation] ?? 0;
+    final rotation = camera.lensDirection == CameraLensDirection.front
+        ? (camera.sensorOrientation + device) % 360
+        : (camera.sensorOrientation - device + 360) % 360;
+    var result = switch (rotation) {
+      90 => Offset(1 - point.dy, point.dx),
+      180 => Offset(1 - point.dx, 1 - point.dy),
+      270 => Offset(point.dy, 1 - point.dx),
+      _ => point,
+    };
+    if (camera.lensDirection == CameraLensDirection.front) {
+      result = Offset(1 - result.dx, result.dy);
+    }
+    return result;
   }
 
   Future<void> _analyzeFrame(
@@ -1122,6 +1227,30 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   );
                 }),
               ),
+              _CameraOption(
+                label: '峰值对焦',
+                icon: Icons.center_focus_strong,
+                selected: _showFocusPeaking,
+                onTap: () => setState(() {
+                  _showFocusPeaking = !_showFocusPeaking;
+                  if (!_showFocusPeaking) _focusPeaks = const [];
+                  unawaited(
+                    _savePreference(_focusPeakingPreference, _showFocusPeaking),
+                  );
+                }),
+              ),
+              _CameraOption(
+                label: '镜头清洁提醒',
+                icon: Icons.cleaning_services_outlined,
+                selected: _lensCleaningHints,
+                onTap: () => setState(() {
+                  _lensCleaningHints = !_lensCleaningHints;
+                  _softFrameCount = 0;
+                  unawaited(
+                    _savePreference(_lensHintsPreference, _lensCleaningHints),
+                  );
+                }),
+              ),
               for (final option in const [
                 ('智能快门关', SmartShutterMode.off, Icons.touch_app_outlined),
                 ('笑脸快门', SmartShutterMode.smile, Icons.sentiment_satisfied_alt),
@@ -1262,6 +1391,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
               ),
             if (_showGuide)
               IgnorePointer(child: CustomPaint(painter: _GuidePainter(_guide))),
+            if (_showFocusPeaking && _focusPeaks.isNotEmpty)
+              IgnorePointer(
+                child: CustomPaint(painter: _FocusPeakingPainter(_focusPeaks)),
+              ),
             if (_focusPoint != null)
               Positioned(
                 left: _focusPoint!.dx - 25,
@@ -1298,6 +1431,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
               right: 0,
               child: Center(child: _LevelIndicator(angle: _levelAngle)),
             ),
+            if (_lensCleaningHints && _softFrameCount >= 8)
+              Positioned(
+                top: 34,
+                left: 70,
+                right: 70,
+                child: _LensCleaningHint(clarity: _clarityScore),
+              ),
             if (_processingStatus != null && _countdown == 0)
               Positioned(
                 left: 22,
@@ -1613,6 +1753,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
       await _startLightMonitoring(controller);
     }
   }
+}
+
+class _FrameSharpness {
+  const _FrameSharpness({required this.clarity, required this.peaks});
+
+  final double clarity;
+  final List<Offset> peaks;
 }
 
 Uint8List _processPhoto((Uint8List, double, bool, int) input) {
@@ -2017,6 +2164,68 @@ class _HistogramPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _HistogramPainter oldDelegate) =>
       !listEquals(values, oldDelegate.values);
+}
+
+class _FocusPeakingPainter extends CustomPainter {
+  const _FocusPeakingPainter(this.points);
+
+  final List<Offset> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFFFF2D55).withValues(alpha: .88)
+      ..strokeWidth = 1.4
+      ..strokeCap = StrokeCap.round;
+    for (final point in points) {
+      final center = Offset(point.dx * size.width, point.dy * size.height);
+      canvas.drawLine(
+        center.translate(-2.2, 0),
+        center.translate(2.2, 0),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _FocusPeakingPainter oldDelegate) =>
+      !listEquals(points, oldDelegate.points);
+}
+
+class _LensCleaningHint extends StatelessWidget {
+  const _LensCleaningHint({required this.clarity});
+
+  final double clarity;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.black87,
+      borderRadius: BorderRadius.circular(99),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.cleaning_services_outlined,
+            color: Color(0xFFFFD60A),
+            size: 14,
+          ),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              '画面持续偏糊，请检查并清洁镜头',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 class _TemplateChip extends StatelessWidget {
