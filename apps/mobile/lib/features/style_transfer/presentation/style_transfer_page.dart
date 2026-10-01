@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:ai_image_studio/features/style_transfer/presentation/style_transfer_controller.dart';
 import 'package:ai_image_studio/features/styles/presentation/styles_controller.dart';
 import 'package:flutter/material.dart';
@@ -24,6 +25,22 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
   Widget build(BuildContext context) {
     final stylesAsync = ref.watch(stylesProvider);
     final state = ref.watch(styleTransferControllerProvider);
+
+    ref.listen<String?>(
+      styleTransferControllerProvider.select((value) => value.errorMessage),
+      (previous, message) {
+        if (message == null || message == previous) return;
+        _showErrorMessage(message);
+      },
+    );
+    ref.listen<AsyncValue<dynamic>>(stylesProvider, (previous, next) {
+      next.whenOrNull(
+        error: (error, _) {
+          if (previous is AsyncError && previous.error == error) return;
+          _showErrorMessage('加载风格失败，请稍后重试');
+        },
+      );
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -67,9 +84,12 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                       padding: EdgeInsets.all(20),
                       child: Center(child: CircularProgressIndicator()),
                     ),
-                    error: (e, _) => Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text('加载风格失败:$e'),
+                    error: (_, _) => Center(
+                      child: TextButton.icon(
+                        onPressed: () => ref.invalidate(stylesProvider),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('重新加载风格'),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -126,16 +146,6 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                         .read(styleTransferControllerProvider.notifier)
                         .setProtectBackground(v),
                   ),
-                  if (state.errorMessage != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(
-                        state.errorMessage!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
@@ -168,6 +178,27 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         ],
       ),
     );
+  }
+
+  void _showErrorMessage(String message) {
+    final needsBackend = message.contains('后端服务');
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+          action: needsBackend
+              ? SnackBarAction(
+                  label: '立即开启',
+                  onPressed: () => ref
+                      .read(aiSettingsControllerProvider.notifier)
+                      .setPreferLocal(false),
+                )
+              : null,
+        ),
+      );
   }
 
   Future<void> _submit(BuildContext context) async {

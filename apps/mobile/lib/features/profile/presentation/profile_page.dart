@@ -39,18 +39,18 @@ class ProfilePage extends ConsumerWidget {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.offline_bolt_outlined),
-              title: const Text('优先本地运行'),
+              title: const Text('使用后端 AI 服务'),
               subtitle: Text(
                 aiSettings.settings.preferLocal
-                    ? '已开启 · 图片留在设备，后端服务停用'
-                    : '已关闭 · 上传与 AI 任务使用后端服务',
+                    ? '已关闭 · 图片留在设备'
+                    : '已开启 · 支持风格迁移与 AI 生成',
               ),
-              value: aiSettings.settings.preferLocal,
+              value: !aiSettings.settings.preferLocal,
               onChanged: aiSettings.loading
                   ? null
-                  : ref
+                  : (value) => ref
                         .read(aiSettingsControllerProvider.notifier)
-                        .setPreferLocal,
+                        .setPreferLocal(!value),
             ),
             _ProfileTile(
               icon: Icons.edit_note,

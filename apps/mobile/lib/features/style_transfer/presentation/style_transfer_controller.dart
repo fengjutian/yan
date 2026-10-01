@@ -83,7 +83,7 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       return null;
     }
     if (localOnly) {
-      state = state.copyWith(errorMessage: 'AI 风格迁移需要后端服务，请在「我的」中关闭“优先本地运行”');
+      state = state.copyWith(errorMessage: 'AI 风格迁移需要后端服务，请开启“使用后端 AI 服务”');
       return null;
     }
     if (state.submitting) return null;

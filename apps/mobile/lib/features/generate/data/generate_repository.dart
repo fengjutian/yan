@@ -138,7 +138,7 @@ class GenerateRepository {
 
   void _requireBackend(String feature) {
     if (localOnly) {
-      throw StateError('$feature需要后端服务，请在「我的」中关闭“优先本地运行”');
+      throw StateError('$feature需要后端服务，请开启“使用后端 AI 服务”');
     }
   }
 }
