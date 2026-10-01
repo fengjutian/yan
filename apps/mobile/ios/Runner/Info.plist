@@ -74,5 +74,7 @@
 	</array>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>选择人物参考图片用于 AI 图片创作</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>将拍摄完成的照片保存到系统相册</string>
 </dict>
 </plist>

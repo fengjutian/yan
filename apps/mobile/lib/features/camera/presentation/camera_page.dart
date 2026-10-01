@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
+import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
 import 'package:camera/camera.dart';
@@ -13,9 +14,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
+import 'package:saver_gallery/saver_gallery.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 enum CompositionGuide { thirds, center, symmetry }
+
+enum CameraStyle { standard, vivid, warm, cool, mono }
 
 class CameraPage extends ConsumerStatefulWidget {
   const CameraPage({super.key, this.templateParams});
@@ -56,6 +61,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String? _error;
   int _countdownSeconds = 0;
   int _countdown = 0;
+  bool _cancelCountdown = false;
   double _baseZoom = 1;
   double _zoom = 1;
   double _minZoom = 1;
@@ -78,6 +84,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _showCameraOptions = false;
   bool _shutterFlash = false;
   bool _focusLocked = false;
+  bool _mirrorSelfies = true;
+  bool _autoSave = false;
+  CameraStyle _style = CameraStyle.standard;
+  CameraCapabilities _capabilities = const CameraCapabilities.fallback();
+
+  static const _aspectPreference = 'camera.aspect_ratio';
+  static const _timerPreference = 'camera.timer_seconds';
+  static const _guidePreference = 'camera.show_guide';
+  static const _guidancePreference = 'camera.realtime_guidance';
+  static const _mirrorPreference = 'camera.mirror_selfies';
+  static const _autoSavePreference = 'camera.auto_save';
+  static const _stylePreference = 'camera.photo_style';
 
   @override
   void initState() {
@@ -91,7 +109,45 @@ class _CameraPageState extends ConsumerState<CameraPage>
           if (mounted) setState(() => _levelAngle = angle.clamp(-45, 45));
         }, onError: (_) {});
     _applyTemplateParams();
+    unawaited(_loadPreferences());
+    unawaited(_loadCapabilities());
     unawaited(_loadCameras());
+  }
+
+  Future<void> _loadCapabilities() async {
+    final capabilities = await CameraCapabilitiesService().load();
+    if (mounted) setState(() => _capabilities = capabilities);
+  }
+
+  Future<void> _loadPreferences() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    final savedAspect = preferences.getDouble(_aspectPreference);
+    setState(() {
+      if (savedAspect == 1 || savedAspect == .75 || savedAspect == .5625) {
+        _aspectRatio = savedAspect!;
+      }
+      _countdownSeconds = preferences.getInt(_timerPreference) ?? 0;
+      _showGuide = preferences.getBool(_guidePreference) ?? true;
+      _showRealtimeGuidance = preferences.getBool(_guidancePreference) ?? true;
+      _mirrorSelfies = preferences.getBool(_mirrorPreference) ?? true;
+      _autoSave = preferences.getBool(_autoSavePreference) ?? false;
+      final styleIndex = preferences.getInt(_stylePreference) ?? 0;
+      _style = CameraStyle
+          .values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
+    });
+  }
+
+  Future<void> _savePreference(String key, Object value) async {
+    final preferences = await SharedPreferences.getInstance();
+    switch (value) {
+      case final bool boolean:
+        await preferences.setBool(key, boolean);
+      case final int integer:
+        await preferences.setInt(key, integer);
+      case final double number:
+        await preferences.setDouble(key, number);
+    }
   }
 
   void _applyTemplateParams() {
@@ -307,11 +363,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
   }
 
+  Future<void> _setFlashMode(FlashMode mode) async {
+    final controller = _controller;
+    if (controller == null) return;
+    try {
+      await controller.setFlashMode(mode);
+      if (mounted) setState(() => _flashMode = mode);
+    } on CameraException {
+      if (mounted) _showMessage('当前设备不支持此闪光灯模式');
+    }
+  }
+
   Future<void> _capture() async {
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized || _capturing) {
       return;
     }
+    _cancelCountdown = false;
     setState(() => _capturing = true);
     unawaited(HapticFeedback.mediumImpact());
     try {
@@ -319,6 +387,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         if (!mounted) return;
         setState(() => _countdown = value);
         await Future<void>.delayed(const Duration(seconds: 1));
+        if (_cancelCountdown) return;
       }
       if (mounted) setState(() => _countdown = 0);
       if (controller.value.isStreamingImages) {
@@ -332,13 +401,26 @@ class _CameraPageState extends ConsumerState<CameraPage>
         if (mounted) setState(() => _shutterFlash = false);
         analysisFile ??= file;
         final bytes = await file.readAsBytes();
-        values.add(await compute(_cropToAspect, (bytes, _aspectRatio)));
+        final mirror =
+            _mirrorSelfies &&
+            controller.description.lensDirection == CameraLensDirection.front;
+        values.add(
+          await compute(_processPhoto, (
+            bytes,
+            _aspectRatio,
+            mirror,
+            _style.index,
+          )),
+        );
         if (index + 1 < _burstCount) {
           await Future<void>.delayed(const Duration(milliseconds: 220));
         }
       }
       if (mounted && values.isNotEmpty) {
         setState(() => _capturedImage = values.first);
+      }
+      if (_autoSave && values.isNotEmpty) {
+        unawaited(_saveToGallery(values.first));
       }
       await ref.read(cameraSessionProvider.notifier).setPhotos(values);
       final session = ref.read(cameraSessionProvider);
@@ -374,6 +456,31 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
   }
 
+  void _handleShutterTap() {
+    if (_countdown > 0) {
+      _cancelCountdown = true;
+      setState(() => _countdown = 0);
+      return;
+    }
+    unawaited(_capture());
+  }
+
+  Future<void> _saveToGallery(Uint8List bytes) async {
+    try {
+      final result = await SaverGallery.saveImage(
+        bytes,
+        fileName: 'yan-camera-${DateTime.now().millisecondsSinceEpoch}',
+        albumPath: 'Yan',
+        skipIfExists: false,
+      );
+      if (!result.isSuccess && mounted) {
+        _showMessage('保存到系统相册失败：${result.errorMessage ?? '请检查照片权限'}');
+      }
+    } catch (_) {
+      if (mounted) _showMessage('保存到系统相册失败，请检查照片权限');
+    }
+  }
+
   Future<void> _importPhoto() async {
     final file = await _picker.pickImage(
       source: ImageSource.gallery,
@@ -387,9 +494,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   Future<void> _focus(
     TapDownDetails details,
-    BoxConstraints constraints,
-    {bool keepVisible = false},
-  ) async {
+    BoxConstraints constraints, {
+    bool keepVisible = false,
+  }) async {
     final controller = _controller;
     if (controller == null) return;
     final point = Offset(
@@ -397,6 +504,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
       (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
     );
     try {
+      await controller.setFocusMode(
+        keepVisible ? FocusMode.locked : FocusMode.auto,
+      );
+      await controller.setExposureMode(
+        keepVisible ? ExposureMode.locked : ExposureMode.auto,
+      );
       await controller.setFocusPoint(point);
       await controller.setExposurePoint(point);
       setState(() {
@@ -565,8 +678,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       children: [
         IconButton(
           tooltip: '关闭',
-              onPressed: () =>
-                  context.canPop() ? context.pop() : context.go('/home'),
+          onPressed: () =>
+              context.canPop() ? context.pop() : context.go('/home'),
           icon: const Icon(Icons.close_rounded, color: Colors.white),
         ),
         IconButton(
@@ -588,6 +701,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
           onPressed: () => setState(() {
             _showRealtimeGuidance = !_showRealtimeGuidance;
             if (!_showRealtimeGuidance) _liveAnalysis = null;
+            unawaited(
+              _savePreference(_guidancePreference, _showRealtimeGuidance),
+            );
           }),
           icon: Icon(
             _showRealtimeGuidance
@@ -600,7 +716,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
         ),
         IconButton(
           tooltip: '构图线',
-          onPressed: () => setState(() => _showGuide = !_showGuide),
+          onPressed: () => setState(() {
+            _showGuide = !_showGuide;
+            unawaited(_savePreference(_guidePreference, _showGuide));
+          }),
           icon: Icon(
             Icons.grid_3x3,
             color: _showGuide ? const Color(0xFFFFD60A) : Colors.white70,
@@ -618,27 +737,49 @@ class _CameraPageState extends ConsumerState<CameraPage>
       color: const Color(0xFF1C1C1E),
       borderRadius: BorderRadius.circular(18),
     ),
-    child: Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
+        _CapabilitySummary(capabilities: _capabilities),
+        const SizedBox(height: 8),
+        Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          runSpacing: 8,
+          children: [
         for (final ratio in const [('1:1', 1.0), ('4:3', .75), ('16:9', .5625)])
           _CameraOption(
             label: ratio.$1,
             selected: _aspectRatio == ratio.$2,
-            onTap: () => setState(() => _aspectRatio = ratio.$2),
+            onTap: () => setState(() {
+              _aspectRatio = ratio.$2;
+              unawaited(_savePreference(_aspectPreference, _aspectRatio));
+            }),
           ),
-        for (final seconds in const [0, 3, 10])
+        for (final seconds in const [0, 3, 5, 10])
           _CameraOption(
             label: seconds == 0 ? '定时关闭' : '$seconds 秒',
             icon: seconds == 0
                 ? Icons.timer_off_outlined
                 : Icons.timer_outlined,
             selected: _countdownSeconds == seconds,
-            onTap: () => setState(() => _countdownSeconds = seconds),
+            onTap: () => setState(() {
+              _countdownSeconds = seconds;
+              unawaited(_savePreference(_timerPreference, seconds));
+            }),
           ),
-        _CameraOption(
+        for (final option in const [
+          ('闪光关', FlashMode.off, Icons.flash_off),
+          ('闪光自动', FlashMode.auto, Icons.flash_auto),
+          ('闪光开', FlashMode.always, Icons.flash_on),
+        ])
+          _CameraOption(
+            label: option.$1,
+            icon: option.$3,
+            selected: _flashMode == option.$2,
+            onTap: () => _setFlashMode(option.$2),
+          ),
+            _CameraOption(
           label: _guideName,
           icon: Icons.grid_3x3,
           selected: _showGuide,
@@ -646,7 +787,50 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _showGuide = true;
             _guide = CompositionGuide
                 .values[(_guide.index + 1) % CompositionGuide.values.length];
+            unawaited(_savePreference(_guidePreference, true));
           }),
+        ),
+        _CameraOption(
+          label: '曝光归零',
+          icon: Icons.exposure_zero,
+          selected: _exposure.abs() < .05,
+          onTap: () => _setExposure(0),
+        ),
+        _CameraOption(
+          label: '镜像自拍',
+          icon: Icons.flip,
+          selected: _mirrorSelfies,
+          onTap: () => setState(() {
+            _mirrorSelfies = !_mirrorSelfies;
+            unawaited(_savePreference(_mirrorPreference, _mirrorSelfies));
+          }),
+        ),
+        for (final option in const [
+          ('标准', CameraStyle.standard),
+          ('鲜明', CameraStyle.vivid),
+          ('暖色', CameraStyle.warm),
+          ('冷色', CameraStyle.cool),
+          ('黑白', CameraStyle.mono),
+        ])
+          _CameraOption(
+            label: option.$1,
+            icon: Icons.filter_vintage_outlined,
+            selected: _style == option.$2,
+            onTap: () => setState(() {
+              _style = option.$2;
+              unawaited(_savePreference(_stylePreference, _style.index));
+            }),
+          ),
+        _CameraOption(
+          label: '自动存相册',
+          icon: Icons.save_alt,
+          selected: _autoSave,
+          onTap: () => setState(() {
+            _autoSave = !_autoSave;
+            unawaited(_savePreference(_autoSavePreference, _autoSave));
+          }),
+            ),
+          ],
         ),
       ],
     ),
@@ -703,7 +887,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            _CroppedCameraPreview(controller: controller),
+            _CroppedCameraPreview(controller: controller, style: _style),
             if (_showRealtimeGuidance &&
                 _liveAnalysis?.landmarks.isNotEmpty == true)
               IgnorePointer(
@@ -805,7 +989,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   : () => setState(() => _reviewing = true),
             ),
             GestureDetector(
-              onTap: _capture,
+              onTap: _handleShutterTap,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 width: 78,
@@ -973,10 +1157,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 }
 
-Uint8List _cropToAspect((Uint8List, double) input) {
+Uint8List _processPhoto((Uint8List, double, bool, int) input) {
   final decoded = img.decodeImage(input.$1);
   if (decoded == null) return input.$1;
-  final image = img.bakeOrientation(decoded);
+  var image = img.bakeOrientation(decoded);
+  if (input.$3) image = img.flipHorizontal(image);
   final target = input.$2;
   final current = image.width / image.height;
   var width = image.width;
@@ -986,26 +1171,47 @@ Uint8List _cropToAspect((Uint8List, double) input) {
   } else {
     height = (width / target).round();
   }
-  final cropped = img.copyCrop(
+  var cropped = img.copyCrop(
     image,
     x: (image.width - width) ~/ 2,
     y: (image.height - height) ~/ 2,
     width: width,
     height: height,
   );
+  final style =
+      CameraStyle.values[input.$4.clamp(0, CameraStyle.values.length - 1)];
+  switch (style) {
+    case CameraStyle.standard:
+      break;
+    case CameraStyle.vivid:
+      cropped = img.adjustColor(cropped, saturation: 1.22, contrast: 1.08);
+    case CameraStyle.warm:
+      for (final pixel in cropped) {
+        pixel.r = (pixel.r * 1.05 + 4).clamp(0, 255);
+        pixel.b = (pixel.b * .94).clamp(0, 255);
+      }
+    case CameraStyle.cool:
+      for (final pixel in cropped) {
+        pixel.r = (pixel.r * .95).clamp(0, 255);
+        pixel.b = (pixel.b * 1.06 + 3).clamp(0, 255);
+      }
+    case CameraStyle.mono:
+      cropped = img.grayscale(cropped);
+  }
   return Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
 }
 
 class _CroppedCameraPreview extends StatelessWidget {
-  const _CroppedCameraPreview({required this.controller});
+  const _CroppedCameraPreview({required this.controller, required this.style});
 
   final CameraController controller;
+  final CameraStyle style;
 
   @override
   Widget build(BuildContext context) {
     final size = controller.value.previewSize;
     if (size == null) return CameraPreview(controller);
-    return FittedBox(
+    final preview = FittedBox(
       fit: BoxFit.cover,
       clipBehavior: Clip.hardEdge,
       child: SizedBox(
@@ -1014,8 +1220,125 @@ class _CroppedCameraPreview extends StatelessWidget {
         child: CameraPreview(controller),
       ),
     );
+    return ColorFiltered(
+      colorFilter: ColorFilter.matrix(_styleMatrix(style)),
+      child: preview,
+    );
   }
 }
+
+List<double> _styleMatrix(CameraStyle style) => switch (style) {
+  CameraStyle.standard => const [
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  CameraStyle.vivid => const [
+    1.16,
+    -.08,
+    -.08,
+    0,
+    0,
+    -.08,
+    1.16,
+    -.08,
+    0,
+    0,
+    -.08,
+    -.08,
+    1.16,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  CameraStyle.warm => const [
+    1.06,
+    0,
+    0,
+    0,
+    4,
+    0,
+    1.01,
+    0,
+    0,
+    1,
+    0,
+    0,
+    .94,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  CameraStyle.cool => const [
+    .95,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1.06,
+    0,
+    3,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+  CameraStyle.mono => const [
+    .299,
+    .587,
+    .114,
+    0,
+    0,
+    .299,
+    .587,
+    .114,
+    0,
+    0,
+    .299,
+    .587,
+    .114,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
+};
 
 class _FocusRing extends StatelessWidget {
   const _FocusRing({required this.locked});
@@ -1163,6 +1486,56 @@ class _CameraCircleButton extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _CapabilitySummary extends StatelessWidget {
+  const _CapabilitySummary({required this.capabilities});
+
+  final CameraCapabilities capabilities;
+
+  static const _labels = <String, String>{
+    'front': '前摄',
+    'back': '后摄',
+    'wide': '广角',
+    'ultra-wide': '超广角',
+    'telephoto': '长焦',
+    'true-depth': '深感',
+    'multi-lens': '多镜头',
+    'external': '外接',
+    'auto': '自动增强',
+    'portrait': '人像',
+    'retouch': '美颜',
+    'hdr': 'HDR',
+    'night': '夜景',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final features = <String>[
+      ...capabilities.lensTypes.map((item) => _labels[item] ?? item),
+      ...capabilities.extensionModes.map((item) => _labels[item] ?? item),
+      if (capabilities.hasFlash) '闪光灯',
+      if (capabilities.supportsMultiCamera) '多摄协同',
+    ];
+    return Row(
+      children: [
+        Icon(
+          capabilities.platform == 'ios' ? Icons.apple : Icons.android,
+          color: Colors.white70,
+          size: 16,
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            features.isEmpty ? '正在检测设备相机能力' : features.join(' · '),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white60, fontSize: 11),
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _CameraOption extends StatelessWidget {
