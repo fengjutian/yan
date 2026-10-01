@@ -23,16 +23,28 @@ class CameraSession {
 class CameraSessionController extends StateNotifier<CameraSession> {
   CameraSessionController() : super(const CameraSession());
 
-  Future<void> setPhotos(List<Uint8List> values) async {
-    // 评分丢到后台 isolate,5 张连拍不再卡 UI 线程
-    final scored = await Future.wait(
-      values.map(
-        (bytes) async => CapturedPhoto(
-          bytes: bytes,
-          score: await compute(_scoreIsolate, bytes),
-        ),
-      ),
-    );
+  Future<void> setPhotos(
+    List<Uint8List> values, {
+    ValueChanged<double>? onProgress,
+  }) async {
+    // 最多同时解码两张，避免高分辨率连拍触发大量 isolate 和内存峰值。
+    final scored = <CapturedPhoto>[];
+    const concurrency = 2;
+    for (var offset = 0; offset < values.length; offset += concurrency) {
+      final end = (offset + concurrency).clamp(0, values.length);
+      final batch = await Future.wait(
+        values
+            .sublist(offset, end)
+            .map(
+              (bytes) async => CapturedPhoto(
+                bytes: bytes,
+                score: await compute(_scoreIsolate, bytes),
+              ),
+            ),
+      );
+      scored.addAll(batch);
+      onProgress?.call(scored.length / values.length);
+    }
     scored.sort((a, b) => b.score.compareTo(a.score));
     state = CameraSession(photos: scored);
   }

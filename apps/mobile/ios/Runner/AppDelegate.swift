@@ -21,11 +21,14 @@ import UIKit
       binaryMessenger: registrar.messenger()
     )
     channel.setMethodCallHandler { call, result in
-      guard call.method == "getCapabilities" else {
+      if call.method == "getCapabilities" {
+        result(Self.cameraCapabilities())
+      } else if call.method == "openAppSettings",
+                let url = URL(string: UIApplication.openSettingsURLString) {
+        UIApplication.shared.open(url) { opened in result(opened) }
+      } else {
         result(FlutterMethodNotImplemented)
-        return
       }
-      result(Self.cameraCapabilities())
     }
   }
 

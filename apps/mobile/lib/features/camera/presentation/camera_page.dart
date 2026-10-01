@@ -82,6 +82,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _aspectRatio = 3 / 4;
   int _burstCount = 1;
   int _activeIndex = 0;
+  int _initializationToken = 0;
   String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
   Offset? _focusPoint;
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
@@ -94,8 +95,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _focusLocked = false;
   bool _mirrorSelfies = true;
   bool _autoSave = false;
+  bool _saveOriginalCopy = false;
   CameraStyle _style = CameraStyle.standard;
   CameraCapabilities _capabilities = const CameraCapabilities.fallback();
+  bool _permissionPermanentlyDenied = false;
+  String? _processingStatus;
+  double? _processingProgress;
 
   static const _aspectPreference = 'camera.aspect_ratio';
   static const _timerPreference = 'camera.timer_seconds';
@@ -103,6 +108,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _guidancePreference = 'camera.realtime_guidance';
   static const _mirrorPreference = 'camera.mirror_selfies';
   static const _autoSavePreference = 'camera.auto_save';
+  static const _saveOriginalPreference = 'camera.save_original';
   static const _stylePreference = 'camera.photo_style';
 
   @override
@@ -165,6 +171,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _showRealtimeGuidance = preferences.getBool(_guidancePreference) ?? true;
       _mirrorSelfies = preferences.getBool(_mirrorPreference) ?? true;
       _autoSave = preferences.getBool(_autoSavePreference) ?? false;
+      _saveOriginalCopy = preferences.getBool(_saveOriginalPreference) ?? false;
       final styleIndex = preferences.getInt(_stylePreference) ?? 0;
       _style = CameraStyle
           .values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
@@ -207,6 +214,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String? get initialPrompt => _initialPrompt;
 
   Future<void> _loadCameras() async {
+    if (mounted) {
+      setState(() {
+        _initializing = true;
+        _error = null;
+        _permissionPermanentlyDenied = false;
+      });
+    }
     try {
       _cameras = await availableCameras();
       if (_cameras.isEmpty) throw CameraException('no-camera', '未检测到可用相机');
@@ -229,6 +243,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
     setState(() {
       _error = _cameraError(error);
+      _permissionPermanentlyDenied = _isPermissionError(error);
       _initializing = false;
       _controller = null;
     });
@@ -237,6 +252,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Future<void> _initializeCamera(int index) async {
+    final token = ++_initializationToken;
     final previous = _controller;
     if (previous != null && mounted) {
       // 先把 UI 切到加载态，避免 dispose 的 await 期间出现
@@ -244,6 +260,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       setState(() {
         _initializing = true;
         _error = null;
+        _permissionPermanentlyDenied = false;
         _controller = null;
       });
     }
@@ -264,6 +281,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // Vivo 等定制 ROM 上 controller.initialize() / getMinZoomLevel 等偶发挂死,
       // 用 .timeout 兜底,超时后落到错误态而不是永久 spinner。
       await controller.initialize().timeout(const Duration(seconds: 8));
+      if (!mounted || token != _initializationToken) {
+        await controller.dispose();
+        return;
+      }
       _minZoom = await controller.getMinZoomLevel().timeout(
         const Duration(seconds: 3),
       );
@@ -282,14 +303,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
           .setFlashMode(_flashMode)
           .timeout(const Duration(seconds: 3));
       await _startLightMonitoring(controller);
-      if (mounted) setState(() => _initializing = false);
+      if (mounted && token == _initializationToken) {
+        setState(() => _initializing = false);
+      }
     } on CameraException catch (error) {
+      if (token != _initializationToken) return;
       _handleCameraError(error);
     } on PlatformException catch (error) {
+      if (token != _initializationToken) return;
       _handleCameraError(error);
     } on TimeoutException catch (_) {
+      if (token != _initializationToken) return;
       _handleCameraError(CameraException('init-timeout', '相机初始化超时，请重试或重启应用'));
     } catch (error) {
+      if (token != _initializationToken) return;
       _handleCameraError(error);
     }
   }
@@ -416,6 +443,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
     setState(() {
       _capturing = true;
       _burstTaken = 0;
+      _processingStatus = _countdownSeconds > 0 && !continuous ? '准备拍摄' : '拍摄中';
+      _processingProgress = 0;
     });
     unawaited(HapticFeedback.mediumImpact());
     try {
@@ -431,17 +460,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await controller.stopImageStream();
       }
       final values = <Uint8List>[];
+      Uint8List? firstOriginal;
       XFile? analysisFile;
       // Keep a conservative cap to avoid high-resolution JPEGs exhausting
       // memory on mid-range Android devices.
       final requestedCount = continuous ? 8 : _burstCount;
       for (var index = 0; index < requestedCount; index++) {
         if (continuous && !_continuousBurst && index > 0) break;
-        if (mounted) setState(() => _shutterFlash = true);
+        if (mounted) {
+          setState(() {
+            _shutterFlash = true;
+            _processingStatus = '拍摄中 ${index + 1}/$requestedCount';
+            _processingProgress = index / requestedCount;
+          });
+        }
         final file = await controller.takePicture();
         if (mounted) setState(() => _shutterFlash = false);
         analysisFile ??= file;
         final bytes = await file.readAsBytes();
+        firstOriginal ??= bytes;
         final mirror =
             _mirrorSelfies &&
             controller.description.lensDirection == CameraLensDirection.front;
@@ -453,7 +490,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _style.index,
           )),
         );
-        if (mounted) setState(() => _burstTaken = values.length);
+        if (mounted) {
+          setState(() {
+            _burstTaken = values.length;
+            _processingProgress = values.length / requestedCount;
+          });
+        }
         if (index + 1 < requestedCount) {
           await Future<void>.delayed(
             Duration(milliseconds: continuous ? 120 : 220),
@@ -464,12 +506,29 @@ class _CameraPageState extends ConsumerState<CameraPage>
         setState(() => _capturedImage = values.first);
       }
       if (_autoSave && values.isNotEmpty) {
-        unawaited(_saveToGallery(values.first));
+        unawaited(_saveToGallery(values.first, suffix: 'styled'));
+        if (_saveOriginalCopy && firstOriginal != null) {
+          unawaited(_saveToGallery(firstOriginal, suffix: 'original'));
+        }
       }
-      await ref.read(cameraSessionProvider.notifier).setPhotos(values);
+      if (mounted) {
+        setState(() {
+          _processingStatus = '正在评选最佳照片';
+          _processingProgress = 0;
+        });
+      }
+      await ref
+          .read(cameraSessionProvider.notifier)
+          .setPhotos(
+            values,
+            onProgress: (progress) {
+              if (mounted) setState(() => _processingProgress = progress);
+            },
+          );
       final session = ref.read(cameraSessionProvider);
       final size = controller.value.previewSize;
       if (analysisFile != null && size != null) {
+        if (mounted) setState(() => _processingStatus = '正在分析构图');
         final analysis = await analyzeFaces(
           analysisFile.path,
           size.width.round(),
@@ -492,6 +551,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _shutterFlash = false;
           _countdown = 0;
           _continuousBurst = false;
+          _processingStatus = null;
+          _processingProgress = null;
         });
       }
       if (controller.value.isInitialized &&
@@ -522,11 +583,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
     setState(() => _continuousBurst = false);
   }
 
-  Future<void> _saveToGallery(Uint8List bytes) async {
+  Future<void> _saveToGallery(
+    Uint8List bytes, {
+    String suffix = 'photo',
+  }) async {
     try {
       final result = await SaverGallery.saveImage(
         bytes,
-        fileName: 'yan-camera-${DateTime.now().millisecondsSinceEpoch}',
+        fileName: 'yan-camera-$suffix-${DateTime.now().millisecondsSinceEpoch}',
         albumPath: 'Yan',
         skipIfExists: false,
       );
@@ -671,6 +735,24 @@ class _CameraPageState extends ConsumerState<CameraPage>
     return error.toString();
   }
 
+  bool _isPermissionError(Object error) {
+    if (error is CameraException) {
+      return error.code == 'CameraAccessDenied' ||
+          error.code == 'CameraAccessDeniedWithoutPrompt' ||
+          error.code == 'CameraAccessRestricted';
+    }
+    if (error is PlatformException) {
+      return error.code == 'CameraAccessDenied' ||
+          error.code == 'camera_permission';
+    }
+    return false;
+  }
+
+  Future<void> _openSystemSettings() async {
+    final opened = await CameraCapabilitiesService().openAppSettings();
+    if (!opened && mounted) _showMessage('无法打开系统设置，请手动前往应用权限设置');
+  }
+
   String get _guideName => switch (_guide) {
     CompositionGuide.thirds => '三分构图',
     CompositionGuide.center => '中心构图',
@@ -685,6 +767,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   void dispose() {
+    _initializationToken++;
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
     unawaited(_liveAnalyzer.close());
@@ -937,6 +1020,17 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   unawaited(_savePreference(_autoSavePreference, _autoSave));
                 }),
               ),
+              _CameraOption(
+                label: '同时保存原图',
+                icon: Icons.photo_library_outlined,
+                selected: _saveOriginalCopy,
+                onTap: () => setState(() {
+                  _saveOriginalCopy = !_saveOriginalCopy;
+                  unawaited(
+                    _savePreference(_saveOriginalPreference, _saveOriginalCopy),
+                  );
+                }),
+              ),
             ],
           ),
         ],
@@ -970,8 +1064,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 ),
                 const SizedBox(height: 18),
                 OutlinedButton(
-                  onPressed: _loadCameras,
-                  child: const Text('重试'),
+                  onPressed: _permissionPermanentlyDenied
+                      ? _openSystemSettings
+                      : _loadCameras,
+                  child: Text(_permissionPermanentlyDenied ? '前往系统设置' : '重试'),
                 ),
               ],
             ),
@@ -1014,13 +1110,26 @@ class _CameraPageState extends ConsumerState<CameraPage>
               ),
             if (_countdown > 0)
               Center(
-                child: Text(
-                  '$_countdown',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 92,
-                    fontWeight: FontWeight.w300,
-                  ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$_countdown',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 92,
+                        fontWeight: FontWeight.w300,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _handleShutterTap,
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      label: const Text(
+                        '取消',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             Positioned(
@@ -1029,6 +1138,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
               right: 0,
               child: Center(child: _LevelIndicator(angle: _levelAngle)),
             ),
+            if (_processingStatus != null && _countdown == 0)
+              Positioned(
+                left: 22,
+                right: 22,
+                bottom: 76,
+                child: _CaptureProgress(
+                  label: _processingStatus!,
+                  progress: _processingProgress,
+                ),
+              ),
             if (_showRealtimeGuidance && _liveAnalysis != null)
               Positioned(
                 top: 40,
@@ -1569,6 +1688,57 @@ class _CameraTip extends StatelessWidget {
           style: const TextStyle(color: Colors.white70, fontSize: 12),
         ),
       ],
+    ),
+  );
+}
+
+class _CaptureProgress extends StatelessWidget {
+  const _CaptureProgress({required this.label, required this.progress});
+
+  final String label;
+  final double? progress;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.black87,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              const SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFFFFD60A),
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ],
+          ),
+          if (progress != null) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(
+              value: progress!.clamp(0, 1),
+              minHeight: 3,
+              color: const Color(0xFFFFD60A),
+              backgroundColor: Colors.white24,
+            ),
+          ],
+        ],
+      ),
     ),
   );
 }

@@ -1,10 +1,13 @@
 package com.yan.ai.ai_image_studio
 
 import android.content.Context
+import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraExtensionCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
+import android.provider.Settings
+import android.net.Uri
 import android.view.KeyEvent
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
@@ -20,13 +23,21 @@ class MainActivity : FlutterActivity() {
             flutterEngine.dartExecutor.binaryMessenger,
             "yan.camera/capabilities",
         ).setMethodCallHandler { call, result ->
-            if (call.method != "getCapabilities") {
-                result.notImplemented()
-                return@setMethodCallHandler
+            when (call.method) {
+                "getCapabilities" -> runCatching { cameraCapabilities() }
+                    .onSuccess(result::success)
+                    .onFailure { result.error("camera-capabilities", it.message, null) }
+                "openAppSettings" -> {
+                    startActivity(
+                        Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName"),
+                        ),
+                    )
+                    result.success(true)
+                }
+                else -> result.notImplemented()
             }
-            runCatching { cameraCapabilities() }
-                .onSuccess(result::success)
-                .onFailure { result.error("camera-capabilities", it.message, null) }
         }
         cameraControlsChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,

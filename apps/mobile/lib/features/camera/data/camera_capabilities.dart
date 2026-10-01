@@ -48,6 +48,16 @@ class CameraCapabilitiesService {
     }
   }
 
+  Future<bool> openAppSettings() async {
+    try {
+      return await _channel.invokeMethod<bool>('openAppSettings') ?? false;
+    } on MissingPluginException {
+      return false;
+    } on PlatformException {
+      return false;
+    }
+  }
+
   static List<String> _strings(Object? value) => value is List
       ? value.whereType<String>().toList(growable: false)
       : const [];
