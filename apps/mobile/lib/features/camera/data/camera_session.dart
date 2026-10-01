@@ -26,10 +26,12 @@ class CameraSessionController extends StateNotifier<CameraSession> {
   Future<void> setPhotos(List<Uint8List> values) async {
     // 评分丢到后台 isolate,5 张连拍不再卡 UI 线程
     final scored = await Future.wait(
-      values.map((bytes) async => CapturedPhoto(
-            bytes: bytes,
-            score: await compute(_scoreIsolate, bytes),
-          )),
+      values.map(
+        (bytes) async => CapturedPhoto(
+          bytes: bytes,
+          score: await compute(_scoreIsolate, bytes),
+        ),
+      ),
     );
     scored.sort((a, b) => b.score.compareTo(a.score));
     state = CameraSession(photos: scored);
@@ -71,4 +73,5 @@ double _scoreIsolate(Uint8List bytes) {
 
 final cameraSessionProvider =
     StateNotifierProvider<CameraSessionController, CameraSession>(
-        (ref) => CameraSessionController());
+      (ref) => CameraSessionController(),
+    );

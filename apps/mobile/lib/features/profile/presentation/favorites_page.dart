@@ -59,90 +59,98 @@ class _CollectionRow extends ConsumerWidget {
         onTap: () => context.push('/task/$taskId'),
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: Row(children: [
-            SizedBox(
-              width: 80,
-              height: 80,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: taskAsync.maybeWhen(
-                  data: (t) {
-                    final url =
-                        t.images.isNotEmpty ? t.images.first.thumbnailUrl : null;
-                    if (url == null) {
-                      return const ColoredBox(
-                        color: Colors.black12,
-                        child: Icon(Icons.image_not_supported_outlined),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: taskAsync.maybeWhen(
+                    data: (t) {
+                      final url = t.images.isNotEmpty
+                          ? t.images.first.thumbnailUrl
+                          : null;
+                      if (url == null) {
+                        return const ColoredBox(
+                          color: Colors.black12,
+                          child: Icon(Icons.image_not_supported_outlined),
+                        );
+                      }
+                      return CachedNetworkImage(
+                        imageUrl: url,
+                        fit: BoxFit.cover,
                       );
-                    }
-                    return CachedNetworkImage(imageUrl: url, fit: BoxFit.cover);
-                  },
-                  orElse: () => const ColoredBox(
-                    color: Colors.black12,
-                    child: Center(
-                      child: SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    },
+                    orElse: () => const ColoredBox(
+                      color: Colors.black12,
+                      child: Center(
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  taskAsync.maybeWhen(
-                    data: (t) => Text(
-                      t.prompt.isEmpty ? '(无提示词)' : t.prompt,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium,
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    taskAsync.maybeWhen(
+                      data: (t) => Text(
+                        t.prompt.isEmpty ? '(无提示词)' : t.prompt,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      orElse: () => Text(
+                        taskId,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     ),
-                    orElse: () => Text(
-                      taskId,
-                      style: Theme.of(context).textTheme.bodySmall,
+                    const SizedBox(height: 4),
+                    taskAsync.maybeWhen(
+                      data: (t) => Text(
+                        t.status,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      orElse: () => const SizedBox.shrink(),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  taskAsync.maybeWhen(
-                    data: (t) => Text(t.status,
-                        style: Theme.of(context).textTheme.bodySmall),
-                    orElse: () => const SizedBox.shrink(),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: kind == _RowKind.favorite ? '取消收藏' : '从草稿移除',
-              icon: Icon(
-                kind == _RowKind.favorite
-                    ? Icons.favorite
-                    : Icons.edit_note,
-                color: kind == _RowKind.favorite
-                    ? Colors.redAccent
-                    : Colors.blueAccent,
+              IconButton(
+                tooltip: kind == _RowKind.favorite ? '取消收藏' : '从草稿移除',
+                icon: Icon(
+                  kind == _RowKind.favorite ? Icons.favorite : Icons.edit_note,
+                  color: kind == _RowKind.favorite
+                      ? Colors.redAccent
+                      : Colors.blueAccent,
+                ),
+                onPressed: () async {
+                  if (kind == _RowKind.favorite) {
+                    await ref.read(toggleFavoriteProvider)(taskId);
+                  } else {
+                    await ref.read(toggleDraftProvider)(taskId, false);
+                  }
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          kind == _RowKind.favorite ? '已取消收藏' : '已从草稿移除',
+                        ),
+                      ),
+                    );
+                  }
+                },
               ),
-              onPressed: () async {
-                if (kind == _RowKind.favorite) {
-                  await ref.read(toggleFavoriteProvider)(taskId);
-                } else {
-                  await ref.read(toggleDraftProvider)(taskId, false);
-                }
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                    content: Text(kind == _RowKind.favorite
-                        ? '已取消收藏'
-                        : '已从草稿移除'),
-                  ));
-                }
-              },
-            ),
-          ]),
+            ],
+          ),
         ),
       ),
     );
@@ -166,23 +174,23 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, size: 56),
-              const SizedBox(height: 12),
-              Text(title, style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              Text(hint),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => context.go(actionRoute),
-                child: Text(actionLabel),
-              ),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 56),
+          const SizedBox(height: 12),
+          Text(title, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Text(hint),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => context.go(actionRoute),
+            child: Text(actionLabel),
           ),
-        ),
-      );
+        ],
+      ),
+    ),
+  );
 }

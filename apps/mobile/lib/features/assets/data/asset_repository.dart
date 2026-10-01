@@ -9,8 +9,10 @@ class AssetRepository {
   final ApiClient _apiClient;
   final bool localOnly;
 
-  Future<ImageAsset> upload(XFile file,
-      {required void Function(double) onProgress}) async {
+  Future<ImageAsset> upload(
+    XFile file, {
+    required void Function(double) onProgress,
+  }) async {
     if (localOnly) {
       final bytes = await file.readAsBytes();
       onProgress(1);
@@ -28,8 +30,9 @@ class AssetRepository {
       final bytes = await file.readAsBytes();
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/assets',
-        data: FormData.fromMap(
-            {'file': MultipartFile.fromBytes(bytes, filename: file.name)}),
+        data: FormData.fromMap({
+          'file': MultipartFile.fromBytes(bytes, filename: file.name),
+        }),
         onSendProgress: (sent, total) {
           if (total > 0) onProgress(sent / total);
         },

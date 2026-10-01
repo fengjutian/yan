@@ -6,8 +6,11 @@ import 'package:dio/dio.dart';
 import 'package:uuid/uuid.dart';
 
 class GenerateRepository {
-  GenerateRepository(this._apiClient, this._localAIClient,
-      {this.localOnly = true});
+  GenerateRepository(
+    this._apiClient,
+    this._localAIClient, {
+    this.localOnly = true,
+  });
   final ApiClient _apiClient;
   final LocalAIClient _localAIClient;
   final bool localOnly;
@@ -21,11 +24,12 @@ class GenerateRepository {
     }
   }
 
-  Future<ImageTask> create(
-      {required String prompt,
-      required String aspectRatio,
-      required int count,
-      required bool promptOptimizer}) async {
+  Future<ImageTask> create({
+    required String prompt,
+    required String aspectRatio,
+    required int count,
+    required bool promptOptimizer,
+  }) async {
     _requireBackend('AI 图像生成');
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
@@ -36,7 +40,7 @@ class GenerateRepository {
           'prompt': prompt,
           'aspect_ratio': aspectRatio,
           'count': count,
-          'prompt_optimizer': promptOptimizer
+          'prompt_optimizer': promptOptimizer,
         },
       );
       return ImageTask.fromJson(response.data!);
@@ -75,8 +79,9 @@ class GenerateRepository {
   Future<ImageTask> get(String taskId) async {
     _requireBackend('任务查询');
     try {
-      final response = await _apiClient.dio
-          .get<Map<String, dynamic>>('/image-tasks/$taskId');
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/image-tasks/$taskId',
+      );
       return ImageTask.fromJson(response.data!);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);

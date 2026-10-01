@@ -88,10 +88,13 @@ class InspirationTemplate {
         title: (json['title'] as String?) ?? '',
         subtitle: (json['subtitle'] as String?) ?? '',
         category: _categoryFromString((json['category'] as String?) ?? ''),
-        coverColor: _colorFromHex((json['cover_color'] as String?) ?? '#E6D3B8'),
+        coverColor: _colorFromHex(
+          (json['cover_color'] as String?) ?? '#E6D3B8',
+        ),
         examplePrompt: (json['example_prompt'] as String?) ?? '',
-        compositionRule:
-            _compositionFromString((json['composition'] as String?) ?? ''),
+        compositionRule: _compositionFromString(
+          (json['composition'] as String?) ?? '',
+        ),
         cameraAngle: _angleFromString((json['angle'] as String?) ?? ''),
         subjectPosition: Offset(
           ((json['subject_x'] as num?) ?? 0.5).toDouble(),
@@ -110,22 +113,16 @@ class InspirationTemplate {
       );
 }
 
-TemplateCategory _categoryFromString(String s) =>
-    TemplateCategory.values.firstWhere(
-      (c) => c.name == s,
-      orElse: () => TemplateCategory.portrait,
-    );
+TemplateCategory _categoryFromString(String s) => TemplateCategory.values
+    .firstWhere((c) => c.name == s, orElse: () => TemplateCategory.portrait);
 
-CompositionRule _compositionFromString(String s) =>
-    CompositionRule.values.firstWhere(
-      (c) => c.name == s,
-      orElse: () => CompositionRule.thirds,
-    );
+CompositionRule _compositionFromString(String s) => CompositionRule.values
+    .firstWhere((c) => c.name == s, orElse: () => CompositionRule.thirds);
 
 CameraAngle _angleFromString(String s) => CameraAngle.values.firstWhere(
-      (c) => c.name == s,
-      orElse: () => CameraAngle.eyeLevel,
-    );
+  (c) => c.name == s,
+  orElse: () => CameraAngle.eyeLevel,
+);
 
 Color _colorFromHex(String hex) {
   var v = hex.replaceFirst('#', '');

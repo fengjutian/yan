@@ -26,15 +26,15 @@ class LiveCameraAnalysis {
 
 class LiveCameraAnalyzer {
   LiveCameraAnalyzer()
-      : _poseDetector = PoseDetector(
-          options: PoseDetectorOptions(
-            model: PoseDetectionModel.base,
-            mode: PoseDetectionMode.stream,
-          ),
+    : _poseDetector = PoseDetector(
+        options: PoseDetectorOptions(
+          model: PoseDetectionModel.base,
+          mode: PoseDetectionMode.stream,
         ),
-        _labeler = ImageLabeler(
-          options: ImageLabelerOptions(confidenceThreshold: .55),
-        );
+      ),
+      _labeler = ImageLabeler(
+        options: ImageLabelerOptions(confidenceThreshold: .55),
+      );
 
   final PoseDetector _poseDetector;
   final ImageLabeler _labeler;
@@ -126,7 +126,8 @@ class LiveCameraAnalyzer {
     CameraDescription camera,
     InputImageRotation rotation,
   ) {
-    final rotated = rotation == InputImageRotation.rotation90deg ||
+    final rotated =
+        rotation == InputImageRotation.rotation90deg ||
         rotation == InputImageRotation.rotation270deg;
     final width = rotated ? image.height.toDouble() : image.width.toDouble();
     final height = rotated ? image.width.toDouble() : image.height.toDouble();
@@ -149,10 +150,7 @@ class LiveCameraAnalyzer {
     if (current.isEmpty) return const {};
     return current.map((key, point) {
       final old = previous[key];
-      return MapEntry(
-        key,
-        old == null ? point : Offset.lerp(old, point, .35)!,
-      );
+      return MapEntry(key, old == null ? point : Offset.lerp(old, point, .35)!);
     });
   }
 
@@ -174,7 +172,8 @@ class LiveCameraAnalyzer {
     if (leftAnkle == null || rightAnkle == null) {
       return '想拍全身照时请再后退一步，露出双脚';
     }
-    final shoulderAngle = math.atan2(
+    final shoulderAngle =
+        math.atan2(
           rightShoulder.dy - leftShoulder.dy,
           rightShoulder.dx - leftShoulder.dx,
         ) *

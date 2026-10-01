@@ -27,8 +27,10 @@ class DraftsPage extends ConsumerWidget {
                   children: [
                     const Icon(Icons.edit_note, size: 56),
                     const SizedBox(height: 12),
-                    Text('没有草稿',
-                        style: Theme.of(context).textTheme.titleMedium),
+                    Text(
+                      '没有草稿',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
                     const SizedBox(height: 8),
                     const Text('作品页点击"存为草稿"会出现在这里'),
                     const SizedBox(height: 16),
@@ -66,34 +68,40 @@ class _DraftRow extends ConsumerWidget {
     return Card(
       child: ListTile(
         title: taskAsync.maybeWhen(
-          data: (t) => Text(t.prompt.isEmpty ? '(无提示词)' : t.prompt,
-              maxLines: 2, overflow: TextOverflow.ellipsis),
-          orElse: () => Text(taskId,
-              style: Theme.of(context).textTheme.bodySmall),
+          data: (t) => Text(
+            t.prompt.isEmpty ? '(无提示词)' : t.prompt,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          orElse: () =>
+              Text(taskId, style: Theme.of(context).textTheme.bodySmall),
         ),
         subtitle: taskAsync.maybeWhen(
           data: (t) => Text(t.status),
           orElse: () => const SizedBox.shrink(),
         ),
-        trailing: Wrap(spacing: 0, children: [
-          IconButton(
-            tooltip: '继续创作',
-            icon: const Icon(Icons.play_arrow_outlined),
-            onPressed: () => context.push('/task/$taskId'),
-          ),
-          IconButton(
-            tooltip: '移除',
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () async {
-              await ref.read(toggleDraftProvider)(taskId, false);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('已从草稿移除')),
-                );
-              }
-            },
-          ),
-        ]),
+        trailing: Wrap(
+          spacing: 0,
+          children: [
+            IconButton(
+              tooltip: '继续创作',
+              icon: const Icon(Icons.play_arrow_outlined),
+              onPressed: () => context.push('/task/$taskId'),
+            ),
+            IconButton(
+              tooltip: '移除',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                await ref.read(toggleDraftProvider)(taskId, false);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(const SnackBar(content: Text('已从草稿移除')));
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -41,9 +41,7 @@ void main() {
     final directAdapter = _JsonAdapter('不应调用');
     final backend = Dio()..httpClientAdapter = _JsonAdapter('后端结果');
     final client = LocalAIClient(
-      _MemorySettings(
-        const AISettings(preferLocal: false, apiKey: 'secret'),
-      ),
+      _MemorySettings(const AISettings(preferLocal: false, apiKey: 'secret')),
       backend,
       directClient: Dio()..httpClientAdapter = directAdapter,
     );

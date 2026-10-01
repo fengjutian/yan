@@ -55,8 +55,9 @@ class ShareController extends StateNotifier<ShareState> {
 
   /// 复制到剪贴板由 UI 层做(避免 share_plus 依赖剪贴板),controller 仅暴露文本。
   String exportText() {
-    final tagsLine =
-        state.tags.isEmpty ? '' : '\n${state.tags.map((t) => '#$t').join(' ')}';
+    final tagsLine = state.tags.isEmpty
+        ? ''
+        : '\n${state.tags.map((t) => '#$t').join(' ')}';
     return '${state.title}\n${state.caption}$tagsLine';
   }
 
@@ -67,7 +68,8 @@ class ShareController extends StateNotifier<ShareState> {
   }
 
   ({String title, String body, List<String> tags}) _splitCaption(
-      String enhanced) {
+    String enhanced,
+  ) {
     // 服务端返回的 enhanced prompt 是一段连续文本,我们按行/句拆分。
     // 格式约定:\n第一行 = 标题,后面段落 = 正文,最后 #tag1 #tag2 行 = 标签。
     final lines = enhanced
@@ -114,20 +116,19 @@ class ShareState {
     List<String>? tags,
     String? errorMessage,
     bool clearError = false,
-  }) =>
-      ShareState(
-        generating: generating ?? this.generating,
-        title: title ?? this.title,
-        caption: caption ?? this.caption,
-        tags: tags ?? this.tags,
-        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      );
+  }) => ShareState(
+    generating: generating ?? this.generating,
+    title: title ?? this.title,
+    caption: caption ?? this.caption,
+    tags: tags ?? this.tags,
+    errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+  );
 }
 
 final shareControllerProvider =
     StateNotifierProvider.autoDispose<ShareController, ShareState>((ref) {
-  return ShareController(ref.watch(localAIClientProvider));
-});
+      return ShareController(ref.watch(localAIClientProvider));
+    });
 
 /// 收藏 + 草稿用本地 SharedPreferences 持久化,MVP 不上后端。
 /// 后续可替换成 `/me/favorites` / `/me/drafts` 接口。
@@ -173,10 +174,13 @@ final sharedPreferencesProvider = FutureProvider<SharedPreferences>((ref) {
 });
 
 final localCollectionServiceProvider = Provider<LocalCollectionService>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider).maybeWhen(
+  final prefs = ref
+      .watch(sharedPreferencesProvider)
+      .maybeWhen(
         data: (v) => v,
         orElse: () => throw StateError(
-            'sharedPreferencesProvider 还未就绪,请先 await SharedPreferences.getInstance()'),
+          'sharedPreferencesProvider 还未就绪,请先 await SharedPreferences.getInstance()',
+        ),
       );
   return LocalCollectionService(prefs);
 });
@@ -200,8 +204,9 @@ final toggleFavoriteProvider = Provider<Future<void> Function(String)>((ref) {
   };
 });
 
-final toggleDraftProvider =
-    Provider<Future<void> Function(String, bool)>((ref) {
+final toggleDraftProvider = Provider<Future<void> Function(String, bool)>((
+  ref,
+) {
   return (taskId, add) async {
     final svc = ref.read(localCollectionServiceProvider);
     if (add) {

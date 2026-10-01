@@ -10,88 +10,115 @@ class StudioPage extends ConsumerWidget {
     final captured = ref.watch(cameraSessionProvider).selected;
     return Scaffold(
       appBar: AppBar(title: const Text('工作室')),
-      body: ListView(padding: const EdgeInsets.all(20), children: [
-        Text('让照片成为作品', style: Theme.of(context).textTheme.headlineMedium),
-        const SizedBox(height: 8),
-        Text('导入照片，选择适合它的创作方式。', style: Theme.of(context).textTheme.bodyLarge),
-        if (captured != null) ...[
-          const SizedBox(height: 20),
-          ClipRRect(
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          Text('让照片成为作品', style: Theme.of(context).textTheme.headlineMedium),
+          const SizedBox(height: 8),
+          Text(
+            '导入照片，选择适合它的创作方式。',
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+          if (captured != null) ...[
+            const SizedBox(height: 20),
+            ClipRRect(
               borderRadius: BorderRadius.circular(22),
-              child: Stack(alignment: Alignment.bottomLeft, children: [
-                Image.memory(captured.bytes,
-                    height: 220, width: double.infinity, fit: BoxFit.cover),
-                Container(
+              child: Stack(
+                alignment: Alignment.bottomLeft,
+                children: [
+                  Image.memory(
+                    captured.bytes,
+                    height: 220,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                  Container(
                     margin: const EdgeInsets.all(12),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(99)),
-                    child: Text('相机成片 · 质量 ${captured.score.round()} 分',
-                        style: const TextStyle(
-                            color: Colors.white, fontSize: 12))),
-              ])),
-        ],
-        const SizedBox(height: 26),
-        _StudioCard(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                    child: Text(
+                      '相机成片 · 质量 ${captured.score.round()} 分',
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 26),
+          _StudioCard(
             icon: Icons.auto_fix_high,
             title: 'AI 风格迁移',
             subtitle: '保留人物特征，重塑画面氛围',
             accent: const Color(0xFF32796D),
             badge: 'AI 推荐',
             featured: true,
-            onTap: () => context.push('/style-transfer', extra: captured?.bytes)),
-        const SizedBox(height: 12),
-        _StudioCard(
+            onTap: () =>
+                context.push('/style-transfer', extra: captured?.bytes),
+          ),
+          const SizedBox(height: 12),
+          _StudioCard(
             icon: Icons.tune,
             title: '图片编辑器',
             subtitle: '裁剪/旋转/调色，本地即时处理',
             accent: const Color(0xFF9A654F),
-            onTap: () => context.push('/editor', extra: captured?.bytes)),
-        const SizedBox(height: 12),
-        _StudioCard(
+            onTap: () => context.push('/editor', extra: captured?.bytes),
+          ),
+          const SizedBox(height: 12),
+          _StudioCard(
             icon: Icons.add_photo_alternate_outlined,
             title: '导入照片',
             subtitle: '上传原图并开始编辑',
             accent: const Color(0xFF52718D),
-            onTap: () => context.push('/assets/upload')),
-        const SizedBox(height: 12),
-        _StudioCard(
+            onTap: () => context.push('/assets/upload'),
+          ),
+          const SizedBox(height: 12),
+          _StudioCard(
             icon: Icons.draw_outlined,
             title: 'AI 图像创作',
             subtitle: '用一句话创造全新画面',
             accent: const Color(0xFF86669A),
             badge: 'AI',
-            onTap: () => context.push('/create/text-to-image')),
-        const SizedBox(height: 12),
-        _StudioCard(
+            onTap: () => context.push('/create/text-to-image'),
+          ),
+          const SizedBox(height: 12),
+          _StudioCard(
             icon: Icons.collections_outlined,
             title: '我的作品',
             subtitle: '查看成片与历史版本',
             accent: const Color(0xFF8A6A58),
-            onTap: () => context.push('/history')),
-        const SizedBox(height: 12),
-        _StudioCard(
+            onTap: () => context.push('/history'),
+          ),
+          const SizedBox(height: 12),
+          _StudioCard(
             icon: Icons.share_outlined,
             title: '分享工作台',
             subtitle: '平台裁剪 / AI 文案 / 一键分享',
             accent: const Color(0xFF4F786C),
-            onTap: () => context.push('/share')),
-      ]),
+            onTap: () => context.push('/share'),
+          ),
+        ],
+      ),
     );
   }
 }
 
 class _StudioCard extends StatelessWidget {
-  const _StudioCard(
-      {required this.icon,
-      required this.title,
-      required this.subtitle,
-      required this.accent,
-      this.badge,
-      this.featured = false,
-      required this.onTap});
+  const _StudioCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.accent,
+    this.badge,
+    this.featured = false,
+    required this.onTap,
+  });
   final IconData icon;
   final String title;
   final String subtitle;
@@ -115,7 +142,10 @@ class _StudioCard extends StatelessWidget {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  Color.alphaBlend(accent.withValues(alpha: .14), scheme.surface),
+                  Color.alphaBlend(
+                    accent.withValues(alpha: .14),
+                    scheme.surface,
+                  ),
                   scheme.surface,
                 ],
               )

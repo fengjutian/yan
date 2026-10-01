@@ -5,18 +5,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final historyControllerProvider =
     StateNotifierProvider.autoDispose<HistoryController, HistoryState>(
-  (ref) => HistoryController(ref.watch(generateRepositoryProvider)),
-);
+      (ref) => HistoryController(ref.watch(generateRepositoryProvider)),
+    );
 final taskDetailProvider = FutureProvider.autoDispose.family<ImageTask, String>(
   (ref, taskId) => ref.watch(generateRepositoryProvider).get(taskId),
 );
 
 class HistoryState {
-  const HistoryState(
-      {this.tasks = const [],
-      this.nextCursor = '',
-      this.loading = false,
-      this.errorMessage});
+  const HistoryState({
+    this.tasks = const [],
+    this.nextCursor = '',
+    this.loading = false,
+    this.errorMessage,
+  });
   final List<ImageTask> tasks;
   final String nextCursor;
   final bool loading;
@@ -45,18 +46,24 @@ class HistoryController extends StateNotifier<HistoryState> {
 
   Future<void> _doLoad(bool replace) async {
     state = HistoryState(
-        tasks: state.tasks, nextCursor: state.nextCursor, loading: true);
+      tasks: state.tasks,
+      nextCursor: state.nextCursor,
+      loading: true,
+    );
     try {
-      final page =
-          await _repository.list(cursor: replace ? '' : state.nextCursor);
+      final page = await _repository.list(
+        cursor: replace ? '' : state.nextCursor,
+      );
       state = HistoryState(
-          tasks: replace ? page.tasks : [...state.tasks, ...page.tasks],
-          nextCursor: page.nextCursor);
+        tasks: replace ? page.tasks : [...state.tasks, ...page.tasks],
+        nextCursor: page.nextCursor,
+      );
     } catch (error) {
       state = HistoryState(
-          tasks: state.tasks,
-          nextCursor: state.nextCursor,
-          errorMessage: error.toString());
+        tasks: state.tasks,
+        nextCursor: state.nextCursor,
+        errorMessage: error.toString(),
+      );
     }
   }
 }

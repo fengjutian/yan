@@ -53,10 +53,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
         title: const Text('图片编辑器'),
         actions: [
           if (state.isDirty)
-            TextButton(
-              onPressed: controller.reset,
-              child: const Text('重置'),
-            ),
+            TextButton(onPressed: controller.reset, child: const Text('重置')),
           TextButton(
             onPressed: _exporting ? null : () => _export(bytes, state),
             child: const Text('完成'),
@@ -74,10 +71,11 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                         alignment: Alignment.center,
                         transform: Matrix4.identity()
                           ..scaleByDouble(
-                              state.flipHorizontal ? -1.0 : 1.0,
-                              state.flipVertical ? -1.0 : 1.0,
-                              1.0,
-                              1.0),
+                            state.flipHorizontal ? -1.0 : 1.0,
+                            state.flipVertical ? -1.0 : 1.0,
+                            1.0,
+                            1.0,
+                          ),
                         child: RotatedBox(
                           quarterTurns: state.rotationQuarterTurns,
                           child: InteractiveViewer(
@@ -90,10 +88,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
             ),
           ),
           if (_exporting) const LinearProgressIndicator(),
-          _AdjustPanel(
-            state: state,
-            controller: controller,
-          ),
+          _AdjustPanel(state: state, controller: controller),
         ],
       ),
     );
@@ -106,14 +101,10 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       final result = await compute(applyAdjustments, s);
       if (!mounted) return;
       setState(() => _exportPreview = result);
-      messenger.showSnackBar(
-        const SnackBar(content: Text('导出完成，可前往分享')),
-      );
+      messenger.showSnackBar(const SnackBar(content: Text('导出完成，可前往分享')));
     } catch (e) {
       if (!mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text('导出失败：$e')),
-      );
+      messenger.showSnackBar(SnackBar(content: Text('导出失败：$e')));
     } finally {
       if (mounted) setState(() => _exporting = false);
     }
@@ -172,25 +163,30 @@ class _ToolbarRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      _ToolButton(
+    return Row(
+      children: [
+        _ToolButton(
           icon: Icons.rotate_right,
           label: '旋转',
-          onTap: controller.rotateClockwise),
-      _ToolButton(
+          onTap: controller.rotateClockwise,
+        ),
+        _ToolButton(
           icon: Icons.flip,
           label: '水平翻转',
-          onTap: controller.flipHorizontal),
-      _ToolButton(
+          onTap: controller.flipHorizontal,
+        ),
+        _ToolButton(
           icon: Icons.flip_camera_android,
           label: '垂直翻转',
-          onTap: controller.flipVertical),
-      _ToolButton(
-        icon: Icons.crop_landscape,
-        label: '平台预设',
-        onTap: () => _showPresetSheet(context, controller),
-      ),
-    ]);
+          onTap: controller.flipVertical,
+        ),
+        _ToolButton(
+          icon: Icons.crop_landscape,
+          label: '平台预设',
+          onTap: () => _showPresetSheet(context, controller),
+        ),
+      ],
+    );
   }
 
   void _showPresetSheet(BuildContext context, EditorController controller) {
@@ -221,26 +217,32 @@ class _ToolbarRow extends StatelessWidget {
 }
 
 class _ToolButton extends StatelessWidget {
-  const _ToolButton(
-      {required this.icon, required this.label, required this.onTap});
+  const _ToolButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) => Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 6),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              Icon(icon, size: 22),
-              const SizedBox(height: 2),
-              Text(label, style: const TextStyle(fontSize: 10)),
-            ]),
-          ),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22),
+            const SizedBox(height: 2),
+            Text(label, style: const TextStyle(fontSize: 10)),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 }
 
 class _SliderRow extends StatelessWidget {
@@ -258,25 +260,30 @@ class _SliderRow extends StatelessWidget {
   final ValueChanged<double> onChanged;
 
   @override
-  Widget build(BuildContext context) => Row(children: [
-        SizedBox(
-            width: 36,
-            child: Text(label, style: const TextStyle(fontSize: 11))),
-        Expanded(
-          child: Slider(
-            value: value.clamp(min, max),
-            min: min,
-            max: max,
-            onChanged: onChanged,
-          ),
+  Widget build(BuildContext context) => Row(
+    children: [
+      SizedBox(
+        width: 36,
+        child: Text(label, style: const TextStyle(fontSize: 11)),
+      ),
+      Expanded(
+        child: Slider(
+          value: value.clamp(min, max),
+          min: min,
+          max: max,
+          onChanged: onChanged,
         ),
-        SizedBox(
-          width: 36,
-          child: Text(value.round().toString(),
-              textAlign: TextAlign.right,
-              style: const TextStyle(fontSize: 11)),
+      ),
+      SizedBox(
+        width: 36,
+        child: Text(
+          value.round().toString(),
+          textAlign: TextAlign.right,
+          style: const TextStyle(fontSize: 11),
         ),
-      ]);
+      ),
+    ],
+  );
 }
 
 class _Preset {

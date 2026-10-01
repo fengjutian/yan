@@ -5,10 +5,11 @@ import 'package:ai_image_studio/features/auth/data/auth_models.dart';
 import 'package:dio/dio.dart';
 
 class AuthRepository {
-  AuthRepository(
-      {required ApiClient apiClient, required TokenStorage tokenStorage})
-      : _apiClient = apiClient,
-        _tokenStorage = tokenStorage;
+  AuthRepository({
+    required ApiClient apiClient,
+    required TokenStorage tokenStorage,
+  }) : _apiClient = apiClient,
+       _tokenStorage = tokenStorage;
 
   final ApiClient _apiClient;
   final TokenStorage _tokenStorage;

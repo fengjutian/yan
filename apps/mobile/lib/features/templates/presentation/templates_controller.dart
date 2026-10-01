@@ -9,30 +9,34 @@ final templateRepositoryProvider = Provider<TemplateRepository>(
 );
 
 /// 全部模板(按分类缓存),启动时拉一次,后续只在 invalidate 后重拉。
-final allTemplatesProvider =
-    FutureProvider<List<InspirationTemplate>>((ref) async {
+final allTemplatesProvider = FutureProvider<List<InspirationTemplate>>((
+  ref,
+) async {
   final repo = ref.watch(templateRepositoryProvider);
   return repo.listByCategory();
 });
 
-final featuredTemplatesProvider =
-    FutureProvider<List<InspirationTemplate>>((ref) async {
+final featuredTemplatesProvider = FutureProvider<List<InspirationTemplate>>((
+  ref,
+) async {
   final repo = ref.watch(templateRepositoryProvider);
   return repo.featured();
 });
 
 final templateByCategoryProvider = FutureProvider.family
-    .autoDispose<List<InspirationTemplate>, TemplateCategory?>((ref, cat) async {
-  final repo = ref.watch(templateRepositoryProvider);
-  return repo.listByCategory(cat);
-});
+    .autoDispose<List<InspirationTemplate>, TemplateCategory?>((
+      ref,
+      cat,
+    ) async {
+      final repo = ref.watch(templateRepositoryProvider);
+      return repo.listByCategory(cat);
+    });
 
-final templateByIdProvider =
-    FutureProvider.family.autoDispose<InspirationTemplate?, String>(
-        (ref, id) async {
-  final repo = ref.watch(templateRepositoryProvider);
-  return repo.findById(id);
-});
+final templateByIdProvider = FutureProvider.family
+    .autoDispose<InspirationTemplate?, String>((ref, id) async {
+      final repo = ref.watch(templateRepositoryProvider);
+      return repo.findById(id);
+    });
 
 /// 模板收藏:本地持久化。登录后迁移到后端 /me/template-favorites。
 class TemplateFavoritesService {
@@ -54,21 +58,23 @@ class TemplateFavoritesService {
   }
 }
 
-final templateFavoritesServiceProvider =
-    Provider<TemplateFavoritesService>((ref) {
-  final prefs = ref.watch(sharedPreferencesProvider).maybeWhen(
+final templateFavoritesServiceProvider = Provider<TemplateFavoritesService>((
+  ref,
+) {
+  final prefs = ref
+      .watch(sharedPreferencesProvider)
+      .maybeWhen(
         data: (v) => v,
-        orElse: () =>
-            throw StateError('sharedPreferencesProvider 未就绪'),
+        orElse: () => throw StateError('sharedPreferencesProvider 未就绪'),
       );
   return TemplateFavoritesService(prefs);
 });
 
 final templateFavoritesProvider =
     StateNotifierProvider<TemplateFavoritesNotifier, Set<String>>((ref) {
-  final svc = ref.watch(templateFavoritesServiceProvider);
-  return TemplateFavoritesNotifier(svc);
-});
+      final svc = ref.watch(templateFavoritesServiceProvider);
+      return TemplateFavoritesNotifier(svc);
+    });
 
 class TemplateFavoritesNotifier extends StateNotifier<Set<String>> {
   TemplateFavoritesNotifier(this._svc) : super(_svc.read());

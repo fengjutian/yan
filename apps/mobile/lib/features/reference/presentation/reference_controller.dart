@@ -15,18 +15,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 final styleRepositoryProvider = Provider<StyleRepository>((ref) {
-  final localOnly = ref.watch(aiSettingsControllerProvider
-      .select((state) => state.settings.preferLocal));
+  final localOnly = ref.watch(
+    aiSettingsControllerProvider.select((state) => state.settings.preferLocal),
+  );
   return StyleRepository(ref.watch(apiClientProvider), localOnly: localOnly);
 });
 final referenceControllerProvider =
     StateNotifierProvider.autoDispose<ReferenceController, ReferenceState>(
-        (ref) => ReferenceController(
-              ref.watch(assetRepositoryProvider),
-              ref.watch(generateRepositoryProvider),
-              ref.watch(styleRepositoryProvider),
-              ref.watch(imagePickerProvider),
-            ));
+      (ref) => ReferenceController(
+        ref.watch(assetRepositoryProvider),
+        ref.watch(generateRepositoryProvider),
+        ref.watch(styleRepositoryProvider),
+        ref.watch(imagePickerProvider),
+      ),
+    );
 
 class ReferenceState {
   const ReferenceState({
@@ -64,24 +66,23 @@ class ReferenceState {
     ImageTask? task,
     String? errorMessage,
     bool clearError = false,
-  }) =>
-      ReferenceState(
-        previewBytes: previewBytes ?? this.previewBytes,
-        sourceAsset: sourceAsset ?? this.sourceAsset,
-        styles: styles ?? this.styles,
-        styleId: styleId ?? this.styleId,
-        prompt: prompt ?? this.prompt,
-        aspectRatio: aspectRatio ?? this.aspectRatio,
-        busy: busy ?? this.busy,
-        uploadProgress: uploadProgress ?? this.uploadProgress,
-        task: task ?? this.task,
-        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      );
+  }) => ReferenceState(
+    previewBytes: previewBytes ?? this.previewBytes,
+    sourceAsset: sourceAsset ?? this.sourceAsset,
+    styles: styles ?? this.styles,
+    styleId: styleId ?? this.styleId,
+    prompt: prompt ?? this.prompt,
+    aspectRatio: aspectRatio ?? this.aspectRatio,
+    busy: busy ?? this.busy,
+    uploadProgress: uploadProgress ?? this.uploadProgress,
+    task: task ?? this.task,
+    errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+  );
 }
 
 class ReferenceController extends StateNotifier<ReferenceState> {
   ReferenceController(this._assets, this._generate, this._styles, this._picker)
-      : super(const ReferenceState());
+    : super(const ReferenceState());
   final AssetRepository _assets;
   final GenerateRepository _generate;
   final StyleRepository _styles;
@@ -93,9 +94,10 @@ class ReferenceController extends StateNotifier<ReferenceState> {
     try {
       final styles = await _styles.list();
       state = state.copyWith(
-          styles: styles,
-          styleId: styles.isEmpty ? null : styles.first.id,
-          clearError: true);
+        styles: styles,
+        styleId: styles.isEmpty ? null : styles.first.id,
+        clearError: true,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
     }
@@ -104,10 +106,11 @@ class ReferenceController extends StateNotifier<ReferenceState> {
   Future<void> selectAndUpload() async {
     if (state.busy) return;
     final file = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 4096,
-        maxHeight: 4096,
-        imageQuality: 95);
+      source: ImageSource.gallery,
+      maxWidth: 4096,
+      maxHeight: 4096,
+      imageQuality: 95,
+    );
     if (file == null) return;
     final bytes = await file.readAsBytes();
     if (bytes.length > maxUploadBytes) {
@@ -115,20 +118,34 @@ class ReferenceController extends StateNotifier<ReferenceState> {
       return;
     }
     state = state.copyWith(
-        previewBytes: bytes, busy: true, uploadProgress: 0, clearError: true);
+      previewBytes: bytes,
+      busy: true,
+      uploadProgress: 0,
+      clearError: true,
+    );
     try {
-      final asset = await _assets.upload(file, onProgress: (progress) {
-        state = state.copyWith(
-            previewBytes: bytes, busy: true, uploadProgress: progress);
-      });
+      final asset = await _assets.upload(
+        file,
+        onProgress: (progress) {
+          state = state.copyWith(
+            previewBytes: bytes,
+            busy: true,
+            uploadProgress: progress,
+          );
+        },
+      );
       state = state.copyWith(
-          previewBytes: bytes,
-          sourceAsset: asset,
-          busy: false,
-          uploadProgress: 1);
+        previewBytes: bytes,
+        sourceAsset: asset,
+        busy: false,
+        uploadProgress: 1,
+      );
     } catch (error) {
       state = state.copyWith(
-          previewBytes: bytes, busy: false, errorMessage: error.toString());
+        previewBytes: bytes,
+        busy: false,
+        errorMessage: error.toString(),
+      );
     }
   }
 
@@ -139,23 +156,39 @@ class ReferenceController extends StateNotifier<ReferenceState> {
       return;
     }
     state = state.copyWith(
-        previewBytes: bytes, busy: true, uploadProgress: 0, clearError: true);
+      previewBytes: bytes,
+      busy: true,
+      uploadProgress: 0,
+      clearError: true,
+    );
     try {
-      final file = XFile.fromData(bytes,
-          mimeType: 'image/jpeg',
-          name: 'camera-${DateTime.now().millisecondsSinceEpoch}.jpg');
-      final asset = await _assets.upload(file, onProgress: (progress) {
-        state = state.copyWith(
-            previewBytes: bytes, busy: true, uploadProgress: progress);
-      });
+      final file = XFile.fromData(
+        bytes,
+        mimeType: 'image/jpeg',
+        name: 'camera-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
+      final asset = await _assets.upload(
+        file,
+        onProgress: (progress) {
+          state = state.copyWith(
+            previewBytes: bytes,
+            busy: true,
+            uploadProgress: progress,
+          );
+        },
+      );
       state = state.copyWith(
-          previewBytes: bytes,
-          sourceAsset: asset,
-          busy: false,
-          uploadProgress: 1);
+        previewBytes: bytes,
+        sourceAsset: asset,
+        busy: false,
+        uploadProgress: 1,
+      );
     } catch (error) {
       state = state.copyWith(
-          previewBytes: bytes, busy: false, errorMessage: error.toString());
+        previewBytes: bytes,
+        busy: false,
+        errorMessage: error.toString(),
+      );
     }
   }
 

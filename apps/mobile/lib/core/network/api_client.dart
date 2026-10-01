@@ -9,13 +9,13 @@ class ApiClient {
     this.onSessionInvalidated,
   }) : dio = dio ?? Dio(_options()) {
     this.dio.interceptors.add(
-          _AuthInterceptor(
-            dio: this.dio,
-            refreshDio: Dio(_options()),
-            tokenStorage: tokenStorage,
-            onSessionInvalidated: onSessionInvalidated,
-          ),
-        );
+      _AuthInterceptor(
+        dio: this.dio,
+        refreshDio: Dio(_options()),
+        tokenStorage: tokenStorage,
+        onSessionInvalidated: onSessionInvalidated,
+      ),
+    );
   }
 
   final Dio dio;
@@ -24,11 +24,11 @@ class ApiClient {
   final void Function()? onSessionInvalidated;
 
   static BaseOptions _options() => BaseOptions(
-        baseUrl: AppConfig.apiBaseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 30),
-        headers: const {'Accept': 'application/json'},
-      );
+    baseUrl: AppConfig.apiBaseUrl,
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 30),
+    headers: const {'Accept': 'application/json'},
+  );
 }
 
 class _AuthInterceptor extends QueuedInterceptor {
@@ -133,10 +133,7 @@ class _AuthInterceptor extends QueuedInterceptor {
       final access = body['access_token'];
       final nextRefresh = body['refresh_token'];
       if (access is! String || nextRefresh is! String) return null;
-      await tokenStorage.write(
-        accessToken: access,
-        refreshToken: nextRefresh,
-      );
+      await tokenStorage.write(accessToken: access, refreshToken: nextRefresh);
       return access;
     } on DioException {
       return null;

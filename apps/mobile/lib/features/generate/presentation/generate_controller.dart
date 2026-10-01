@@ -6,26 +6,32 @@ import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_co
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final generateRepositoryProvider = Provider<GenerateRepository>(
-    (ref) => GenerateRepository(
-          ref.watch(apiClientProvider),
-          ref.watch(localAIClientProvider),
-          localOnly: ref.watch(aiSettingsControllerProvider
-              .select((state) => state.settings.preferLocal)),
-        ));
+  (ref) => GenerateRepository(
+    ref.watch(apiClientProvider),
+    ref.watch(localAIClientProvider),
+    localOnly: ref.watch(
+      aiSettingsControllerProvider.select(
+        (state) => state.settings.preferLocal,
+      ),
+    ),
+  ),
+);
 final generateControllerProvider =
     StateNotifierProvider.autoDispose<GenerateController, GenerateState>(
-        (ref) => GenerateController(ref.watch(generateRepositoryProvider)));
+      (ref) => GenerateController(ref.watch(generateRepositoryProvider)),
+    );
 
 class GenerateState {
-  const GenerateState(
-      {this.prompt = '',
-      this.aspectRatio = '1:1',
-      this.count = 1,
-      this.promptOptimizer = true,
-      this.enhancing = false,
-      this.submitting = false,
-      this.task,
-      this.errorMessage});
+  const GenerateState({
+    this.prompt = '',
+    this.aspectRatio = '1:1',
+    this.count = 1,
+    this.promptOptimizer = true,
+    this.enhancing = false,
+    this.submitting = false,
+    this.task,
+    this.errorMessage,
+  });
   final String prompt;
   final String aspectRatio;
   final int count;
@@ -34,26 +40,26 @@ class GenerateState {
   final bool submitting;
   final ImageTask? task;
   final String? errorMessage;
-  GenerateState copyWith(
-          {String? prompt,
-          String? aspectRatio,
-          int? count,
-          bool? promptOptimizer,
-          bool? enhancing,
-          bool? submitting,
-          ImageTask? task,
-          String? errorMessage,
-          bool clearError = false}) =>
-      GenerateState(
-        prompt: prompt ?? this.prompt,
-        aspectRatio: aspectRatio ?? this.aspectRatio,
-        count: count ?? this.count,
-        promptOptimizer: promptOptimizer ?? this.promptOptimizer,
-        enhancing: enhancing ?? this.enhancing,
-        submitting: submitting ?? this.submitting,
-        task: task ?? this.task,
-        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      );
+  GenerateState copyWith({
+    String? prompt,
+    String? aspectRatio,
+    int? count,
+    bool? promptOptimizer,
+    bool? enhancing,
+    bool? submitting,
+    ImageTask? task,
+    String? errorMessage,
+    bool clearError = false,
+  }) => GenerateState(
+    prompt: prompt ?? this.prompt,
+    aspectRatio: aspectRatio ?? this.aspectRatio,
+    count: count ?? this.count,
+    promptOptimizer: promptOptimizer ?? this.promptOptimizer,
+    enhancing: enhancing ?? this.enhancing,
+    submitting: submitting ?? this.submitting,
+    task: task ?? this.task,
+    errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+  );
 }
 
 class GenerateController extends StateNotifier<GenerateState> {
@@ -101,10 +107,11 @@ class GenerateController extends StateNotifier<GenerateState> {
     state = state.copyWith(submitting: true, clearError: true);
     try {
       final task = await _repository.create(
-          prompt: prompt,
-          aspectRatio: state.aspectRatio,
-          count: state.count,
-          promptOptimizer: state.promptOptimizer);
+        prompt: prompt,
+        aspectRatio: state.aspectRatio,
+        count: state.count,
+        promptOptimizer: state.promptOptimizer,
+      );
       state = state.copyWith(submitting: false, task: task);
       _schedulePoll(task.id, const Duration(seconds: 2));
     } catch (error) {
@@ -123,11 +130,13 @@ class GenerateController extends StateNotifier<GenerateState> {
       state = state.copyWith(task: task, clearError: true);
       if (!task.isTerminal) {
         _schedulePoll(
-            taskId,
-            Duration(
-                seconds: previousDelay.inSeconds < 5
-                    ? previousDelay.inSeconds + 1
-                    : 5));
+          taskId,
+          Duration(
+            seconds: previousDelay.inSeconds < 5
+                ? previousDelay.inSeconds + 1
+                : 5,
+          ),
+        );
       }
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
@@ -142,7 +151,9 @@ class GenerateController extends StateNotifier<GenerateState> {
       await _repository.cancel(task.id);
       _pollTimer?.cancel();
       state = state.copyWith(
-          task: await _repository.get(task.id), clearError: true);
+        task: await _repository.get(task.id),
+        clearError: true,
+      );
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
     }

@@ -22,8 +22,7 @@ class LiveCameraAnalyzer {
     CameraImage image,
     CameraDescription camera,
     DeviceOrientation deviceOrientation,
-  ) async =>
-      null;
+  ) async => null;
 
   Future<void> close() async {}
 }

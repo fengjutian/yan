@@ -9,24 +9,28 @@ import 'package:image_picker/image_picker.dart';
 const maxUploadBytes = 10 * 1024 * 1024;
 final imagePickerProvider = Provider<ImagePicker>((ref) => ImagePicker());
 final assetRepositoryProvider = Provider<AssetRepository>((ref) {
-  final localOnly = ref.watch(aiSettingsControllerProvider
-      .select((state) => state.settings.preferLocal));
+  final localOnly = ref.watch(
+    aiSettingsControllerProvider.select((state) => state.settings.preferLocal),
+  );
   return AssetRepository(ref.watch(apiClientProvider), localOnly: localOnly);
 });
 final assetUploadControllerProvider =
     StateNotifierProvider.autoDispose<AssetUploadController, AssetUploadState>(
-  (ref) => AssetUploadController(
-      ref.watch(assetRepositoryProvider), ref.watch(imagePickerProvider)),
-);
+      (ref) => AssetUploadController(
+        ref.watch(assetRepositoryProvider),
+        ref.watch(imagePickerProvider),
+      ),
+    );
 
 class AssetUploadState {
-  const AssetUploadState(
-      {this.selectedFile,
-      this.previewBytes,
-      this.uploadedAsset,
-      this.uploading = false,
-      this.progress = 0,
-      this.errorMessage});
+  const AssetUploadState({
+    this.selectedFile,
+    this.previewBytes,
+    this.uploadedAsset,
+    this.uploading = false,
+    this.progress = 0,
+    this.errorMessage,
+  });
   final XFile? selectedFile;
   final Uint8List? previewBytes;
   final ImageAsset? uploadedAsset;
@@ -42,29 +46,29 @@ class AssetUploadState {
     double? progress,
     String? errorMessage,
     bool clearError = false,
-  }) =>
-      AssetUploadState(
-        selectedFile: selectedFile ?? this.selectedFile,
-        previewBytes: previewBytes ?? this.previewBytes,
-        uploadedAsset: uploadedAsset ?? this.uploadedAsset,
-        uploading: uploading ?? this.uploading,
-        progress: progress ?? this.progress,
-        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      );
+  }) => AssetUploadState(
+    selectedFile: selectedFile ?? this.selectedFile,
+    previewBytes: previewBytes ?? this.previewBytes,
+    uploadedAsset: uploadedAsset ?? this.uploadedAsset,
+    uploading: uploading ?? this.uploading,
+    progress: progress ?? this.progress,
+    errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+  );
 }
 
 class AssetUploadController extends StateNotifier<AssetUploadState> {
   AssetUploadController(this._repository, this._picker)
-      : super(const AssetUploadState());
+    : super(const AssetUploadState());
   final AssetRepository _repository;
   final ImagePicker _picker;
 
   Future<void> selectImage() async {
     final selected = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 4096,
-        maxHeight: 4096,
-        imageQuality: 95);
+      source: ImageSource.gallery,
+      maxWidth: 4096,
+      maxHeight: 4096,
+      imageQuality: 95,
+    );
     if (selected == null) return;
     final bytes = await selected.readAsBytes();
     if (bytes.length > maxUploadBytes) {
@@ -84,26 +88,35 @@ class AssetUploadController extends StateNotifier<AssetUploadState> {
     }
     final preview = state.previewBytes;
     state = AssetUploadState(
-        selectedFile: file, previewBytes: preview, uploading: true);
+      selectedFile: file,
+      previewBytes: preview,
+      uploading: true,
+    );
     try {
-      final asset = await _repository.upload(file, onProgress: (progress) {
-        state = AssetUploadState(
+      final asset = await _repository.upload(
+        file,
+        onProgress: (progress) {
+          state = AssetUploadState(
             selectedFile: file,
             previewBytes: preview,
             uploading: true,
-            progress: progress);
-      });
+            progress: progress,
+          );
+        },
+      );
       state = AssetUploadState(
-          selectedFile: file,
-          previewBytes: preview,
-          uploadedAsset: asset,
-          progress: 1);
+        selectedFile: file,
+        previewBytes: preview,
+        uploadedAsset: asset,
+        progress: 1,
+      );
       return true;
     } catch (error) {
       state = AssetUploadState(
-          selectedFile: file,
-          previewBytes: preview,
-          errorMessage: error.toString());
+        selectedFile: file,
+        previewBytes: preview,
+        errorMessage: error.toString(),
+      );
       return false;
     }
   }

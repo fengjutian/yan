@@ -33,8 +33,7 @@ class AISettings {
   final String model;
   final String apiKey;
 
-  bool get canCallLocally =>
-      enabled && preferLocal && apiKey.trim().isNotEmpty;
+  bool get canCallLocally => enabled && preferLocal && apiKey.trim().isNotEmpty;
 
   AISettings copyWith({
     bool? enabled,
@@ -43,15 +42,14 @@ class AISettings {
     String? baseUrl,
     String? model,
     String? apiKey,
-  }) =>
-      AISettings(
-        enabled: enabled ?? this.enabled,
-        preferLocal: preferLocal ?? this.preferLocal,
-        provider: provider ?? this.provider,
-        baseUrl: baseUrl ?? this.baseUrl,
-        model: model ?? this.model,
-        apiKey: apiKey ?? this.apiKey,
-      );
+  }) => AISettings(
+    enabled: enabled ?? this.enabled,
+    preferLocal: preferLocal ?? this.preferLocal,
+    provider: provider ?? this.provider,
+    baseUrl: baseUrl ?? this.baseUrl,
+    model: model ?? this.model,
+    apiKey: apiKey ?? this.apiKey,
+  );
 }
 
 abstract interface class AISettingsStore {
@@ -61,7 +59,7 @@ abstract interface class AISettingsStore {
 
 class SecureAISettingsRepository implements AISettingsStore {
   SecureAISettingsRepository({FlutterSecureStorage? storage})
-      : _storage = storage ?? const FlutterSecureStorage();
+    : _storage = storage ?? const FlutterSecureStorage();
 
   // 保留旧 key 名称，MiniMax 用户升级后无需重新配置。
   static const _enabledKey = 'ai.minimax.enabled';

@@ -67,13 +67,12 @@ class AuthState {
     bool? submitting,
     String? errorMessage,
     bool clearError = false,
-  }) =>
-      AuthState(
-        user: user ?? this.user,
-        initialized: initialized ?? this.initialized,
-        submitting: submitting ?? this.submitting,
-        errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
-      );
+  }) => AuthState(
+    user: user ?? this.user,
+    initialized: initialized ?? this.initialized,
+    submitting: submitting ?? this.submitting,
+    errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
+  );
 }
 
 class AuthController extends StateNotifier<AuthState> {

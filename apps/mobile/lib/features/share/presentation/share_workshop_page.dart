@@ -59,9 +59,9 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
       });
       // 进入页面时自动起一份 AI 文案。
       if (url != null && task.prompt.isNotEmpty) {
-        ref.read(shareControllerProvider.notifier).generateCaption(
-              imagePrompt: task.prompt,
-            );
+        ref
+            .read(shareControllerProvider.notifier)
+            .generateCaption(imagePrompt: task.prompt);
       }
     } catch (e) {
       if (!mounted) return;
@@ -153,13 +153,16 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
           if (shareState.errorMessage != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Text(shareState.errorMessage!,
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error)),
+              child: Text(
+                shareState.errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
             ),
           TextField(
             controller: TextEditingController(text: shareState.title)
-              ..selection = TextSelection.collapsed(offset: shareState.title.length),
+              ..selection = TextSelection.collapsed(
+                offset: shareState.title.length,
+              ),
             decoration: const InputDecoration(
               labelText: '标题',
               border: OutlineInputBorder(),
@@ -170,7 +173,9 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
           const SizedBox(height: 8),
           TextField(
             controller: TextEditingController(text: shareState.caption)
-              ..selection = TextSelection.collapsed(offset: shareState.caption.length),
+              ..selection = TextSelection.collapsed(
+                offset: shareState.caption.length,
+              ),
             maxLines: 4,
             decoration: const InputDecoration(
               labelText: '正文',
@@ -179,28 +184,27 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
             onChanged: controller.setCaption,
           ),
           const SizedBox(height: 8),
-          _TagsEditor(
-            tags: shareState.tags,
-            onChanged: controller.setTags,
-          ),
+          _TagsEditor(tags: shareState.tags, onChanged: controller.setTags),
           const SizedBox(height: 24),
-          Row(children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _busy ? null : () => _copyText(context),
-                icon: const Icon(Icons.copy_outlined),
-                label: const Text('复制文案'),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _copyText(context),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('复制文案'),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _busy ? null : () => _saveToGallery(context),
-                icon: const Icon(Icons.download_outlined),
-                label: const Text('保存到相册'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : () => _saveToGallery(context),
+                  icon: const Icon(Icons.download_outlined),
+                  label: const Text('保存到相册'),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
           const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _busy ? null : () => _systemShare(context),
@@ -219,10 +223,12 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(const SnackBar(
-        content: Text('文案已复制到剪贴板'),
-        behavior: SnackBarBehavior.floating,
-      ));
+      ..showSnackBar(
+        const SnackBar(
+          content: Text('文案已复制到剪贴板'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
   }
 
   Future<void> _saveToGallery(BuildContext context) async {
@@ -242,17 +248,17 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
       );
       if (!context.mounted) return;
       if (result.isSuccess) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('已保存到相册')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('已保存到相册')));
       } else {
         throw Exception(result.errorMessage ?? '保存失败');
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('保存失败：${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败：${e.toString()}')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -268,7 +274,9 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
         ref.read(shareConfigProvider),
       );
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.png');
+      final file = File(
+        '${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.png',
+      );
       await file.writeAsBytes(bytes, flush: true);
       final text = ref.read(shareControllerProvider.notifier).exportText();
       await Share.shareXFiles(
@@ -278,9 +286,9 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('分享失败：${e.toString()}')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('分享失败：${e.toString()}')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -340,11 +348,18 @@ Uint8List _exportImage(Uint8List bytes, ShareConfig config) {
     final boxHeight = 24 + padding * 2;
     final margin = (image.width * 0.025).round().clamp(12, 40).toInt();
     final (x, y) = switch (config.watermark) {
-      WatermarkPosition.bottomLeft => (margin, image.height - boxHeight - margin),
-      WatermarkPosition.bottomRight =>
-        (image.width - boxWidth - margin, image.height - boxHeight - margin),
-      WatermarkPosition.center =>
-        ((image.width - boxWidth) ~/ 2, (image.height - boxHeight) ~/ 2),
+      WatermarkPosition.bottomLeft => (
+        margin,
+        image.height - boxHeight - margin,
+      ),
+      WatermarkPosition.bottomRight => (
+        image.width - boxWidth - margin,
+        image.height - boxHeight - margin,
+      ),
+      WatermarkPosition.center => (
+        (image.width - boxWidth) ~/ 2,
+        (image.height - boxHeight) ~/ 2,
+      ),
       WatermarkPosition.hidden => (0, 0),
     };
     img.fillRect(
@@ -401,32 +416,38 @@ class _PreviewCanvas extends StatelessWidget {
       image = AspectRatio(aspectRatio: aspect, child: image);
     }
     if (config.watermark != WatermarkPosition.hidden) {
-      image = Stack(children: [
-        image,
-        Positioned(
-          left: config.watermark == WatermarkPosition.bottomLeft ? 12 : null,
-          right: config.watermark == WatermarkPosition.bottomRight ? 12 : null,
-          top: config.watermark == WatermarkPosition.center ? null : null,
-          bottom: 12,
-          child: _Watermark(),
-        ),
-      ]);
+      image = Stack(
+        children: [
+          image,
+          Positioned(
+            left: config.watermark == WatermarkPosition.bottomLeft ? 12 : null,
+            right: config.watermark == WatermarkPosition.bottomRight
+                ? 12
+                : null,
+            top: config.watermark == WatermarkPosition.center ? null : null,
+            bottom: 12,
+            child: _Watermark(),
+          ),
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(children: [
-          Text('预览', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppColors.cream,
-              borderRadius: BorderRadius.circular(99),
+        Row(
+          children: [
+            Text('预览', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.cream,
+                borderRadius: BorderRadius.circular(99),
+              ),
+              child: Text(ratioLabel, style: const TextStyle(fontSize: 11)),
             ),
-            child: Text(ratioLabel, style: const TextStyle(fontSize: 11)),
-          ),
-        ]),
+          ],
+        ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -443,14 +464,16 @@ class _PreviewCanvas extends StatelessWidget {
 class _Watermark extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Text('颜 · AI 生成',
-            style: TextStyle(color: Colors.white, fontSize: 11)),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: const Text(
+      '颜 · AI 生成',
+      style: TextStyle(color: Colors.white, fontSize: 11),
+    ),
+  );
 }
 
 class _PlatformPicker extends StatelessWidget {
@@ -460,20 +483,24 @@ class _PlatformPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('分享尺寸', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Text('分享尺寸', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final p in SharePlatform.values)
-              ChoiceChip(
-                label: Text(p.label),
-                selected: current == p,
-                onSelected: (_) => onChanged(p),
-              ),
-          ]),
+          for (final p in SharePlatform.values)
+            ChoiceChip(
+              label: Text(p.label),
+              selected: current == p,
+              onSelected: (_) => onChanged(p),
+            ),
         ],
-      );
+      ),
+    ],
+  );
 }
 
 class _WatermarkPicker extends StatelessWidget {
@@ -483,25 +510,29 @@ class _WatermarkPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text('水印', style: Theme.of(context).textTheme.titleMedium),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
         children: [
-          Text('水印', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            for (final w in WatermarkPosition.values)
-              ChoiceChip(
-                label: Text(switch (w) {
-                  WatermarkPosition.hidden => '不添加',
-                  WatermarkPosition.bottomLeft => '左下',
-                  WatermarkPosition.bottomRight => '右下',
-                  WatermarkPosition.center => '居中',
-                }),
-                selected: current == w,
-                onSelected: (_) => onChanged(w),
-              ),
-          ]),
+          for (final w in WatermarkPosition.values)
+            ChoiceChip(
+              label: Text(switch (w) {
+                WatermarkPosition.hidden => '不添加',
+                WatermarkPosition.bottomLeft => '左下',
+                WatermarkPosition.bottomRight => '右下',
+                WatermarkPosition.center => '居中',
+              }),
+              selected: current == w,
+              onSelected: (_) => onChanged(w),
+            ),
         ],
-      );
+      ),
+    ],
+  );
 }
 
 class _TagsEditor extends StatefulWidget {
@@ -539,29 +570,32 @@ class _TagsEditorState extends State<_TagsEditor> {
                   widget.onChanged(next);
                 },
               ),
-            for (int i = 0; i < 3 - widget.tags.length && widget.tags.length < 3; i++)
+            for (
+              int i = 0;
+              i < 3 - widget.tags.length && widget.tags.length < 3;
+              i++
+            )
               const SizedBox.shrink(),
           ],
         ),
         const SizedBox(height: 8),
-        Row(children: [
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              decoration: const InputDecoration(
-                labelText: '添加标签',
-                isDense: true,
-                border: OutlineInputBorder(),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _controller,
+                decoration: const InputDecoration(
+                  labelText: '添加标签',
+                  isDense: true,
+                  border: OutlineInputBorder(),
+                ),
+                onSubmitted: (_) => _add(),
               ),
-              onSubmitted: (_) => _add(),
             ),
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: _add,
-            icon: const Icon(Icons.add),
-          ),
-        ]),
+            const SizedBox(width: 8),
+            IconButton(onPressed: _add, icon: const Icon(Icons.add)),
+          ],
+        ),
       ],
     );
   }

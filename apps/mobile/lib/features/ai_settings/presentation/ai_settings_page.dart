@@ -47,17 +47,19 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(children: [
-                          const Icon(Icons.bolt_rounded),
-                          const SizedBox(width: 8),
-                          Text(
-                            '${provider.label} 国内线路',
-                            style: const TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
+                        Row(
+                          children: [
+                            const Icon(Icons.bolt_rounded),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${provider.label} 国内线路',
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                        ]),
+                          ],
+                        ),
                         const SizedBox(height: 8),
                         Text(
                           '配置仅保存在本机安全存储中。启用后，AI 帮写和分享文案会优先由 APP 直连所选服务，失败时自动回退服务端。',
@@ -72,10 +74,12 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                   initialValue: provider,
                   decoration: const InputDecoration(labelText: '服务商'),
                   items: AIProvider.values
-                      .map((value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(value.label),
-                          ))
+                      .map(
+                        (value) => DropdownMenuItem(
+                          value: value,
+                          child: Text(value.label),
+                        ),
+                      )
                       .toList(),
                   onChanged: (value) {
                     if (value == null || value == provider) return;
@@ -112,9 +116,11 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                     suffixIcon: IconButton(
                       onPressed: () =>
                           setState(() => _obscureKey = !_obscureKey),
-                      icon: Icon(_obscureKey
-                          ? Icons.visibility_outlined
-                          : Icons.visibility_off_outlined),
+                      icon: Icon(
+                        _obscureKey
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                      ),
                     ),
                   ),
                   onChanged: (_) => _update(),
@@ -149,35 +155,37 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                   ),
                 ],
                 const SizedBox(height: 24),
-                Row(children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: state.testing || state.saving
-                          ? null
-                          : () {
-                              _update();
-                              ref
-                                  .read(aiSettingsControllerProvider.notifier)
-                                  .test();
-                            },
-                      child: Text(state.testing ? '测试中…' : '测试连接'),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: state.testing || state.saving
+                            ? null
+                            : () {
+                                _update();
+                                ref
+                                    .read(aiSettingsControllerProvider.notifier)
+                                    .test();
+                              },
+                        child: Text(state.testing ? '测试中…' : '测试连接'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: FilledButton(
-                      onPressed: state.testing || state.saving
-                          ? null
-                          : () async {
-                              _update();
-                              await ref
-                                  .read(aiSettingsControllerProvider.notifier)
-                                  .save();
-                            },
-                      child: Text(state.saving ? '保存中…' : '保存设置'),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: FilledButton(
+                        onPressed: state.testing || state.saving
+                            ? null
+                            : () async {
+                                _update();
+                                await ref
+                                    .read(aiSettingsControllerProvider.notifier)
+                                    .save();
+                              },
+                        child: Text(state.saving ? '保存中…' : '保存设置'),
+                      ),
                     ),
-                  ),
-                ]),
+                  ],
+                ),
               ],
             ),
     );
@@ -189,19 +197,19 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
     _apiKey.text = settings.apiKey;
   }
 
-  void _update({
-    bool? enabled,
-    bool? preferLocal,
-    AIProvider? provider,
-  }) {
+  void _update({bool? enabled, bool? preferLocal, AIProvider? provider}) {
     final current = ref.read(aiSettingsControllerProvider).settings;
-    ref.read(aiSettingsControllerProvider.notifier).update(AISettings(
-          enabled: enabled ?? current.enabled,
-          preferLocal: preferLocal ?? current.preferLocal,
-          provider: provider ?? current.provider,
-          baseUrl: _baseUrl.text,
-          model: _model.text,
-          apiKey: _apiKey.text,
-        ));
+    ref
+        .read(aiSettingsControllerProvider.notifier)
+        .update(
+          AISettings(
+            enabled: enabled ?? current.enabled,
+            preferLocal: preferLocal ?? current.preferLocal,
+            provider: provider ?? current.provider,
+            baseUrl: _baseUrl.text,
+            model: _model.text,
+            apiKey: _apiKey.text,
+          ),
+        );
   }
 }

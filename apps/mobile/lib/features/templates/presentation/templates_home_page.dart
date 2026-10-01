@@ -111,12 +111,16 @@ class _FeaturedBanner extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
-          child: Row(children: [
-            Text('本周精选', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            const Text('按热度排序',
-                style: TextStyle(color: AppColors.muted, fontSize: 12)),
-          ]),
+          child: Row(
+            children: [
+              Text('本周精选', style: Theme.of(context).textTheme.titleLarge),
+              const Spacer(),
+              const Text(
+                '按热度排序',
+                style: TextStyle(color: AppColors.muted, fontSize: 12),
+              ),
+            ],
+          ),
         ),
         SizedBox(
           height: 220,
@@ -157,35 +161,48 @@ class _FeaturedCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.7),
                 borderRadius: BorderRadius.circular(99),
               ),
-              child: Text(item.category.label,
-                  style: const TextStyle(fontSize: 11)),
+              child: Text(
+                item.category.label,
+                style: const TextStyle(fontSize: 11),
+              ),
             ),
             const Spacer(),
-            Text(item.title,
-                style: const TextStyle(
-                    fontSize: 20, fontWeight: FontWeight.w800)),
+            Text(
+              item.title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+            ),
             const SizedBox(height: 4),
-            Text(item.subtitle,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 12)),
+            Text(
+              item.subtitle,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12),
+            ),
             const SizedBox(height: 8),
-            Row(children: [
-              const Icon(Icons.local_fire_department,
-                  size: 14, color: Colors.deepOrange),
-              const SizedBox(width: 4),
-              Text('${item.popularity}',
+            Row(
+              children: [
+                const Icon(
+                  Icons.local_fire_department,
+                  size: 14,
+                  color: Colors.deepOrange,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '${item.popularity}',
                   style: const TextStyle(
-                      fontSize: 11, fontWeight: FontWeight.w700)),
-              const Spacer(),
-              const Icon(Icons.arrow_forward_rounded, size: 18),
-            ]),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                const Icon(Icons.arrow_forward_rounded, size: 18),
+              ],
+            ),
           ],
         ),
       ),
@@ -197,9 +214,9 @@ class _BannerSkeleton extends StatelessWidget {
   const _BannerSkeleton();
   @override
   Widget build(BuildContext context) => const SizedBox(
-        height: 220,
-        child: Center(child: CircularProgressIndicator()),
-      );
+    height: 220,
+    child: Center(child: CircularProgressIndicator()),
+  );
 }
 
 class _CategoryChips extends StatelessWidget {
@@ -223,11 +240,14 @@ class _CategoryChips extends StatelessWidget {
           const SizedBox(width: 8),
           for (final c in TemplateCategory.values) ...[
             ChoiceChip(
-              label: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(c.icon, size: 14),
-                const SizedBox(width: 4),
-                Text(c.label),
-              ]),
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(c.icon, size: 14),
+                  const SizedBox(width: 4),
+                  Text(c.label),
+                ],
+              ),
               selected: current == c,
               onSelected: (_) => onChanged(c),
             ),
@@ -304,44 +324,59 @@ class _TemplateCard extends StatelessWidget {
                 gradient: LinearGradient(
                   colors: [
                     item.coverColor,
-                    _mix(item.coverColor, Colors.white, .5)
+                    _mix(item.coverColor, Colors.white, .5),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                 ),
                 borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(20)),
-              ),
-              child: Stack(children: [
-                Center(child: Icon(item.category.icon, size: 36, color: Colors.black54)),
-                Positioned(
-                  top: 8,
-                  right: 8,
-                  child: IconButton(
-                    icon: Icon(
-                      isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: isFavorite ? Colors.redAccent : Colors.black54,
-                    ),
-                    onPressed: onToggleFavorite,
-                  ),
+                  top: Radius.circular(20),
                 ),
-              ]),
+              ),
+              child: Stack(
+                children: [
+                  Center(
+                    child: Icon(
+                      item.category.icon,
+                      size: 36,
+                      color: Colors.black54,
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: IconButton(
+                      icon: Icon(
+                        isFavorite ? Icons.favorite : Icons.favorite_border,
+                        color: isFavorite ? Colors.redAccent : Colors.black54,
+                      ),
+                      onPressed: onToggleFavorite,
+                    ),
+                  ),
+                ],
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(
+                    item.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   const SizedBox(height: 2),
-                  Text(item.subtitle,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 11, color: AppColors.muted)),
+                  Text(
+                    item.subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.muted,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -365,8 +400,10 @@ class _FavoritesSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('我的收藏 (${favorites.length})',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              '我的收藏 (${favorites.length})',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: 12),
             if (favorites.isEmpty)
               const Padding(

@@ -6,10 +6,13 @@ import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show DeviceOrientation, PlatformException;
+import 'package:flutter/services.dart'
+    show DeviceOrientation, HapticFeedback, PlatformException;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
@@ -45,6 +48,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   CameraController? _controller;
   List<CameraDescription> _cameras = const [];
   Uint8List? _capturedImage;
+  bool _reviewing = false;
   CompositionGuide _guide = CompositionGuide.thirds;
   FlashMode _flashMode = FlashMode.off;
   bool _showGuide = true;
@@ -73,6 +77,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   LiveCameraAnalysis? _liveAnalysis;
   bool _showRealtimeGuidance = true;
   bool _showCameraOptions = false;
+  bool _shutterFlash = false;
+  bool _focusLocked = false;
 
   @override
   void initState() {
@@ -301,6 +307,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       return;
     }
     setState(() => _capturing = true);
+    unawaited(HapticFeedback.mediumImpact());
     try {
       for (var value = _countdownSeconds; value > 0; value--) {
         if (!mounted) return;
@@ -314,12 +321,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
       final values = <Uint8List>[];
       XFile? analysisFile;
       for (var index = 0; index < _burstCount; index++) {
+        if (mounted) setState(() => _shutterFlash = true);
         final file = await controller.takePicture();
+        if (mounted) setState(() => _shutterFlash = false);
         analysisFile ??= file;
-        values.add(await file.readAsBytes());
+        final bytes = await file.readAsBytes();
+        values.add(await compute(_cropToAspect, (bytes, _aspectRatio)));
         if (index + 1 < _burstCount) {
           await Future<void>.delayed(const Duration(milliseconds: 220));
         }
+      }
+      if (mounted && values.isNotEmpty) {
+        setState(() => _capturedImage = values.first);
       }
       await ref.read(cameraSessionProvider.notifier).setPhotos(values);
       final session = ref.read(cameraSessionProvider);
@@ -330,6 +343,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
         _compositionSuggestion = analysis.suggestion;
       }
       if (mounted) setState(() => _capturedImage = session.selected?.bytes);
+      if (!controller.value.isStreamingImages) {
+        await _startLightMonitoring(controller);
+      }
     } on CameraException catch (error) {
       if (mounted) _showMessage(_cameraError(error));
     } on PlatformException catch (error) {
@@ -362,10 +378,52 @@ class _CameraPageState extends ConsumerState<CameraPage>
     try {
       await controller.setFocusPoint(point);
       await controller.setExposurePoint(point);
-      setState(() => _focusPoint = details.localPosition);
+      setState(() {
+        _focusPoint = details.localPosition;
+        _focusLocked = false;
+      });
       await Future<void>.delayed(const Duration(milliseconds: 800));
-      if (mounted) setState(() => _focusPoint = null);
+      if (mounted && !_focusLocked) setState(() => _focusPoint = null);
     } on CameraException {/* Device does not support manual focus. */}
+  }
+
+  Future<void> _lockFocus(
+      LongPressStartDetails details, BoxConstraints constraints) async {
+    await _focus(
+      TapDownDetails(localPosition: details.localPosition),
+      constraints,
+    );
+    if (!mounted) return;
+    setState(() {
+      _focusPoint = details.localPosition;
+      _focusLocked = true;
+    });
+    unawaited(HapticFeedback.selectionClick());
+  }
+
+  void _handleScaleUpdate(ScaleUpdateDetails details) {
+    if (details.pointerCount > 1) {
+      unawaited(_setZoom(details.scale));
+      return;
+    }
+    if (_focusPoint == null || details.focalPointDelta.dy == 0) return;
+    final range = (_maxExposure - _minExposure).abs();
+    final next = _exposure - details.focalPointDelta.dy / 240 * range;
+    unawaited(_setExposure(next.clamp(_minExposure, _maxExposure)));
+  }
+
+  Future<void> _setZoomLevel(double value) async {
+    final controller = _controller;
+    if (controller == null) return;
+    final next = value.clamp(_minZoom, _maxZoom).toDouble();
+    try {
+      await controller.setZoomLevel(next);
+      if (mounted) setState(() => _zoom = next);
+    } on CameraException catch (_) {
+      // Device does not support the requested continuous zoom value.
+    } on PlatformException catch (_) {
+      // Some vendor camera implementations reject individual zoom values.
+    }
   }
 
   Future<void> _setZoom(double scale) async {
@@ -442,7 +500,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   Widget build(BuildContext context) {
-    if (_capturedImage != null) return _buildReview();
+    if (_reviewing && _capturedImage != null) return _buildReview();
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
@@ -471,6 +529,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Widget _buildTopBar() => Padding(
         padding: const EdgeInsets.fromLTRB(14, 6, 14, 8),
         child: Row(children: [
+          IconButton(
+              tooltip: '关闭',
+              onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+              icon: const Icon(Icons.close_rounded, color: Colors.white)),
           IconButton(
               tooltip: '闪光灯',
               onPressed: _toggleFlash,
@@ -522,8 +584,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           children: [
             for (final ratio in const [
               ('1:1', 1.0),
-              ('3:4', .75),
-              ('9:16', .5625),
+              ('4:3', .75),
+              ('16:9', .5625),
             ])
               _CameraOption(
                 label: ratio.$1,
@@ -582,10 +644,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
     return LayoutBuilder(
         builder: (context, constraints) => GestureDetector(
               onTapDown: (details) => _focus(details, constraints),
+              onLongPressStart: (details) =>
+                  _lockFocus(details, constraints),
               onScaleStart: (_) => _baseZoom = _zoom,
-              onScaleUpdate: (details) => _setZoom(details.scale),
+              onScaleUpdate: _handleScaleUpdate,
               child: Stack(fit: StackFit.expand, children: [
-                CameraPreview(controller),
+                _CroppedCameraPreview(controller: controller),
                 if (_showRealtimeGuidance &&
                     _liveAnalysis?.landmarks.isNotEmpty == true)
                   IgnorePointer(
@@ -598,7 +662,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   Positioned(
                       left: _focusPoint!.dx - 25,
                       top: _focusPoint!.dy - 25,
-                      child: const IgnorePointer(child: _FocusRing())),
+                      child: IgnorePointer(
+                          child: _FocusRing(locked: _focusLocked))),
                 if (_countdown > 0)
                   Center(
                       child: Text('$_countdown',
@@ -619,21 +684,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
                           scene: _liveAnalysis!.scene,
                           confidence: _liveAnalysis!.sceneConfidence)),
                 Positioned(
-                    right: 4,
-                    top: 55,
-                    child: RotatedBox(
-                        quarterTurns: 3,
-                        child: SizedBox(
-                            width: 140,
-                            child: Slider(
-                                value:
-                                    _exposure.clamp(_minExposure, _maxExposure),
-                                min: _minExposure,
-                                max: _maxExposure == _minExposure
-                                    ? _minExposure + 1
-                                    : _maxExposure,
-                                onChanged: _setExposure)))),
-                Positioned(
                     bottom: 18,
                     left: 18,
                     right: 18,
@@ -641,6 +691,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
                         zoom: _zoom,
                         brightness: _brightness,
                         suggestion: _compositionSuggestion)),
+                if (_shutterFlash)
+                  const Positioned.fill(
+                      child: IgnorePointer(child: ColoredBox(color: Colors.white))),
               ]),
             ));
   }
@@ -661,12 +714,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
               onTap: () => setState(() => _burstCount = 5),
             ),
           ]),
+          const SizedBox(height: 8),
+          _ZoomSelector(
+            zoom: _zoom,
+            minZoom: _minZoom,
+            maxZoom: _maxZoom,
+            onSelected: (value) {
+              unawaited(_setZoomLevel(value));
+            },
+          ),
           const SizedBox(height: 10),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            _RoundAction(
-                icon: Icons.photo_library_outlined,
-                label: '相册',
-                onTap: _importPhoto),
+            _CameraThumbnail(
+              bytes: _capturedImage,
+              onTap: _capturedImage == null
+                  ? _importPhoto
+                  : () => setState(() => _reviewing = true),
+            ),
             GestureDetector(
                 onTap: _capture,
                 child: AnimatedContainer(
@@ -772,7 +836,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
 
   Future<void> _retake() async {
-    if (mounted) setState(() => _capturedImage = null);
+    if (mounted) setState(() {
+      _capturedImage = null;
+      _reviewing = false;
+    });
     final controller = _controller;
     if (controller == null || !controller.value.isInitialized) return;
     if (!controller.value.isStreamingImages) {
@@ -781,15 +848,71 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 }
 
-class _FocusRing extends StatelessWidget {
-  const _FocusRing();
+Uint8List _cropToAspect((Uint8List, double) input) {
+  final decoded = img.decodeImage(input.$1);
+  if (decoded == null) return input.$1;
+  final image = img.bakeOrientation(decoded);
+  final target = input.$2;
+  final current = image.width / image.height;
+  var width = image.width;
+  var height = image.height;
+  if (current > target) {
+    width = (height * target).round();
+  } else {
+    height = (width / target).round();
+  }
+  final cropped = img.copyCrop(
+    image,
+    x: (image.width - width) ~/ 2,
+    y: (image.height - height) ~/ 2,
+    width: width,
+    height: height,
+  );
+  return Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
+}
+
+class _CroppedCameraPreview extends StatelessWidget {
+  const _CroppedCameraPreview({required this.controller});
+
+  final CameraController controller;
+
   @override
-  Widget build(BuildContext context) => Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-          border: Border.all(color: Colors.amber, width: 1.5),
-          borderRadius: BorderRadius.circular(4)));
+  Widget build(BuildContext context) {
+    final size = controller.value.previewSize;
+    if (size == null) return CameraPreview(controller);
+    return FittedBox(
+      fit: BoxFit.cover,
+      clipBehavior: Clip.hardEdge,
+      child: SizedBox(
+        width: size.height,
+        height: size.width,
+        child: CameraPreview(controller),
+      ),
+    );
+  }
+}
+
+class _FocusRing extends StatelessWidget {
+  const _FocusRing({required this.locked});
+  final bool locked;
+  @override
+  Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                  border: Border.all(color: Colors.amber, width: 1.5),
+                  borderRadius: BorderRadius.circular(4))),
+          if (locked)
+            const Padding(
+              padding: EdgeInsets.only(top: 3),
+              child: Text('自动曝光/自动对焦锁定',
+                  style: TextStyle(color: Colors.amber, fontSize: 9)),
+            ),
+        ],
+      );
 }
 
 class _LevelIndicator extends StatelessWidget {
@@ -966,6 +1089,92 @@ class _CameraModeLabel extends StatelessWidget {
         ),
       );
 }
+
+class _ZoomSelector extends StatelessWidget {
+  const _ZoomSelector({
+    required this.zoom,
+    required this.minZoom,
+    required this.maxZoom,
+    required this.onSelected,
+  });
+
+  final double zoom;
+  final double minZoom;
+  final double maxZoom;
+  final ValueChanged<double> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final candidates = <double>{
+      minZoom,
+      1,
+      if (maxZoom >= 2) 2,
+      if (maxZoom >= 3) 3,
+    }.where((value) => value >= minZoom && value <= maxZoom).toList()
+      ..sort();
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        for (final value in candidates)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: InkResponse(
+              onTap: () => onSelected(value),
+              radius: 25,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: (zoom - value).abs() < .08 ? 42 : 34,
+                height: (zoom - value).abs() < .08 ? 42 : 34,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: (zoom - value).abs() < .08
+                      ? const Color(0xFFFFD60A)
+                      : const Color(0xFF2C2C2E),
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '${value.toStringAsFixed(value % 1 == 0 ? 0 : 1)}×',
+                  style: TextStyle(
+                    color: (zoom - value).abs() < .08
+                        ? Colors.black
+                        : Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _CameraThumbnail extends StatelessWidget {
+  const _CameraThumbnail({required this.bytes, required this.onTap});
+
+  final Uint8List? bytes;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          width: 54,
+          height: 54,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            color: const Color(0xFF2C2C2E),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white24),
+          ),
+          child: bytes == null
+              ? const Icon(Icons.photo_library_outlined,
+                  color: Colors.white, size: 24)
+              : Image.memory(bytes!, fit: BoxFit.cover),
+        ),
+      );
 
 class _RoundAction extends StatelessWidget {
   const _RoundAction(

@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 
 class LocalAIClient {
   LocalAIClient(this._settings, this._backend, {Dio? directClient})
-      : _direct = directClient ?? Dio();
+    : _direct = directClient ?? Dio();
 
   static const promptSystemMessage =
       '你是专业的 AI 绘画提示词编辑。依据用户原意补充主体细节、环境、光线、构图、色彩和材质。'
@@ -45,11 +45,8 @@ class LocalAIClient {
         '色彩协调，真实细腻质感，高质量摄影画面';
   }
 
-  Future<String> test(AISettings settings) => _callProvider(
-        settings,
-        '一只在窗边晒太阳的猫',
-        '请简短优化用户的图片生成提示词，只返回优化结果。',
-      );
+  Future<String> test(AISettings settings) =>
+      _callProvider(settings, '一只在窗边晒太阳的猫', '请简短优化用户的图片生成提示词，只返回优化结果。');
 
   Future<String> _callProvider(
     AISettings settings,
@@ -57,8 +54,8 @@ class LocalAIClient {
     String systemMessage,
   ) async {
     final baseUrl = settings.baseUrl.trim().replaceFirst(RegExp(r'/+$'), '');
-    final versionPath = settings.provider == AIProvider.miniMax &&
-            !baseUrl.endsWith('/v1')
+    final versionPath =
+        settings.provider == AIProvider.miniMax && !baseUrl.endsWith('/v1')
         ? '/v1'
         : '';
     final response = await _direct.post<Map<String, dynamic>>(

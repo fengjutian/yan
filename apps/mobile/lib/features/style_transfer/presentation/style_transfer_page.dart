@@ -82,15 +82,21 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                     min: 0,
                     max: 1,
                   ),
-                  Row(children: [
-                    const Text('保持原片', style: TextStyle(fontSize: 12)),
-                    const Spacer(),
-                    Text('${(state.strength * 100).round()}%',
-                        style: const TextStyle(fontWeight: FontWeight.w700)),
-                    const Spacer(),
-                    const Text('强烈重塑',
-                        style: TextStyle(fontSize: 12, color: AppColors.muted)),
-                  ]),
+                  Row(
+                    children: [
+                      const Text('保持原片', style: TextStyle(fontSize: 12)),
+                      const Spacer(),
+                      Text(
+                        '${(state.strength * 100).round()}%',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      const Spacer(),
+                      const Text(
+                        '强烈重塑',
+                        style: TextStyle(fontSize: 12, color: AppColors.muted),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 16),
                   Text('保护选项', style: Theme.of(context).textTheme.titleSmall),
                   _ProtectTile(
@@ -123,9 +129,12 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                   if (state.errorMessage != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(state.errorMessage!,
-                          style: TextStyle(
-                              color: Theme.of(context).colorScheme.error)),
+                      child: Text(
+                        state.errorMessage!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
                     ),
                 ],
               ),
@@ -144,11 +153,15 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.auto_awesome),
                 label: const Text('生成成片'),
                 style: FilledButton.styleFrom(
-                    minimumSize: const Size.fromHeight(50)),
+                  minimumSize: const Size.fromHeight(50),
+                ),
               ),
             ),
           ),
@@ -161,22 +174,23 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
     final bytes =
         widget.sourceBytes ?? ref.read(cameraSessionProvider).selected?.bytes;
     if (bytes == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('没有可用的源图,请先在相机或工作室准备一张')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('没有可用的源图,请先在相机或工作室准备一张')));
       return;
     }
-    final taskId =
-        await ref.read(styleTransferControllerProvider.notifier).submit(
-              sourceBytes: bytes,
-              prompt: '对这张照片进行自然、精细的风格迁移',
-              aspectRatio: '1:1',
-            );
+    final taskId = await ref
+        .read(styleTransferControllerProvider.notifier)
+        .submit(
+          sourceBytes: bytes,
+          prompt: '对这张照片进行自然、精细的风格迁移',
+          aspectRatio: '1:1',
+        );
     if (!context.mounted) return;
     if (taskId != null && taskId.isNotEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('任务已提交，正在生成成片')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('任务已提交，正在生成成片')));
       context.go('/task/$taskId');
     }
   }
@@ -185,27 +199,31 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
 class _StrengthLegend extends StatelessWidget {
   const _StrengthLegend();
   @override
-  Widget build(BuildContext context) => Row(children: [
-        Container(
-          width: 8,
-          height: 8,
-          decoration:
-              const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+  Widget build(BuildContext context) => Row(
+    children: [
+      Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: Colors.green,
+          shape: BoxShape.circle,
         ),
-        const SizedBox(width: 4),
-        const Text('原片',
-            style: TextStyle(fontSize: 11, color: AppColors.muted)),
-        const Spacer(),
-        const Text('成片',
-            style: TextStyle(fontSize: 11, color: AppColors.muted)),
-        const SizedBox(width: 4),
-        Container(
-          width: 8,
-          height: 8,
-          decoration: const BoxDecoration(
-              color: AppColors.rose, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 4),
+      const Text('原片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+      const Spacer(),
+      const Text('成片', style: TextStyle(fontSize: 11, color: AppColors.muted)),
+      const SizedBox(width: 4),
+      Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: AppColors.rose,
+          shape: BoxShape.circle,
         ),
-      ]);
+      ),
+    ],
+  );
 }
 
 /// 前后对比滑动:拖动滑块显示左侧原图、右侧"模拟成片"(用风格色覆盖表示)。
@@ -227,92 +245,97 @@ class _BeforeAfterSlider extends StatelessWidget {
         final h = (w * 4 / 3).clamp(0.0, 320.0);
         return SizedBox(
           height: h,
-          child: Stack(children: [
-            // 原图(占满)
-            Positioned.fill(
-              child: Container(
-                color: Colors.black12,
-                child: sourceBytes == null
-                    ? const Center(child: Text('请从相机/工作室带入原图'))
-                    : Image.memory(sourceBytes!, fit: BoxFit.cover),
-              ),
-            ),
-            // 模拟成片:用柔和米色渐变 + 风格描述,等待真实结果接入
-            Positioned(
-              left: position * w,
-              top: 0,
-              bottom: 0,
-              width: w - position * w,
-              child: ClipRect(
+          child: Stack(
+            children: [
+              // 原图(占满)
+              Positioned.fill(
                 child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFE6D3B8), Color(0xFFB07E5A)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
+                  color: Colors.black12,
+                  child: sourceBytes == null
+                      ? const Center(child: Text('请从相机/工作室带入原图'))
+                      : Image.memory(sourceBytes!, fit: BoxFit.cover),
+                ),
+              ),
+              // 模拟成片:用柔和米色渐变 + 风格描述,等待真实结果接入
+              Positioned(
+                left: position * w,
+                top: 0,
+                bottom: 0,
+                width: w - position * w,
+                child: ClipRect(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Color(0xFFE6D3B8), Color(0xFFB07E5A)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                     ),
-                  ),
-                  child: const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16),
-                      child: Text(
-                        '成片预览 · 提交后可见',
-                        style: TextStyle(
+                    child: const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          '成片预览 · 提交后可见',
+                          style: TextStyle(
                             color: Colors.white,
                             fontSize: 16,
-                            fontWeight: FontWeight.w700),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // 分割线
-            Positioned(
-              left: position * w - 1,
-              top: 0,
-              bottom: 0,
-              child: Container(width: 2, color: Colors.white),
-            ),
-            // 把手
-            Positioned(
-              left: position * w - 18,
-              top: h / 2 - 18,
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: const [
-                    BoxShadow(
+              // 分割线
+              Positioned(
+                left: position * w - 1,
+                top: 0,
+                bottom: 0,
+                child: Container(width: 2, color: Colors.white),
+              ),
+              // 把手
+              Positioned(
+                left: position * w - 18,
+                top: h / 2 - 18,
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
+                    boxShadow: const [
+                      BoxShadow(
                         color: Color(0x22000000),
                         blurRadius: 8,
-                        offset: Offset(0, 2))
-                  ],
-                ),
-                child: const Icon(Icons.compare_arrows,
-                    color: Colors.black87, size: 22),
-              ),
-            ),
-            // 滑动热区
-            Positioned.fill(
-              child: SliderTheme(
-                data: SliderThemeData(
-                  trackHeight: 0,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 0),
-                  overlayShape: SliderComponentShape.noOverlay,
-                  activeTrackColor: Colors.transparent,
-                  inactiveTrackColor: Colors.transparent,
-                ),
-                child: Slider(
-                  value: position,
-                  onChanged: onChanged,
+                        offset: Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.compare_arrows,
+                    color: Colors.black87,
+                    size: 22,
+                  ),
                 ),
               ),
-            ),
-          ]),
+              // 滑动热区
+              Positioned.fill(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    trackHeight: 0,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 0,
+                    ),
+                    overlayShape: SliderComponentShape.noOverlay,
+                    activeTrackColor: Colors.transparent,
+                    inactiveTrackColor: Colors.transparent,
+                  ),
+                  child: Slider(value: position, onChanged: onChanged),
+                ),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -331,14 +354,18 @@ class _StyleChips extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(spacing: 8, runSpacing: 8, children: [
-      for (final s in styles)
-        ChoiceChip(
-          label: Text((s.name as String?) ?? ''),
-          selected: selected == s.id,
-          onSelected: (_) => onSelect(s.id as String),
-        ),
-    ]);
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final s in styles)
+          ChoiceChip(
+            label: Text((s.name as String?) ?? ''),
+            selected: selected == s.id,
+            onSelected: (_) => onSelect(s.id as String),
+          ),
+      ],
+    );
   }
 }
 
@@ -358,11 +385,11 @@ class _ProtectTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SwitchListTile(
-        contentPadding: EdgeInsets.zero,
-        secondary: Icon(icon),
-        title: Text(title),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
-        value: value,
-        onChanged: onChanged,
-      );
+    contentPadding: EdgeInsets.zero,
+    secondary: Icon(icon),
+    title: Text(title),
+    subtitle: Text(subtitle, style: const TextStyle(fontSize: 12)),
+    value: value,
+    onChanged: onChanged,
+  );
 }

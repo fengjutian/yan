@@ -75,14 +75,16 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
     final controller = ref.read(generateControllerProvider.notifier);
     return Scaffold(
       appBar: AppBar(title: const Text('文生图')),
-      body: ListView(padding: const EdgeInsets.all(24), children: [
-        TextField(
-          controller: _promptController,
-          minLines: 4,
-          maxLines: 8,
-          maxLength: 1500,
-          onChanged: controller.setPrompt,
-          decoration: InputDecoration(
+      body: ListView(
+        padding: const EdgeInsets.all(24),
+        children: [
+          TextField(
+            controller: _promptController,
+            minLines: 4,
+            maxLines: 8,
+            maxLength: 1500,
+            onChanged: controller.setPrompt,
+            decoration: InputDecoration(
               labelText: '画面描述',
               hintText: '例如：一只坐在月球上的橘猫，电影感，柔和轮廓光',
               alignLabelWithHint: true,
@@ -96,7 +98,8 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
                       ? const SizedBox(
                           width: 17,
                           height: 17,
-                          child: CircularProgressIndicator(strokeWidth: 2))
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : const Icon(Icons.auto_awesome, size: 19),
                   label: Text(state.enhancing ? '生成中' : 'AI 帮写'),
                   style: TextButton.styleFrom(
@@ -113,61 +116,72 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
                 minWidth: 104,
                 minHeight: 48,
               ),
-              border: OutlineInputBorder()),
-        ),
-        const SizedBox(height: 20),
-        Text('画面比例', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        Wrap(spacing: 8, children: [
-          for (final ratio in GeneratePage.ratios)
-            ChoiceChip(
-                label: Text(ratio),
-                selected: state.aspectRatio == ratio,
-                onSelected: (_) => controller.setAspectRatio(ratio))
-        ]),
-        const SizedBox(height: 20),
-        Text('生成数量', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
-        SegmentedButton<int>(
-          segments: const [
-            ButtonSegment(value: 1, label: Text('1 张')),
-            ButtonSegment(value: 2, label: Text('2 张')),
-            ButtonSegment(value: 4, label: Text('4 张'))
-          ],
-          selected: {state.count},
-          onSelectionChanged: (value) => controller.setCount(value.first),
-        ),
-        const SizedBox(height: 12),
-        SwitchListTile(
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('画面比例', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final ratio in GeneratePage.ratios)
+                ChoiceChip(
+                  label: Text(ratio),
+                  selected: state.aspectRatio == ratio,
+                  onSelected: (_) => controller.setAspectRatio(ratio),
+                ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Text('生成数量', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<int>(
+            segments: const [
+              ButtonSegment(value: 1, label: Text('1 张')),
+              ButtonSegment(value: 2, label: Text('2 张')),
+              ButtonSegment(value: 4, label: Text('4 张')),
+            ],
+            selected: {state.count},
+            onSelectionChanged: (value) => controller.setCount(value.first),
+          ),
+          const SizedBox(height: 12),
+          SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('自动优化 Prompt'),
             subtitle: const Text('由图片模型优化描述细节'),
             value: state.promptOptimizer,
-            onChanged: controller.setPromptOptimizer),
-        if (state.errorMessage != null)
-          Padding(
+            onChanged: controller.setPromptOptimizer,
+          ),
+          if (state.errorMessage != null)
+            Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Text(state.errorMessage!,
-                  style:
-                      TextStyle(color: Theme.of(context).colorScheme.error))),
-        FilledButton.icon(
-          onPressed: state.submitting ||
-                  (state.task != null && !state.task!.isTerminal)
-              ? null
-              : controller.generate,
-          icon: const Icon(Icons.auto_awesome),
-          label:
-              Text(state.submitting ? '正在提交…' : '开始生成（${state.count * 10} 积分）'),
-        ),
-        if (state.task != null) ...[
-          const SizedBox(height: 24),
-          _TaskResult(
-            task: state.task!,
-            onCancel: controller.cancel,
-            onRetry: controller.retry,
-          )
+              child: Text(
+                state.errorMessage!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            ),
+          FilledButton.icon(
+            onPressed:
+                state.submitting ||
+                    (state.task != null && !state.task!.isTerminal)
+                ? null
+                : controller.generate,
+            icon: const Icon(Icons.auto_awesome),
+            label: Text(
+              state.submitting ? '正在提交…' : '开始生成（${state.count * 10} 积分）',
+            ),
+          ),
+          if (state.task != null) ...[
+            const SizedBox(height: 24),
+            _TaskResult(
+              task: state.task!,
+              onCancel: controller.cancel,
+              onRetry: controller.retry,
+            ),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }
@@ -259,8 +273,10 @@ class _AiPromptSheet extends StatelessWidget {
                     ),
                     child: Icon(idea.$2, color: const Color(0xFF7B5152)),
                   ),
-                  title: Text(idea.$1,
-                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  title: Text(
+                    idea.$1,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
                   trailing: const Icon(Icons.north_west_rounded, size: 18),
                 );
               },
@@ -273,42 +289,56 @@ class _AiPromptSheet extends StatelessWidget {
 }
 
 class _TaskResult extends StatelessWidget {
-  const _TaskResult(
-      {required this.task, required this.onCancel, required this.onRetry});
+  const _TaskResult({
+    required this.task,
+    required this.onCancel,
+    required this.onRetry,
+  });
   final ImageTask task;
   final VoidCallback onCancel;
   final VoidCallback onRetry;
   @override
   Widget build(BuildContext context) {
     if (!task.isTerminal) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text('正在生成 · ${task.progress}%'),
-        const SizedBox(height: 8),
-        LinearProgressIndicator(value: task.progress / 100),
-        const SizedBox(height: 8),
-        TextButton(onPressed: onCancel, child: const Text('取消任务')),
-      ]);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('正在生成 · ${task.progress}%'),
+          const SizedBox(height: 8),
+          LinearProgressIndicator(value: task.progress / 100),
+          const SizedBox(height: 8),
+          TextButton(onPressed: onCancel, child: const Text('取消任务')),
+        ],
+      );
     }
     if (task.status == 'FAILED') {
       return Card(
-          child: ListTile(
-        leading: Icon(Icons.error_outline,
-            color: Theme.of(context).colorScheme.error),
-        title: const Text('生成失败，积分已退回'),
-        subtitle: Text(task.errorMessage ?? '请稍后重试'),
-        trailing: TextButton(onPressed: onRetry, child: const Text('重试')),
-      ));
+        child: ListTile(
+          leading: Icon(
+            Icons.error_outline,
+            color: Theme.of(context).colorScheme.error,
+          ),
+          title: const Text('生成失败，积分已退回'),
+          subtitle: Text(task.errorMessage ?? '请稍后重试'),
+          trailing: TextButton(onPressed: onRetry, child: const Text('重试')),
+        ),
+      );
     }
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2, crossAxisSpacing: 12, mainAxisSpacing: 12),
+        crossAxisCount: 2,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
       itemCount: task.images.length,
       itemBuilder: (context, index) => ClipRRect(
         borderRadius: BorderRadius.circular(16),
         child: CachedNetworkImage(
-            imageUrl: task.images[index].thumbnailUrl, fit: BoxFit.cover),
+          imageUrl: task.images[index].thumbnailUrl,
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

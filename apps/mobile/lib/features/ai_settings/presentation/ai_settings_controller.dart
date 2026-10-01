@@ -14,13 +14,13 @@ final localAIClientProvider = Provider<LocalAIClient>(
   ),
 );
 
-final aiSettingsControllerProvider = StateNotifierProvider.autoDispose<
-    AISettingsController, AISettingsState>(
-  (ref) => AISettingsController(
-    ref.watch(aiSettingsStoreProvider),
-    ref.watch(localAIClientProvider),
-  )..load(),
-);
+final aiSettingsControllerProvider =
+    StateNotifierProvider.autoDispose<AISettingsController, AISettingsState>(
+      (ref) => AISettingsController(
+        ref.watch(aiSettingsStoreProvider),
+        ref.watch(localAIClientProvider),
+      )..load(),
+    );
 
 class AISettingsState {
   const AISettingsState({
@@ -47,20 +47,19 @@ class AISettingsState {
     String? message,
     bool? isError,
     bool clearMessage = false,
-  }) =>
-      AISettingsState(
-        settings: settings ?? this.settings,
-        loading: loading ?? this.loading,
-        saving: saving ?? this.saving,
-        testing: testing ?? this.testing,
-        message: clearMessage ? null : message ?? this.message,
-        isError: isError ?? this.isError,
-      );
+  }) => AISettingsState(
+    settings: settings ?? this.settings,
+    loading: loading ?? this.loading,
+    saving: saving ?? this.saving,
+    testing: testing ?? this.testing,
+    message: clearMessage ? null : message ?? this.message,
+    isError: isError ?? this.isError,
+  );
 }
 
 class AISettingsController extends StateNotifier<AISettingsState> {
   AISettingsController(this._store, this._client)
-      : super(const AISettingsState());
+    : super(const AISettingsState());
 
   final AISettingsStore _store;
   final LocalAIClient _client;
@@ -96,20 +95,13 @@ class AISettingsController extends StateNotifier<AISettingsState> {
         (value.apiKey.trim().isEmpty ||
             value.baseUrl.trim().isEmpty ||
             value.model.trim().isEmpty)) {
-      state = state.copyWith(
-        message: '请填写 API Key、接口地址和模型名称',
-        isError: true,
-      );
+      state = state.copyWith(message: '请填写 API Key、接口地址和模型名称', isError: true);
       return false;
     }
     state = state.copyWith(saving: true, clearMessage: true);
     try {
       await _store.save(value);
-      state = state.copyWith(
-        saving: false,
-        message: '设置已安全保存',
-        isError: false,
-      );
+      state = state.copyWith(saving: false, message: '设置已安全保存', isError: false);
       return true;
     } catch (error) {
       state = state.copyWith(

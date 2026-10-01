@@ -41,22 +41,21 @@ class StyleTransferState {
     String? errorMessage,
     bool clearError = false,
     bool clearTask = false,
-  }) =>
-      StyleTransferState(
-        styleId: styleId ?? this.styleId,
-        strength: strength ?? this.strength,
-        protectFace: protectFace ?? this.protectFace,
-        protectSkin: protectSkin ?? this.protectSkin,
-        protectBackground: protectBackground ?? this.protectBackground,
-        submitting: submitting ?? this.submitting,
-        taskId: clearTask ? null : (taskId ?? this.taskId),
-        errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
-      );
+  }) => StyleTransferState(
+    styleId: styleId ?? this.styleId,
+    strength: strength ?? this.strength,
+    protectFace: protectFace ?? this.protectFace,
+    protectSkin: protectSkin ?? this.protectSkin,
+    protectBackground: protectBackground ?? this.protectBackground,
+    submitting: submitting ?? this.submitting,
+    taskId: clearTask ? null : (taskId ?? this.taskId),
+    errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+  );
 }
 
 class StyleTransferController extends StateNotifier<StyleTransferState> {
   StyleTransferController(this._ref, this._assets, {required this.localOnly})
-      : super(const StyleTransferState());
+    : super(const StyleTransferState());
 
   final Ref _ref;
   final AssetRepository _assets;
@@ -84,9 +83,7 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       return null;
     }
     if (localOnly) {
-      state = state.copyWith(
-        errorMessage: 'AI 风格迁移需要后端服务，请在「我的」中关闭“优先本地运行”',
-      );
+      state = state.copyWith(errorMessage: 'AI 风格迁移需要后端服务，请在「我的」中关闭“优先本地运行”');
       return null;
     }
     if (state.submitting) return null;
@@ -96,9 +93,11 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
         throw StateError('图片不能超过 10 MB');
       }
       final source = await _assets.upload(
-        XFile.fromData(sourceBytes,
-            mimeType: 'image/jpeg',
-            name: 'style-${DateTime.now().millisecondsSinceEpoch}.jpg'),
+        XFile.fromData(
+          sourceBytes,
+          mimeType: 'image/jpeg',
+          name: 'style-${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
         onProgress: (_) {},
       );
       final dio = _ref.read(apiClientProvider).dio;
@@ -131,11 +130,18 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
   }
 }
 
-final styleTransferControllerProvider = StateNotifierProvider.autoDispose<
-        StyleTransferController, StyleTransferState>(
-    (ref) => StyleTransferController(
-          ref,
-          ref.watch(assetRepositoryProvider),
-          localOnly: ref.watch(aiSettingsControllerProvider
-              .select((state) => state.settings.preferLocal)),
-        ));
+final styleTransferControllerProvider =
+    StateNotifierProvider.autoDispose<
+      StyleTransferController,
+      StyleTransferState
+    >(
+      (ref) => StyleTransferController(
+        ref,
+        ref.watch(assetRepositoryProvider),
+        localOnly: ref.watch(
+          aiSettingsControllerProvider.select(
+            (state) => state.settings.preferLocal,
+          ),
+        ),
+      ),
+    );

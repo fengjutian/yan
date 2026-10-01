@@ -59,18 +59,20 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         title: const Text('作品详情'),
         actions: [
           task.maybeWhen(
-            data: (t) => Row(children: [
-              IconButton(
-                tooltip: '收藏',
-                icon: const Icon(Icons.favorite_border),
-                onPressed: () => _toggleFavorite(t.id),
-              ),
-              IconButton(
-                tooltip: '存为草稿',
-                icon: const Icon(Icons.edit_note),
-                onPressed: () => _toggleDraft(t.id, true),
-              ),
-            ]),
+            data: (t) => Row(
+              children: [
+                IconButton(
+                  tooltip: '收藏',
+                  icon: const Icon(Icons.favorite_border),
+                  onPressed: () => _toggleFavorite(t.id),
+                ),
+                IconButton(
+                  tooltip: '存为草稿',
+                  icon: const Icon(Icons.edit_note),
+                  onPressed: () => _toggleDraft(t.id, true),
+                ),
+              ],
+            ),
             orElse: () => const SizedBox.shrink(),
           ),
         ],
@@ -81,12 +83,14 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         },
         child: task.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (error, _) => ListView(children: [
-            const SizedBox(height: 120),
-            const Icon(Icons.error_outline, size: 56),
-            const SizedBox(height: 12),
-            Center(child: Text('无法加载：${error.toString()}')),
-          ]),
+          error: (error, _) => ListView(
+            children: [
+              const SizedBox(height: 120),
+              const Icon(Icons.error_outline, size: 56),
+              const SizedBox(height: 12),
+              Center(child: Text('无法加载：${error.toString()}')),
+            ],
+          ),
           data: (value) => _buildData(value),
         ),
       ),
@@ -108,20 +112,22 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
             padding: const EdgeInsets.only(bottom: 16),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(18),
-              child: Stack(children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: CachedNetworkImage(
-                    imageUrl: image.url,
-                    fit: BoxFit.cover,
+              child: Stack(
+                children: [
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: CachedNetworkImage(
+                      imageUrl: image.url,
+                      fit: BoxFit.cover,
+                    ),
                   ),
-                ),
-                const Positioned(
-                  left: 12,
-                  bottom: 12,
-                  child: _AiWatermarkBadge(),
-                ),
-              ]),
+                  const Positioned(
+                    left: 12,
+                    bottom: 12,
+                    child: _AiWatermarkBadge(),
+                  ),
+                ],
+              ),
             ),
           ),
         if (value.images.isEmpty && value.isTerminal)
@@ -133,17 +139,20 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
             ),
             child: const Center(child: Text('本次生成未产出图片')),
           ),
-        Text(value.prompt,
-            style: Theme.of(context).textTheme.titleMedium),
+        Text(value.prompt, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(value.type == 'CHARACTER_REFERENCE'
-            ? '人物参考创作 · AI 生成'
-            : '文生图 · AI 生成'),
+        Text(
+          value.type == 'CHARACTER_REFERENCE'
+              ? '人物参考创作 · AI 生成'
+              : '文生图 · AI 生成',
+        ),
         const SizedBox(height: 24),
         _ActionGrid(
           busy: _busy,
-          onSave: () => _save(value.images.isNotEmpty ? value.images.first.url : null),
-          onShare: () => _share(value.images.isNotEmpty ? value.images.first.url : null),
+          onSave: () =>
+              _save(value.images.isNotEmpty ? value.images.first.url : null),
+          onShare: () =>
+              _share(value.images.isNotEmpty ? value.images.first.url : null),
           onShareWorkshop: () =>
               context.push('/share?taskId=${Uri.encodeComponent(value.id)}'),
           onToggleDraft: () => _toggleDraft(value.id, true),
@@ -157,17 +166,17 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
   Future<void> _toggleFavorite(String taskId) async {
     await ref.read(toggleFavoriteProvider)(taskId);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('收藏已更新')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('收藏已更新')));
   }
 
   Future<void> _toggleDraft(String taskId, bool add) async {
     await ref.read(toggleDraftProvider)(taskId, add);
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(add ? '已存为草稿' : '已从草稿移除')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(add ? '已存为草稿' : '已从草稿移除')));
   }
 
   Future<Uint8List?> _downloadImage(String url) async {
@@ -189,13 +198,18 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         skipIfExists: false,
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(result.isSuccess ? '已保存到相册' : '保存失败:${result.errorMessage}'),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isSuccess ? '已保存到相册' : '保存失败:${result.errorMessage}',
+          ),
+        ),
+      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('保存失败:$e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败:$e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -208,7 +222,9 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       final bytes = await _downloadImage(url);
       if (bytes == null) throw Exception('下载图片失败');
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg');
+      final file = File(
+        '${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg',
+      );
       await file.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'image/jpeg')],
@@ -217,8 +233,9 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('分享失败:$e')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('分享失败:$e')));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -237,17 +254,20 @@ class _AiWatermarkBadge extends StatelessWidget {
   const _AiWatermarkBadge();
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: const Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.auto_awesome, size: 12, color: Colors.white),
-          SizedBox(width: 4),
-          Text('AI 生成', style: TextStyle(color: Colors.white, fontSize: 11)),
-        ]),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    decoration: BoxDecoration(
+      color: Colors.black54,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: const Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.auto_awesome, size: 12, color: Colors.white),
+        SizedBox(width: 4),
+        Text('AI 生成', style: TextStyle(color: Colors.white, fontSize: 11)),
+      ],
+    ),
+  );
 }
 
 class _ActionGrid extends StatelessWidget {
@@ -322,7 +342,8 @@ class _ActionButton extends StatelessWidget {
             ? const SizedBox(
                 width: 14,
                 height: 14,
-                child: CircularProgressIndicator(strokeWidth: 2))
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Icon(icon),
         label: Text(label),
         style: OutlinedButton.styleFrom(
@@ -360,16 +381,21 @@ class _ParamsCard extends StatelessWidget {
   }
 
   Widget _kv(BuildContext context, String k, String v) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          SizedBox(
-              width: 80,
-              child: Text(k,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: AppColors.muted))),
-          Expanded(child: Text(v, style: Theme.of(context).textTheme.bodySmall)),
-        ]),
-      );
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 80,
+          child: Text(
+            k,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: AppColors.muted),
+          ),
+        ),
+        Expanded(child: Text(v, style: Theme.of(context).textTheme.bodySmall)),
+      ],
+    ),
+  );
 }

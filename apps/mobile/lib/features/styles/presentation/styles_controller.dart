@@ -5,8 +5,9 @@ import 'package:ai_image_studio/features/styles/data/style_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final styleRepositoryProvider = Provider<StyleRepository>((ref) {
-  final localOnly = ref.watch(aiSettingsControllerProvider
-      .select((state) => state.settings.preferLocal));
+  final localOnly = ref.watch(
+    aiSettingsControllerProvider.select((state) => state.settings.preferLocal),
+  );
   return StyleRepository(ref.watch(apiClientProvider), localOnly: localOnly);
 });
 

@@ -73,8 +73,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         ),
                         validator: (value) =>
                             value == null || value.trim().isEmpty
-                                ? '请输入昵称'
-                                : null,
+                            ? '请输入昵称'
+                            : null,
                       ),
                       const SizedBox(height: 16),
                     ],
@@ -88,8 +88,8 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                       ),
                       validator: (value) =>
                           value == null || !value.contains('@')
-                              ? '请输入有效邮箱'
-                              : null,
+                          ? '请输入有效邮箱'
+                          : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
@@ -131,17 +131,17 @@ class _AuthPageState extends ConsumerState<AuthPage> {
                         child: state.submitting
                             ? const SizedBox.square(
                                 dimension: 20,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
                             : Text(_isRegister ? '注册并开始创作' : '登录'),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
-                      onPressed: () => context.go(
-                        _isRegister ? '/login' : '/register',
-                      ),
+                      onPressed: () =>
+                          context.go(_isRegister ? '/login' : '/register'),
                       child: Text(_isRegister ? '已有账号？登录' : '没有账号？注册'),
                     ),
                   ],

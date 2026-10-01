@@ -17,7 +17,8 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     super.initState();
     if (widget.loadOnStart) {
       Future<void>.microtask(
-          () => ref.read(historyControllerProvider.notifier).refresh());
+        () => ref.read(historyControllerProvider.notifier).refresh(),
+      );
     }
   }
 

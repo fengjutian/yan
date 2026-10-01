@@ -40,15 +40,17 @@ class ProfilePage extends ConsumerWidget {
               contentPadding: EdgeInsets.zero,
               secondary: const Icon(Icons.offline_bolt_outlined),
               title: const Text('优先本地运行'),
-              subtitle: Text(aiSettings.settings.preferLocal
-                  ? '已开启 · 图片留在设备，后端服务停用'
-                  : '已关闭 · 上传与 AI 任务使用后端服务'),
+              subtitle: Text(
+                aiSettings.settings.preferLocal
+                    ? '已开启 · 图片留在设备，后端服务停用'
+                    : '已关闭 · 上传与 AI 任务使用后端服务',
+              ),
               value: aiSettings.settings.preferLocal,
               onChanged: aiSettings.loading
                   ? null
                   : ref
-                      .read(aiSettingsControllerProvider.notifier)
-                      .setPreferLocal,
+                        .read(aiSettingsControllerProvider.notifier)
+                        .setPreferLocal,
             ),
             _ProfileTile(
               icon: Icons.edit_note,

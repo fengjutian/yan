@@ -28,11 +28,10 @@ class ShareConfig {
   ShareConfig copyWith({
     SharePlatform? platform,
     WatermarkPosition? watermark,
-  }) =>
-      ShareConfig(
-        platform: platform ?? this.platform,
-        watermark: watermark ?? this.watermark,
-      );
+  }) => ShareConfig(
+    platform: platform ?? this.platform,
+    watermark: watermark ?? this.watermark,
+  );
 }
 
 @immutable
@@ -54,14 +53,14 @@ class ShareDraft {
     String? caption,
     List<String>? tags,
     ShareConfig? config,
-  }) =>
-      ShareDraft(
-        imageUrl: imageUrl ?? this.imageUrl,
-        caption: caption ?? this.caption,
-        tags: tags ?? this.tags,
-        config: config ?? this.config,
-      );
+  }) => ShareDraft(
+    imageUrl: imageUrl ?? this.imageUrl,
+    caption: caption ?? this.caption,
+    tags: tags ?? this.tags,
+    config: config ?? this.config,
+  );
 }
 
-final shareConfigProvider =
-    StateProvider<ShareConfig>((ref) => const ShareConfig());
+final shareConfigProvider = StateProvider<ShareConfig>(
+  (ref) => const ShareConfig(),
+);
