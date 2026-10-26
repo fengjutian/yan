@@ -81,10 +81,7 @@ class CameraMeteringRing extends StatelessWidget {
 
 /// 从焦点环拖出独立测光点的拖动柄。
 class CameraMeteringDragHandle extends StatelessWidget {
-  const CameraMeteringDragHandle({
-    super.key,
-    required this.onPanUpdate,
-  });
+  const CameraMeteringDragHandle({super.key, required this.onPanUpdate});
 
   final GestureDragUpdateCallback onPanUpdate;
 
@@ -389,9 +386,7 @@ class CameraParameterChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF303033),
         borderRadius: BorderRadius.circular(99),
-        border: Border.all(
-          color: enabled ? Colors.white24 : Colors.white10,
-        ),
+        border: Border.all(color: enabled ? Colors.white24 : Colors.white10),
       ),
       child: Text(
         label,

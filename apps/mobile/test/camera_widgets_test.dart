@@ -26,9 +26,7 @@ void main() {
     expect(find.text('AE/AF 锁定'), findsNothing);
 
     await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: CameraMeteringRing(locked: true)),
-      ),
+      const MaterialApp(home: Scaffold(body: CameraMeteringRing(locked: true))),
     );
     expect(find.text('AE 锁定'), findsOneWidget);
   });

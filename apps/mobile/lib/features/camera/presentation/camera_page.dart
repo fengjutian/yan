@@ -486,9 +486,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
       await controller
           .setFlashMode(_flashMode)
           .timeout(const Duration(seconds: 3));
-      _initStage = '启动分析流';
-      await _startLightMonitoring(controller);
-      _initStage = '就绪';
+      if (_reviewing) {
+        _initStage = '就绪（预览页暂停分析流）';
+      } else {
+        _initStage = '启动分析流';
+        await _startLightMonitoring(controller);
+        _initStage = '就绪';
+      }
       _initElapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       if (mounted && token == _initializationToken) {
         setState(() => _initializing = false);
@@ -512,8 +516,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     try {
       await controller.startImageStream((image) {
         final now = DateTime.now();
-        if (now.difference(_lastFrameAt).inMilliseconds <
-                _analysisIntervalMs ||
+        if (now.difference(_lastFrameAt).inMilliseconds < _analysisIntervalMs ||
             image.planes.isEmpty) {
           return;
         }
@@ -1856,18 +1859,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
         builtIn: catalog.builtIn,
         custom: catalog.custom,
         activeId: _activePresetId,
-        onApply: (preset) => Navigator.of(sheetContext).pop(
-          _PresetAction._(_PresetActionType.apply, preset: preset),
-        ),
-        onCopy: (preset) => Navigator.of(sheetContext).pop(
-          _PresetAction._(_PresetActionType.copy, preset: preset),
-        ),
-        onDelete: (preset) => Navigator.of(sheetContext).pop(
-          _PresetAction._(_PresetActionType.delete, preset: preset),
-        ),
-        onSaveCurrent: () => Navigator.of(sheetContext).pop(
-          const _PresetAction._(_PresetActionType.saveCurrent),
-        ),
+        onApply: (preset) => Navigator.of(
+          sheetContext,
+        ).pop(_PresetAction._(_PresetActionType.apply, preset: preset)),
+        onCopy: (preset) => Navigator.of(
+          sheetContext,
+        ).pop(_PresetAction._(_PresetActionType.copy, preset: preset)),
+        onDelete: (preset) => Navigator.of(
+          sheetContext,
+        ).pop(_PresetAction._(_PresetActionType.delete, preset: preset)),
+        onSaveCurrent: () => Navigator.of(
+          sheetContext,
+        ).pop(const _PresetAction._(_PresetActionType.saveCurrent)),
       ),
     );
     if (action == null || !mounted) return;
@@ -3010,7 +3013,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
       });
     }
     final controller = _controller;
-    if (controller == null || !controller.value.isInitialized) return;
+    if (controller == null || !controller.value.isInitialized) {
+      if (_cameras.isNotEmpty) await _initializeCamera(_activeIndex);
+      return;
+    }
     if (!controller.value.isStreamingImages) {
       await _startLightMonitoring(controller);
     }
