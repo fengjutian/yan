@@ -92,9 +92,7 @@ class CapturePreset {
         'standard',
       ),
       style: _pick(json['style'], CapturePresetRepository.styles, 'standard'),
-      sourceId: json['sourceId'] is String
-          ? json['sourceId'] as String
-          : null,
+      sourceId: json['sourceId'] is String ? json['sourceId'] as String : null,
       version: json['version'] is int && (json['version'] as int) > 0
           ? json['version'] as int
           : 1,
@@ -154,7 +152,14 @@ class CapturePresetRepository {
     'multiFrameHdr',
     'nightDenoise',
   ];
-  static const styles = <String>['standard', 'vivid', 'warm', 'cool', 'mono', 'soft'];
+  static const styles = <String>[
+    'standard',
+    'vivid',
+    'warm',
+    'cool',
+    'mono',
+    'soft',
+  ];
 
   static const builtInPresets = <CapturePreset>[
     CapturePreset(
@@ -261,7 +266,8 @@ class CapturePresetRepository {
       jsonEncode({
         'schemaVersion': schemaVersion,
         'custom': [
-          for (final preset in presets) preset.copyWith(builtIn: false).toJson(),
+          for (final preset in presets)
+            preset.copyWith(builtIn: false).toJson(),
         ],
       }),
     );

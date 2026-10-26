@@ -60,9 +60,7 @@ Future<PortraitQualityMetrics?> analyzePortraitQuality(Uint8List bytes) async {
         face.rightEyeOpenProbability,
       ].whereType<double>().toList(growable: false);
       // 单只眼闭合也会明显拉低该人脸的睁眼分数。
-      eyeScores.add(
-        eyes.isEmpty ? 50.0 : eyes.reduce(math.min) * 100,
-      );
+      eyeScores.add(eyes.isEmpty ? 50.0 : eyes.reduce(math.min) * 100);
       smileScore = math.max(smileScore, (face.smilingProbability ?? 0) * 100);
       occlusionTotal += _occlusionRisk(face);
     }
@@ -72,9 +70,7 @@ Future<PortraitQualityMetrics?> analyzePortraitQuality(Uint8List bytes) async {
       faceSharpness: faceSharpness,
       eyesOpenScore: eyeScores.reduce(math.min).clamp(0, 100).toDouble(),
       smileScore: smileScore.clamp(0, 100).toDouble(),
-      occlusionRisk: (occlusionTotal / faces.length)
-          .clamp(0, 100)
-          .toDouble(),
+      occlusionRisk: (occlusionTotal / faces.length).clamp(0, 100).toDouble(),
     );
   } catch (_) {
     // 部分设备缺少人脸分类模型；失败时只关闭人像能力。
@@ -159,10 +155,7 @@ double _faceSharpness((Uint8List, List<double>) input) {
         .round()
         .clamp(top + 1, image.height - 1)
         .toInt();
-    final step = math.max(
-      1,
-      math.min(right - left, bottom - top) ~/ 24,
-    );
+    final step = math.max(1, math.min(right - left, bottom - top) ~/ 24);
     for (var y = top; y < bottom; y += step) {
       for (var x = left; x < right; x += step) {
         final center = gray(x, y);

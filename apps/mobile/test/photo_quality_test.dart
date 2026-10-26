@@ -12,18 +12,9 @@ void main() {
 
   test('手抖惩罚只影响有稳定度数据的照片', () {
     expect(PhotoQualityEvaluator.applyStability(80, null), 80);
-    expect(
-      PhotoQualityEvaluator.applyStability(80, 100),
-      closeTo(80, .001),
-    );
-    expect(
-      PhotoQualityEvaluator.applyStability(80, 50),
-      closeTo(72, .001),
-    );
-    expect(
-      PhotoQualityEvaluator.applyStability(10, 0),
-      closeTo(0, .001),
-    );
+    expect(PhotoQualityEvaluator.applyStability(80, 100), closeTo(80, .001));
+    expect(PhotoQualityEvaluator.applyStability(80, 50), closeTo(72, .001));
+    expect(PhotoQualityEvaluator.applyStability(10, 0), closeTo(0, .001));
   });
 
   test('相同画质下更稳定的照片得分更高', () {

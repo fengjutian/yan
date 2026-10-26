@@ -95,6 +95,35 @@ void main() {
     );
   });
 
+  test('相机质量指标写入作品元数据并可回读', () async {
+    final task = await store.saveSuccess(
+      prompt: '相机拍摄',
+      aspectRatio: '3:4',
+      count: 1,
+      type: 'CAMERA',
+      images: [_png(90, 120)],
+      metadata: {
+        'quality': {
+          'total_score': 88.5,
+          'stability': 92,
+          'portrait': {'face_count': 2, 'eyes_open_score': 96},
+        },
+        'capture': {'lens_type': 'wide', 'zoom': 1.0},
+        'recommendation': '全员睁眼、手持稳定',
+      },
+    );
+
+    final loaded = await store.require(task.id);
+    final quality = loaded.metadata!['quality'] as Map<String, dynamic>;
+    expect(quality['total_score'], 88.5);
+    expect((quality['portrait'] as Map)['eyes_open_score'], 96);
+    expect(loaded.metadata!['recommendation'], '全员睁眼、手持稳定');
+
+    final meta = File('${root.path}/${task.id}/meta.json');
+    final raw = jsonDecode(await meta.readAsString()) as Map<String, dynamic>;
+    expect((raw['metadata'] as Map)['capture'], isNotNull);
+  });
+
   test('清除全部作品', () async {
     await store.saveSuccess(
       prompt: 'a',

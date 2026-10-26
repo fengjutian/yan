@@ -1,5 +1,6 @@
 import AVFoundation
 import Flutter
+import os
 import UIKit
 
 @main
@@ -23,6 +24,8 @@ import UIKit
     channel.setMethodCallHandler { call, result in
       if call.method == "getCapabilities" {
         result(Self.cameraCapabilities())
+      } else if call.method == "getDiagnostics" {
+        result(Self.deviceDiagnostics())
       } else if call.method == "openAppSettings",
                 let url = URL(string: UIApplication.openSettingsURLString) {
         UIApplication.shared.open(url) { opened in result(opened) }
@@ -30,6 +33,40 @@ import UIKit
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  private static func deviceDiagnostics() -> [String: Any] {
+    var result: [String: Any] = [:]
+    let url = URL(fileURLWithPath: NSHomeDirectory())
+    if let values = try? url.resourceValues(forKeys: [
+      .volumeAvailableCapacityForImportantUsageKey,
+      .volumeTotalCapacityKey,
+    ]) {
+      if let free = values.volumeAvailableCapacityForImportantUsage {
+        result["freeStorageMb"] = Int(free / 1_048_576)
+      }
+      if let total = values.volumeTotalCapacity {
+        result["totalStorageMb"] = total / 1_048_576
+      }
+    }
+
+    var availableMemoryMb: Int?
+    if #available(iOS 13.0, *) {
+      availableMemoryMb = Int(os_proc_available_memory()) / 1_048_576
+      result["availableMemoryMb"] = availableMemoryMb
+    }
+    result["lowMemory"] = (availableMemoryMb ?? 9999) < 300
+
+    let thermal: String
+    switch ProcessInfo.processInfo.thermalState {
+    case .nominal: thermal = "nominal"
+    case .fair: thermal = "fair"
+    case .serious: thermal = "serious"
+    case .critical: thermal = "critical"
+    @unknown default: thermal = "unknown"
+    }
+    result["thermalStatus"] = thermal
+    return result
   }
 
   private static func cameraCapabilities() -> [String: Any] {

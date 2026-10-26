@@ -128,10 +128,7 @@ class CameraSessionController extends StateNotifier<CameraSession> {
         signatures.add(metrics);
       }
     }
-    var photos = [
-      for (final item in unique)
-        _buildPhoto(item, portrait: null),
-    ];
+    var photos = [for (final item in unique) _buildPhoto(item, portrait: null)];
     if (portraitAnalyzer != null && photos.isNotEmpty) {
       photos = await _mergePortraitMetrics(
         photos,

@@ -117,12 +117,8 @@ class StabilityAnalyzer {
     double noiseFloor = .06,
     double smoothing = .22,
     double zeroScoreMotion = .6,
-  }) => StabilityAnalyzer._(
-    requirement,
-    noiseFloor,
-    smoothing,
-    zeroScoreMotion,
-  );
+  }) =>
+      StabilityAnalyzer._(requirement, noiseFloor, smoothing, zeroScoreMotion);
 
   StabilityAnalyzer._(
     this._requirement,
@@ -166,12 +162,7 @@ class StabilityAnalyzer {
   }
 
   /// 摄入一个加速度计采样，返回新的稳定度快照。
-  StabilitySnapshot ingest(
-    double x,
-    double y,
-    double z, {
-    DateTime? at,
-  }) {
+  StabilitySnapshot ingest(double x, double y, double z, {DateTime? at}) {
     final time = at ?? DateTime.now();
     final previous = _lastSample;
     _lastSample = (x: x, y: y, z: z);
@@ -195,8 +186,8 @@ class StabilityAnalyzer {
     );
     final effective = delta <= noiseFloor ? 0.0 : delta - noiseFloor;
     final motion = _snapshot.motion * (1 - smoothing) + effective * smoothing;
-    final score =
-        (100 * (1 - (motion / zeroScoreMotion).clamp(0.0, 1.0))).toDouble();
+    final score = (100 * (1 - (motion / zeroScoreMotion).clamp(0.0, 1.0)))
+        .toDouble();
     _snapshot = _snapshot.copyWith(
       motion: motion,
       score: score,

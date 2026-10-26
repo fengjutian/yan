@@ -73,7 +73,9 @@ class PortraitCompositionAnalyzer {
       if (groupHint != null) return groupHint;
     }
 
-    final union = sortedFaces.reduce((left, right) => left.expandToInclude(right));
+    final union = sortedFaces.reduce(
+      (left, right) => left.expandToInclude(right),
+    );
     final centerX = union.center.dx;
     if (centerX < .34) {
       return PortraitCompositionHint(
@@ -123,11 +125,7 @@ class PortraitCompositionAnalyzer {
     PortraitFraming framing,
   ) {
     const checks = <(List<String>, String, String)>[
-      (
-        ['leftEye', 'rightEye'],
-        'eye_edge',
-        '眼睛贴近画面边缘，稍微调整构图会更自然',
-      ),
+      (['leftEye', 'rightEye'], 'eye_edge', '眼睛贴近画面边缘，稍微调整构图会更自然'),
       (['leftWrist', 'rightWrist'], 'wrist_edge', '手腕贴边，动作容易拍不完整'),
       (['leftKnee', 'rightKnee'], 'knee_edge', '膝盖卡在边缘，建议后退半步'),
       (['leftAnkle', 'rightAnkle'], 'ankle_edge', '脚踝贴边，全身照建议再后退一点'),

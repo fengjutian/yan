@@ -61,4 +61,34 @@ void main() {
     expect(value.lensTypes, isEmpty);
     expect(value.extensionModes, isEmpty);
   });
+
+  test('解析剩余存储、内存和温度诊断', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+          expect(call.method, 'getDiagnostics');
+          return <String, Object>{
+            'freeStorageMb': 2048,
+            'totalStorageMb': 8192,
+            'availableMemoryMb': 512,
+            'totalMemoryMb': 4096,
+            'lowMemory': true,
+            'thermalStatus': 'moderate',
+          };
+        });
+
+    final value = await CameraCapabilitiesService().loadDiagnostics();
+
+    expect(value.freeStorageMb, 2048);
+    expect(value.totalStorageMb, 8192);
+    expect(value.availableMemoryMb, 512);
+    expect(value.lowMemory, isTrue);
+    expect(value.thermalLabel, '中度升温');
+  });
+
+  test('诊断桥接缺失时返回空数据', () async {
+    final value = await CameraCapabilitiesService().loadDiagnostics();
+
+    expect(value.hasData, isFalse);
+    expect(value.freeStorageMb, isNull);
+  });
 }

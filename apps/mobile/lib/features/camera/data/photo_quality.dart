@@ -101,8 +101,7 @@ class PhotoQualityEvaluator {
   /// 手抖惩罚：相同画质下，晃动更少的照片排得更靠前。
   static double applyStability(double genericScore, double? stability) {
     if (stability == null) return genericScore.clamp(0, 100).toDouble();
-    final penalty =
-        (100 - stability.clamp(0, 100)) / 100 * maxStabilityPenalty;
+    final penalty = (100 - stability.clamp(0, 100)) / 100 * maxStabilityPenalty;
     return (genericScore - penalty).clamp(0, 100).toDouble();
   }
 
@@ -134,9 +133,7 @@ class PhotoQualityEvaluator {
   }) {
     final reasons = <String>[];
     if (portrait != null && portrait.hasFaces) {
-      reasons.add(
-        portrait.faceSharpness >= 60 ? '人物清晰' : '人脸稍糊',
-      );
+      reasons.add(portrait.faceSharpness >= 60 ? '人物清晰' : '人脸稍糊');
       reasons.add(
         portrait.eyesOpenScore >= 70
             ? (portrait.faceCount > 1 ? '全员睁眼' : '人物睁眼')

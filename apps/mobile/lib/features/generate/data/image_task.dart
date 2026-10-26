@@ -47,6 +47,7 @@ class ImageTask {
     this.styleId,
     this.createdAt,
     this.local = false,
+    this.metadata,
   });
 
   final String id;
@@ -64,6 +65,9 @@ class ImageTask {
 
   /// 本地 BYOK 作品标记；失败任务没有图片，不能用 images 判断。
   final bool local;
+
+  /// 可选的本地元数据，例如相机质量指标与拍摄上下文；不上传服务端。
+  final Map<String, dynamic>? metadata;
 
   bool get isTerminal =>
       status == 'SUCCEEDED' || status == 'FAILED' || status == 'CANCELED';
@@ -96,6 +100,9 @@ class ImageTask {
     styleId: json['style_id'] as String?,
     createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
     local: json['local'] == true,
+    metadata: json['metadata'] is Map
+        ? Map<String, dynamic>.from(json['metadata'] as Map)
+        : null,
   );
 }
 

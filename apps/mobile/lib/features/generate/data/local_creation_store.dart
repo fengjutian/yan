@@ -54,6 +54,7 @@ class LocalCreationStore {
     required String type,
     required List<Uint8List> images,
     String? styleId,
+    Map<String, Object?>? metadata,
   }) async {
     if (images.isEmpty) {
       throw const FormatException('AI 没有返回图片');
@@ -113,6 +114,7 @@ class LocalCreationStore {
       styleId: styleId,
       createdAt: DateTime.now().toUtc(),
       local: true,
+      metadata: metadata == null ? null : Map<String, dynamic>.from(metadata),
     );
     await _writeMeta(dir, task);
     return task;
@@ -315,6 +317,7 @@ class LocalCreationStore {
       'created_at': (task.createdAt ?? DateTime.now().toUtc())
           .toIso8601String(),
       'images': images,
+      if (task.metadata != null) 'metadata': task.metadata,
     };
     final target = File('${dir.path}${Platform.pathSeparator}$_metaFileName');
     final temporary = File('${target.path}.tmp');
@@ -363,6 +366,9 @@ class LocalCreationStore {
       styleId: raw['style_id']?.toString(),
       createdAt: DateTime.tryParse(raw['created_at']?.toString() ?? ''),
       local: true,
+      metadata: raw['metadata'] is Map
+          ? Map<String, dynamic>.from(raw['metadata'] as Map)
+          : null,
     );
   }
 

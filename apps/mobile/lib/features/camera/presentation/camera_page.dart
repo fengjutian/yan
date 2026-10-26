@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
+import 'package:ai_image_studio/features/camera/data/camera_diagnostics.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
@@ -155,6 +156,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String? _barcodeType;
   DateTime _lastBarcodeAt = DateTime.fromMillisecondsSinceEpoch(0);
   CameraCapabilities _capabilities = const CameraCapabilities.fallback();
+  DeviceDiagnostics _deviceDiagnostics = const DeviceDiagnostics();
+  DateTime? _initStartedAt;
+  int? _initElapsedMs;
+  String _initStage = 'idle';
+  String? _lastInitError;
+  bool _analysisUnavailable = false;
+  int _analysisFrameCount = 0;
+  DateTime _analysisWindowStartedAt = DateTime.fromMillisecondsSinceEpoch(0);
+  double _analysisFps = 0;
   final CapturePresetRepository _presetRepository = CapturePresetRepository();
   List<CapturePreset> _customPresets = const [];
   String? _activePresetId;
@@ -207,32 +217,36 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _motionSubscription =
         accelerometerEventStream(
           samplingPeriod: const Duration(milliseconds: 120),
-        ).listen((event) {
-          final angle = math.atan2(event.x, event.y) * 180 / math.pi;
-          // 同一份加速度数据同时驱动水平仪和稳定度分析，
-          // 避免为了新能力重复订阅传感器。
-          _stabilityAnalyzer.setRequirement(_stabilityRequirement);
-          final snapshot = _stabilityAnalyzer.ingest(
-            event.x,
-            event.y,
-            event.z,
-          );
-          if (mounted) {
-            setState(() {
-              _levelAngle = angle.clamp(-45, 45);
-              _motionLevel = snapshot.motion;
-            });
-          }
-        }, onError: (_) {
-          // 没有加速度计时隐藏稳定度提示，评分自动退化为不含稳定分。
-          _stabilityAnalyzer.reset();
-          if (mounted) setState(() => _motionLevel = 0);
-        });
+        ).listen(
+          (event) {
+            final angle = math.atan2(event.x, event.y) * 180 / math.pi;
+            // 同一份加速度数据同时驱动水平仪和稳定度分析，
+            // 避免为了新能力重复订阅传感器。
+            _stabilityAnalyzer.setRequirement(_stabilityRequirement);
+            final snapshot = _stabilityAnalyzer.ingest(
+              event.x,
+              event.y,
+              event.z,
+            );
+            if (mounted) {
+              setState(() {
+                _levelAngle = angle.clamp(-45, 45);
+                _motionLevel = snapshot.motion;
+              });
+            }
+          },
+          onError: (_) {
+            // 没有加速度计时隐藏稳定度提示，评分自动退化为不含稳定分。
+            _stabilityAnalyzer.reset();
+            if (mounted) setState(() => _motionLevel = 0);
+          },
+        );
     _applyTemplateParams();
     unawaited(_activateHardwareControls());
     unawaited(_loadPreferences());
     unawaited(_loadCapabilities());
     unawaited(_loadPresets());
+    unawaited(_loadDiagnostics());
     unawaited(_loadCameras());
   }
 
@@ -268,6 +282,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Future<void> _loadPresets() async {
     final catalog = await _presetRepository.load();
     if (mounted) setState(() => _customPresets = catalog.custom);
+  }
+
+  Future<void> _loadDiagnostics() async {
+    final diagnostics = await CameraCapabilitiesService().loadDiagnostics();
+    if (mounted) setState(() => _deviceDiagnostics = diagnostics);
   }
 
   Future<void> _loadPreferences() async {
@@ -381,8 +400,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
       unawaited(stale?.dispose());
       return;
     }
+    final message = _cameraError(error);
+    final startedAt = _initStartedAt;
     setState(() {
-      _error = _cameraError(error);
+      _error = message;
+      _lastInitError = message;
+      if (startedAt != null) {
+        _initElapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+      }
       _permissionPermanentlyDenied = _isPermissionError(error);
       _initializing = false;
       _controller = null;
@@ -394,6 +419,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Future<void> _initializeCamera(int index) async {
     final token = ++_initializationToken;
     final previous = _controller;
+    final startedAt = DateTime.now();
+    _initStartedAt = startedAt;
+    _initElapsedMs = null;
+    _initStage = '准备';
+    _lastInitError = null;
     if (previous != null && mounted) {
       // 先把 UI 切到加载态，避免 dispose 的 await 期间出现
       // _initializing=false / _controller=null 的不一致窗口。
@@ -403,10 +433,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
         _permissionPermanentlyDenied = false;
         _controller = null;
         _clearFocusState();
+        _clearPortraitHint();
       });
     }
+    _initStage = '释放旧会话';
     await previous?.dispose();
     if (!mounted) return;
+    _initStage = '创建控制器';
     final controller = CameraController(
       _cameras[index],
       ResolutionPreset.high,
@@ -421,6 +454,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     try {
       // Vivo 等定制 ROM 上 controller.initialize() / getMinZoomLevel 等偶发挂死,
       // 用 .timeout 兜底,超时后落到错误态而不是永久 spinner。
+      _initStage = '打开相机';
       await controller.initialize().timeout(const Duration(seconds: 8));
       if (!mounted || token != _initializationToken) {
         await controller.dispose();
@@ -429,6 +463,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // 切换镜头后重建稳定窗口，避免把上一支镜头的运动状态带入新会话。
       _stabilityAnalyzer.reset();
       _stabilityAnalyzer.setRequirement(_stabilityRequirement);
+      _initStage = '读取能力';
       _minZoom = await controller.getMinZoomLevel().timeout(
         const Duration(seconds: 3),
       );
@@ -443,10 +478,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
       );
       _zoom = _minZoom;
       _flashMode = FlashMode.off;
+      _initStage = '设置闪光灯';
       await controller
           .setFlashMode(_flashMode)
           .timeout(const Duration(seconds: 3));
+      _initStage = '启动分析流';
       await _startLightMonitoring(controller);
+      _initStage = '就绪';
+      _initElapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       if (mounted && token == _initializationToken) {
         setState(() => _initializing = false);
       }
@@ -474,6 +513,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           return;
         }
         _lastFrameAt = now;
+        _recordAnalysisFrame();
         final histogram = _analyzeHistogram(
           image,
           controller.description,
@@ -518,10 +558,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
           );
         }
       });
+      _analysisUnavailable = false;
     } catch (_) {
       // 部分 Android 设备无法同时绑定预览、拍照和图像分析三个
       // CameraX use case。实时分析属于增强能力，绑定失败时保留
       // 已经可用的预览与拍照，不让整个相机页面进入错误状态。
+      _analysisUnavailable = true;
       if (mounted) {
         setState(() {
           _showRealtimeGuidance = false;
@@ -535,6 +577,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _zebraPoints = const [];
         });
       }
+    }
+  }
+
+  void _recordAnalysisFrame() {
+    final now = DateTime.now();
+    if (_analysisWindowStartedAt.millisecondsSinceEpoch == 0) {
+      _analysisWindowStartedAt = now;
+      _analysisFrameCount = 0;
+    }
+    _analysisFrameCount++;
+    final elapsed = now.difference(_analysisWindowStartedAt).inMilliseconds;
+    if (elapsed >= 1000) {
+      _analysisFps = _analysisFrameCount * 1000 / elapsed;
+      _analysisFrameCount = 0;
+      _analysisWindowStartedAt = now;
     }
   }
 
@@ -738,10 +795,17 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _liveAnalysis = result;
       if (_showRealtimeGuidance) {
         _compositionSuggestion = result.suggestion;
+        _updatePortraitHint(result, now);
+        final portraitHint = _activePortraitHint;
+        if (portraitHint != null) {
+          _compositionSuggestion = portraitHint.message;
+        }
         _guidanceOpacity =
-            goodPose && now.difference(_goodPoseSince!).inMilliseconds > 1800
-            ? 0
-            : 1;
+            portraitHint != null ||
+                !(goodPose &&
+                    now.difference(_goodPoseSince!).inMilliseconds > 1800)
+            ? 1
+            : 0;
       }
       if (_scanMode && result.barcodeValue != null) {
         _barcodeValue = result.barcodeValue;
@@ -753,6 +817,38 @@ class _CameraPageState extends ConsumerState<CameraPage>
       }
     });
     _handleSmartShutter(result);
+  }
+
+  void _updatePortraitHint(LiveCameraAnalysis analysis, DateTime now) {
+    // 当前提示仍在展示时不要被下一帧打断，避免文字来回跳。
+    if (_portraitHint != null && now.isBefore(_portraitHintUntil)) return;
+    final hint = _portraitGuide.evaluate(
+      faces: analysis.faces,
+      landmarks: analysis.landmarks,
+    );
+    if (hint == null || hint.confidence < .55) {
+      _portraitHint = null;
+      return;
+    }
+    final sameHint = hint.code == _lastPortraitHintCode;
+    final cooldown = sameHint
+        ? const Duration(seconds: 6)
+        : const Duration(seconds: 2);
+    if (now.difference(_lastPortraitHintAt) < cooldown) {
+      _portraitHint = null;
+      return;
+    }
+    _portraitHint = hint;
+    _lastPortraitHintCode = hint.code;
+    _lastPortraitHintAt = now;
+    _portraitHintUntil = now.add(const Duration(seconds: 4));
+  }
+
+  void _clearPortraitHint() {
+    _portraitHint = null;
+    _portraitHintUntil = DateTime.fromMillisecondsSinceEpoch(0);
+    _lastPortraitHintAt = DateTime.fromMillisecondsSinceEpoch(0);
+    _lastPortraitHintCode = null;
   }
 
   void _handleSmartShutter(LiveCameraAnalysis analysis) {
@@ -810,6 +906,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _controller = null;
           _initializing = true;
           _clearFocusState();
+          _clearPortraitHint();
         });
       }
       return;
@@ -1143,10 +1240,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           ? null
           : scores.reduce((left, right) => left + right) / scores.length,
     );
-    return [
-      merged,
-      ...List<CaptureContext?>.filled(values.length - 1, null),
-    ];
+    return [merged, ...List<CaptureContext?>.filled(values.length - 1, null)];
   }
 
   void _handleShutterTap() {
@@ -1196,9 +1290,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
-    await ref
-        .read(cameraSessionProvider.notifier)
-        .setPhotos([bytes], portraitAnalyzer: analyzePortraitQuality);
+    await ref.read(cameraSessionProvider.notifier).setPhotos([
+      bytes,
+    ], portraitAnalyzer: analyzePortraitQuality);
     if (mounted) setState(() => _capturedImage = bytes);
   }
 
@@ -1230,16 +1324,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _focusLocked = lock;
       _exposureLocked = lock;
     });
-    try {
-      // 点击会解除上一次锁定并重新对焦；长按则在当前位置锁定 AE/AF。
-      await controller.setExposureMode(
-        lock ? ExposureMode.locked : ExposureMode.auto,
-      );
-      await controller.setExposurePoint(point);
-    } on CameraException {
-      _disableMeteringPoint();
-    } on PlatformException {
-      _disableMeteringPoint();
+    if (!_meteringPointSupported) {
+      // 设备已确认不支持独立测光点，保留曝光补偿但不再假装锁定 AE。
+      if (_exposureLocked) setState(() => _exposureLocked = false);
+    } else {
+      try {
+        // 点击会解除上一次锁定并重新对焦；长按则在当前位置锁定 AE/AF。
+        await controller.setExposureMode(
+          lock ? ExposureMode.locked : ExposureMode.auto,
+        );
+        await controller.setExposurePoint(point);
+      } on CameraException {
+        _disableMeteringPoint();
+      } on PlatformException {
+        _disableMeteringPoint();
+      }
     }
     if (lock) {
       unawaited(HapticFeedback.selectionClick());
@@ -1259,10 +1358,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   );
 
   /// 从焦点环旁的 AE 手柄拖出独立测光点。
-  void _dragMetering(
-    DragUpdateDetails details,
-    BoxConstraints constraints,
-  ) {
+  void _dragMetering(DragUpdateDetails details, BoxConstraints constraints) {
     if (!_meteringPointSupported) return;
     final controller = _controller;
     final base = _meteringPoint ?? _focusPoint;
@@ -1284,10 +1380,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     unawaited(
       _applyMeteringPoint(
         controller,
-        Offset(
-          next.dx / constraints.maxWidth,
-          next.dy / constraints.maxHeight,
-        ),
+        Offset(next.dx / constraints.maxWidth, next.dy / constraints.maxHeight),
       ),
     );
   }
@@ -1564,6 +1657,53 @@ class _CameraPageState extends ConsumerState<CameraPage>
     };
   }
 
+  CameraDiagnostics _diagnosticsSnapshot() {
+    final lens = _activeNativeLens;
+    final degraded = <String>[
+      if (_analysisUnavailable) '实时分析流不可用',
+      if (!_stability.hasSamples) '稳定度传感器不可用',
+      if (!_meteringPointSupported) '独立测光点不可用',
+      if (!_supportsCaptureEnhancement(CaptureEnhancement.multiFrameHdr))
+        'HDR 不可用',
+      if (!_supportsCaptureEnhancement(CaptureEnhancement.nightDenoise))
+        '夜景降噪不可用',
+      if (_permissionPermanentlyDenied) '相机权限被拒绝',
+      if (_error != null) '相机错误',
+    ];
+    final active = <String>[
+      if (_showHistogram) '直方图',
+      if (_showZebra) '斑马纹',
+      if (_showFocusPeaking) '峰值对焦',
+      if (_showRealtimeGuidance) '姿态/人像构图',
+      if (_stability.hasSamples) '稳定度',
+      if (_smartShutterMode != SmartShutterMode.off) '智能快门',
+    ];
+    return CameraDiagnostics(
+      platform: _capabilities.platform,
+      lensId: _controller?.description.name,
+      lensType: lens?.type,
+      initializationMs: _initElapsedMs,
+      initializationStage: _initStage,
+      lastError: _lastInitError ?? _error,
+      analysisFps: _analysisFps,
+      analysisFormat: preferredAnalysisFormat.name,
+      activeAnalyzers: active,
+      degraded: degraded,
+      freeStorageMb: _deviceDiagnostics.freeStorageMb,
+      totalStorageMb: _deviceDiagnostics.totalStorageMb,
+      availableMemoryMb: _deviceDiagnostics.availableMemoryMb,
+      totalMemoryMb: _deviceDiagnostics.totalMemoryMb,
+      lowMemory: _deviceDiagnostics.lowMemory,
+      thermalStatus: _deviceDiagnostics.thermalStatus,
+    );
+  }
+
+  Future<void> _copyDiagnostics() async {
+    final report = _diagnosticsSnapshot().buildReport();
+    await Clipboard.setData(ClipboardData(text: report));
+    if (mounted) _showMessage('诊断报告已复制，可直接粘贴反馈');
+  }
+
   void _applyPreset(CapturePreset preset) {
     final guide = CompositionGuide.values.firstWhere(
       (value) => value.name == preset.guide,
@@ -1708,9 +1848,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     ),
                     const Spacer(),
                     TextButton.icon(
-                      onPressed: () => Navigator.of(
-                        sheetContext,
-                      ).pop(const _PresetAction._(_PresetActionType.saveCurrent)),
+                      onPressed: () => Navigator.of(sheetContext).pop(
+                        const _PresetAction._(_PresetActionType.saveCurrent),
+                      ),
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('保存当前'),
                     ),
@@ -1973,7 +2113,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
         const Spacer(),
         _CameraCircleButton(
           tooltip: '相机设置',
-          onTap: () => setState(() => _showCameraOptions = !_showCameraOptions),
+          onTap: () {
+            if (!_showCameraOptions) unawaited(_loadDiagnostics());
+            setState(() => _showCameraOptions = !_showCameraOptions);
+          },
           icon: _showCameraOptions
               ? Icons.keyboard_arrow_up_rounded
               : Icons.keyboard_arrow_down_rounded,
@@ -1983,7 +2126,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
           tooltip: '实时姿态指导',
           onPressed: () => setState(() {
             _showRealtimeGuidance = !_showRealtimeGuidance;
-            if (!_showRealtimeGuidance) _liveAnalysis = null;
+            if (!_showRealtimeGuidance) {
+              _liveAnalysis = null;
+              _clearPortraitHint();
+            }
             _guidanceOpacity = 1;
             _goodPoseSince = null;
             unawaited(
@@ -2028,6 +2174,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
         mainAxisSize: MainAxisSize.min,
         children: [
           _CapabilitySummary(capabilities: _capabilities),
+          const SizedBox(height: 8),
+          _DiagnosticsPanel(
+            diagnostics: _diagnosticsSnapshot(),
+            onCopy: _copyDiagnostics,
+          ),
           const SizedBox(height: 8),
           _ProfessionalCapabilityPanel(
             lens: _activeNativeLens,
@@ -2477,7 +2628,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     zoom: _zoom,
                     brightness: _brightness,
                     motionLevel: _motionLevel,
-                    suggestion: _compositionSuggestion,
+                    suggestion:
+                        _activePortraitHint?.message ?? _compositionSuggestion,
+                    prioritizeSuggestion: _activePortraitHint != null,
                   ),
                 ),
               ),
@@ -2810,7 +2963,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   );
 
   Future<void> _saveToLibrary() async {
-    final bytes = _capturedImage;
+    final session = ref.read(cameraSessionProvider);
+    final selected = session.selected;
+    final bytes = selected?.bytes ?? _capturedImage;
     if (bytes == null) return;
     final aspect = _aspectRatio == .75
         ? '3:4'
@@ -2830,6 +2985,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             count: 1,
             type: 'CAMERA',
             images: [bytes],
+            metadata: selected == null ? null : _photoMetadata(selected),
           );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -2846,6 +3002,50 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _showMessage('保存到作品库失败：$error');
     }
   }
+
+  /// 把可解释的质量指标和拍摄上下文写入本地作品元数据。
+  Map<String, Object?>? _photoMetadata(CapturedPhoto photo) {
+    final metrics = photo.metrics;
+    final portrait = metrics.portrait;
+    final context = photo.context;
+    return {
+      'quality': {
+        'total_score': _roundScore(metrics.totalScore),
+        'sharpness': _roundScore(metrics.sharpness),
+        'exposure': _roundScore(metrics.exposure),
+        'contrast': _roundScore(metrics.contrast),
+        'clipping_penalty': _roundScore(metrics.clippingPenalty),
+        'stability': metrics.stability == null
+            ? null
+            : _roundScore(metrics.stability!),
+        'portrait': portrait == null
+            ? null
+            : {
+                'face_count': portrait.faceCount,
+                'face_sharpness': _roundScore(portrait.faceSharpness),
+                'eyes_open_score': _roundScore(portrait.eyesOpenScore),
+                'smile_score': _roundScore(portrait.smileScore),
+                'occlusion_risk': _roundScore(portrait.occlusionRisk),
+              },
+      },
+      'capture': context == null
+          ? null
+          : {
+              'camera_id': context.cameraId,
+              'lens_type': context.lensType,
+              'zoom': _roundScore(context.zoom),
+              'exposure_offset': _roundScore(context.exposureOffset),
+              'stability_score': context.stabilityScore == null
+                  ? null
+                  : _roundScore(context.stabilityScore!),
+              'preset_id': context.presetId,
+              'captured_at': context.capturedAt.toUtc().toIso8601String(),
+            },
+      'recommendation': photo.recommendationReason,
+    };
+  }
+
+  double _roundScore(double value) => double.parse(value.toStringAsFixed(2));
 
   Future<void> _retake() async {
     if (mounted) {
@@ -3400,11 +3600,13 @@ class _CameraTip extends StatelessWidget {
     required this.brightness,
     required this.motionLevel,
     required this.suggestion,
+    this.prioritizeSuggestion = false,
   });
   final double zoom;
   final double brightness;
   final double motionLevel;
   final String suggestion;
+  final bool prioritizeSuggestion;
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -3418,7 +3620,9 @@ class _CameraTip extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            brightness < 58 && motionLevel > .45
+            prioritizeSuggestion
+                ? suggestion
+                : brightness < 58 && motionLevel > .45
                 ? '低光环境请保持手机稳定，正在等待更清晰的拍摄时机'
                 : brightness < 58
                 ? '光线较暗，建议靠近光源或开启闪光灯'
@@ -3830,6 +4034,103 @@ class _CapabilitySummary extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _DiagnosticsPanel extends StatelessWidget {
+  const _DiagnosticsPanel({required this.diagnostics, required this.onCopy});
+
+  final CameraDiagnostics diagnostics;
+  final VoidCallback onCopy;
+
+  @override
+  Widget build(BuildContext context) {
+    final initialization = diagnostics.initializationMs == null
+        ? '未完成'
+        : '${diagnostics.initializationMs} ms';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(10, 4, 10, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF28282B),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.bug_report_outlined,
+                size: 15,
+                color: Color(0xFFFFD60A),
+              ),
+              const SizedBox(width: 6),
+              const Text(
+                '诊断',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy, size: 13),
+                label: const Text('复制报告'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFFFD60A),
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+          ),
+          Text(
+            '初始化 $initialization · ${diagnostics.initializationStage ?? 'idle'}'
+            ' · 分析 ${diagnostics.analysisFps.toStringAsFixed(1)} fps',
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            '存储可用 ${_formatMb(diagnostics.freeStorageMb)}'
+            ' · 内存可用 ${_formatMb(diagnostics.availableMemoryMb)}'
+            ' · 温度 ${_thermalLabel(diagnostics.thermalStatus)}',
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
+          ),
+          if (diagnostics.warnings.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              '预警：${diagnostics.warnings.join('、')}',
+              style: const TextStyle(
+                color: Color(0xFFFF9F0A),
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+          if (diagnostics.degraded.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              '降级：${diagnostics.degraded.join('、')}',
+              style: const TextStyle(color: Color(0xFFFFD60A), fontSize: 10),
+            ),
+          ],
+          if (diagnostics.lastError != null &&
+              diagnostics.lastError!.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text(
+              '最近错误：${diagnostics.lastError}',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white38, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -4320,6 +4621,21 @@ String _presetStyleLabel(String style) => switch (style) {
   'mono' => '黑白',
   'soft' => '柔和',
   _ => '标准',
+};
+
+String _formatMb(int? value) {
+  if (value == null) return '未知';
+  if (value >= 1024) return '${(value / 1024).toStringAsFixed(1)} GB';
+  return '$value MB';
+}
+
+String _thermalLabel(String? status) => switch (status) {
+  'none' || 'nominal' => '正常',
+  'light' || 'fair' => '轻微升温',
+  'moderate' => '中度升温',
+  'severe' || 'serious' => '高温',
+  'critical' || 'emergency' || 'shutdown' => '过热',
+  _ => '未知',
 };
 
 enum _PresetActionType { apply, copy, delete, saveCurrent }

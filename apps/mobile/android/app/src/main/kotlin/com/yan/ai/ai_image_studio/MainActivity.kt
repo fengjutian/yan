@@ -1,11 +1,14 @@
 package com.yan.ai.ai_image_studio
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraExtensionCharacteristics
 import android.hardware.camera2.CameraManager
 import android.os.Build
+import android.os.PowerManager
+import android.os.StatFs
 import android.provider.Settings
 import android.net.Uri
 import android.view.KeyEvent
@@ -27,6 +30,9 @@ class MainActivity : FlutterActivity() {
                 "getCapabilities" -> runCatching { cameraCapabilities() }
                     .onSuccess(result::success)
                     .onFailure { result.error("camera-capabilities", it.message, null) }
+                "getDiagnostics" -> runCatching { deviceDiagnostics() }
+                    .onSuccess(result::success)
+                    .onFailure { result.error("camera-diagnostics", it.message, null) }
                 "openAppSettings" -> {
                     startActivity(
                         Intent(
@@ -63,6 +69,36 @@ class MainActivity : FlutterActivity() {
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    private fun deviceDiagnostics(): Map<String, Any> {
+        val stat = StatFs(filesDir.path)
+        val memoryInfo = ActivityManager.MemoryInfo()
+        (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .getMemoryInfo(memoryInfo)
+        val thermal = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            when (powerManager.currentThermalStatus) {
+                PowerManager.THERMAL_STATUS_NONE -> "none"
+                PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                else -> "unknown"
+            }
+        } else {
+            "unknown"
+        }
+        return mapOf(
+            "freeStorageMb" to (stat.availableBytes / (1024L * 1024L)),
+            "totalStorageMb" to (stat.totalBytes / (1024L * 1024L)),
+            "availableMemoryMb" to (memoryInfo.availMem / (1024L * 1024L)),
+            "totalMemoryMb" to (memoryInfo.totalMem / (1024L * 1024L)),
+            "lowMemory" to memoryInfo.lowMemory,
+            "thermalStatus" to thermal,
+        )
     }
 
     private fun cameraCapabilities(): Map<String, Any> {

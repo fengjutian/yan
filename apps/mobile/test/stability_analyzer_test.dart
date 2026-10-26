@@ -19,9 +19,10 @@ void main() {
     expect(snapshot.hasSamples, isTrue);
     expect(snapshot.score, greaterThan(95));
     expect(snapshot.stable, isTrue);
-    expect(snapshot.stableFor, greaterThanOrEqualTo(
-      StabilityRequirement.standard.minStableDuration,
-    ));
+    expect(
+      snapshot.stableFor,
+      greaterThanOrEqualTo(StabilityRequirement.standard.minStableDuration),
+    );
     expect(snapshot.guidance, '可以拍摄');
     expect(snapshot.captureScore, closeTo(snapshot.score, .001));
   });
@@ -82,9 +83,10 @@ void main() {
       );
     }
     // 720ms：满足普通模式，但不足严格模式的 900ms。
-    expect(snapshot.stableFor, lessThan(
-      StabilityRequirement.strict.minStableDuration,
-    ));
+    expect(
+      snapshot.stableFor,
+      lessThan(StabilityRequirement.strict.minStableDuration),
+    );
     expect(snapshot.stable, isFalse);
 
     for (var index = 7; index < 10; index++) {
@@ -114,13 +116,11 @@ void main() {
 
   test('过期快照不应继续展示', () {
     final analyzer = StabilityAnalyzer();
-    final snapshot = analyzer.ingest(
-      0,
-      0,
-      9.8,
-      at: start,
+    final snapshot = analyzer.ingest(0, 0, 9.8, at: start);
+    expect(
+      snapshot.isStale(start.add(const Duration(milliseconds: 600))),
+      isFalse,
     );
-    expect(snapshot.isStale(start.add(const Duration(milliseconds: 600))), isFalse);
     expect(snapshot.isStale(start.add(const Duration(seconds: 2))), isTrue);
   });
 }

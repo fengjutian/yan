@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/features/camera/data/camera_diagnostics.dart';
 import 'package:flutter/services.dart';
 
 class CameraCapabilities {
@@ -61,6 +62,31 @@ class CameraCapabilitiesService {
       return false;
     } on PlatformException {
       return false;
+    }
+  }
+
+  /// 读取剩余存储、可用内存和设备温度；原生未实现时安全回退为空数据。
+  Future<DeviceDiagnostics> loadDiagnostics() async {
+    try {
+      final value = await _channel.invokeMapMethod<String, Object?>(
+        'getDiagnostics',
+      );
+      if (value == null) return const DeviceDiagnostics();
+      int? number(Object? item) => item is num
+          ? item.round()
+          : (item is String ? int.tryParse(item) : null);
+      return DeviceDiagnostics(
+        freeStorageMb: number(value['freeStorageMb']),
+        totalStorageMb: number(value['totalStorageMb']),
+        availableMemoryMb: number(value['availableMemoryMb']),
+        totalMemoryMb: number(value['totalMemoryMb']),
+        lowMemory: value['lowMemory'] as bool? ?? false,
+        thermalStatus: value['thermalStatus'] as String?,
+      );
+    } on MissingPluginException {
+      return const DeviceDiagnostics();
+    } on PlatformException {
+      return const DeviceDiagnostics();
     }
   }
 
