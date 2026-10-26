@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image/image.dart' as img;
@@ -12,7 +13,12 @@ class CapturedPhoto {
     this.exposure = 0,
     this.contrast = 0,
     this.clippingPenalty = 0,
+    this.stability,
+    this.portrait,
+    this.context,
+    this.reasons = const [],
   });
+
   final Uint8List bytes;
   final double score;
   final double sharpness;
@@ -20,13 +26,52 @@ class CapturedPhoto {
   final double contrast;
   final double clippingPenalty;
 
-  String get qualityLabel {
-    if (sharpness < 25) return '轻微模糊';
-    if (exposure < 45) return '曝光待改善';
-    if (clippingPenalty > 18) return '明暗细节较少';
-    if (score >= 78) return '优质';
-    return '可用';
-  }
+  /// 快门触发时的稳定度分数；传感器不可用时为 null。
+  final double? stability;
+  final PortraitQualityMetrics? portrait;
+  final CaptureContext? context;
+
+  /// 可解释的推荐原因，如“画面清晰、全员睁眼、手持稳定”。
+  final List<String> reasons;
+
+  String get qualityLabel => PhotoQualityEvaluator.label(
+    score: score,
+    sharpness: sharpness,
+    exposure: exposure,
+    clippingPenalty: clippingPenalty,
+    stability: stability,
+    portrait: portrait,
+  );
+
+  String get recommendationReason =>
+      reasons.isEmpty ? qualityLabel : reasons.join('、');
+
+  PhotoQualityMetrics get metrics => PhotoQualityMetrics(
+    totalScore: score,
+    sharpness: sharpness,
+    exposure: exposure,
+    contrast: contrast,
+    clippingPenalty: clippingPenalty,
+    stability: stability,
+    portrait: portrait,
+  );
+
+  CapturedPhoto copyWith({
+    double? score,
+    PortraitQualityMetrics? portrait,
+    List<String>? reasons,
+  }) => CapturedPhoto(
+    bytes: bytes,
+    score: score ?? this.score,
+    sharpness: sharpness,
+    exposure: exposure,
+    contrast: contrast,
+    clippingPenalty: clippingPenalty,
+    stability: stability,
+    portrait: portrait ?? this.portrait,
+    context: context,
+    reasons: reasons ?? this.reasons,
+  );
 }
 
 class CameraSession {
@@ -47,23 +92,29 @@ class CameraSessionController extends StateNotifier<CameraSession> {
   Future<void> setPhotos(
     List<Uint8List> values, {
     ValueChanged<double>? onProgress,
+    List<CaptureContext?>? contexts,
+    PortraitAnalyzer? portraitAnalyzer,
+    ValueChanged<double>? onPortraitProgress,
   }) async {
     // 最多同时解码两张，避免高分辨率连拍触发大量 isolate 和内存峰值。
     final analyzed = <_AnalyzedPhoto>[];
     const concurrency = 2;
     for (var offset = 0; offset < values.length; offset += concurrency) {
       final end = (offset + concurrency).clamp(0, values.length);
-      final batch = await Future.wait(
-        values.sublist(offset, end).map((bytes) async {
-          final result = await compute(_analyzeIsolate, bytes);
-          return _AnalyzedPhoto(bytes: bytes, metrics: result);
-        }),
-      );
+      final batch = await Future.wait([
+        for (var index = offset; index < end; index++)
+          _analyzePhoto(
+            values[index],
+            contexts != null && index < contexts.length
+                ? contexts[index]
+                : null,
+          ),
+      ]);
       analyzed.addAll(batch);
       onProgress?.call(analyzed.length / values.length);
     }
-    analyzed.sort((a, b) => b.metrics.score.compareTo(a.metrics.score));
-    final unique = <CapturedPhoto>[];
+    analyzed.sort((a, b) => b.score.compareTo(a.score));
+    final unique = <_AnalyzedPhoto>[];
     final signatures = <_PhotoMetrics>[];
     for (final item in analyzed) {
       final metrics = item.metrics;
@@ -73,20 +124,115 @@ class CameraSessionController extends StateNotifier<CameraSession> {
             (existing.averageLuminance - metrics.averageLuminance).abs() < 8,
       );
       if (!duplicate) {
-        unique.add(
-          CapturedPhoto(
-            bytes: item.bytes,
-            score: metrics.score,
-            sharpness: metrics.sharpness,
-            exposure: metrics.exposure,
-            contrast: metrics.contrast,
-            clippingPenalty: metrics.clippingPenalty,
-          ),
-        );
+        unique.add(item);
         signatures.add(metrics);
       }
     }
-    state = CameraSession(photos: unique);
+    var photos = [
+      for (final item in unique)
+        _buildPhoto(item, portrait: null),
+    ];
+    if (portraitAnalyzer != null && photos.isNotEmpty) {
+      photos = await _mergePortraitMetrics(
+        photos,
+        portraitAnalyzer,
+        onProgress: onPortraitProgress,
+      );
+    }
+    state = CameraSession(photos: photos);
+  }
+
+  Future<_AnalyzedPhoto> _analyzePhoto(
+    Uint8List bytes,
+    CaptureContext? context,
+  ) async {
+    final metrics = await compute(_analyzeIsolate, bytes);
+    final stability = context?.stabilityScore;
+    final score = PhotoQualityEvaluator.applyStability(
+      metrics.score,
+      stability,
+    );
+    return _AnalyzedPhoto(
+      bytes: bytes,
+      metrics: metrics,
+      context: context,
+      score: score,
+    );
+  }
+
+  Future<List<CapturedPhoto>> _mergePortraitMetrics(
+    List<CapturedPhoto> photos,
+    PortraitAnalyzer analyzer, {
+    ValueChanged<double>? onProgress,
+  }) async {
+    final merged = <CapturedPhoto>[];
+    for (var index = 0; index < photos.length; index++) {
+      final photo = photos[index];
+      PortraitQualityMetrics? portrait;
+      try {
+        portrait = await analyzer(photo.bytes);
+      } catch (_) {
+        // 检测失败时保留通用评分，人像能力单独降级，不影响选片主流程。
+        portrait = null;
+      }
+      if (portrait != null && portrait.hasFaces) {
+        final score = PhotoQualityEvaluator.mergePortrait(
+          photo.score,
+          portrait,
+        );
+        merged.add(
+          _buildPhoto(
+            _AnalyzedPhoto(
+              bytes: photo.bytes,
+              metrics: _PhotoMetrics(
+                score: photo.score,
+                sharpness: photo.sharpness,
+                exposure: photo.exposure,
+                contrast: photo.contrast,
+                clippingPenalty: photo.clippingPenalty,
+                averageLuminance: 0,
+                hash: 0,
+              ),
+              context: photo.context,
+              score: score,
+            ),
+            portrait: portrait,
+          ),
+        );
+      } else {
+        merged.add(photo);
+      }
+      onProgress?.call((index + 1) / photos.length);
+    }
+    merged.sort((a, b) => b.score.compareTo(a.score));
+    return merged;
+  }
+
+  CapturedPhoto _buildPhoto(
+    _AnalyzedPhoto item, {
+    required PortraitQualityMetrics? portrait,
+  }) {
+    final metrics = item.metrics;
+    final stability = item.context?.stabilityScore;
+    return CapturedPhoto(
+      bytes: item.bytes,
+      score: item.score,
+      sharpness: metrics.sharpness,
+      exposure: metrics.exposure,
+      contrast: metrics.contrast,
+      clippingPenalty: metrics.clippingPenalty,
+      stability: stability,
+      portrait: portrait,
+      context: item.context,
+      reasons: PhotoQualityEvaluator.describe(
+        sharpness: metrics.sharpness,
+        exposure: metrics.exposure,
+        contrast: metrics.contrast,
+        clippingPenalty: metrics.clippingPenalty,
+        stability: stability,
+        portrait: portrait,
+      ),
+    );
   }
 
   void select(int index) {
@@ -100,9 +246,16 @@ class CameraSessionController extends StateNotifier<CameraSession> {
 }
 
 class _AnalyzedPhoto {
-  const _AnalyzedPhoto({required this.bytes, required this.metrics});
+  const _AnalyzedPhoto({
+    required this.bytes,
+    required this.metrics,
+    required this.score,
+    this.context,
+  });
   final Uint8List bytes;
   final _PhotoMetrics metrics;
+  final double score;
+  final CaptureContext? context;
 }
 
 class _PhotoMetrics {

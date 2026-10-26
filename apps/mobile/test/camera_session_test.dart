@@ -1,8 +1,20 @@
 import 'dart:typed_data';
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
+import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+
+Uint8List _testPhoto() {
+  final image = img.Image(width: 48, height: 36);
+  for (var y = 0; y < image.height; y++) {
+    for (var x = 0; x < image.width; x++) {
+      final value = (x * 5 + y * 3).clamp(0, 255);
+      image.setPixelRgb(x, y, value, (value + 40).clamp(0, 255), 120);
+    }
+  }
+  return Uint8List.fromList(img.encodeJpg(image));
+}
 
 void main() {
   test('连拍评分分批执行并报告进度', () async {
@@ -54,5 +66,127 @@ void main() {
 
     expect(controller.state.photos, hasLength(1));
     expect(controller.state.selected, isNotNull);
+  });
+
+  test('快门稳定度写入上下文并参与评分', () async {
+    final bytes = _testPhoto();
+    final baseline = CameraSessionController();
+    await baseline.setPhotos([bytes]);
+    final baseScore = baseline.state.photos.single.score;
+    final capturedAt = DateTime(2026, 1, 1, 12);
+
+    final controller = CameraSessionController();
+    await controller.setPhotos(
+      [bytes],
+      contexts: [
+        CaptureContext(
+          cameraId: '0',
+          lensType: 'wide',
+          zoom: 1,
+          exposureOffset: 0,
+          stabilityScore: 40,
+          capturedAt: capturedAt,
+        ),
+      ],
+    );
+
+    final photo = controller.state.photos.single;
+    expect(photo.stability, 40);
+    expect(photo.context?.capturedAt, capturedAt);
+    expect(
+      photo.score,
+      closeTo(PhotoQualityEvaluator.applyStability(baseScore, 40), .001),
+    );
+    expect(photo.reasons, contains('手抖偏多'));
+    expect(photo.metrics.stability, 40);
+  });
+
+  test('没有稳定度数据时评分保持原样', () async {
+    final bytes = _testPhoto();
+    final withContext = CameraSessionController();
+    await withContext.setPhotos(
+      [bytes],
+      contexts: [
+        CaptureContext(
+          cameraId: '0',
+          lensType: 'wide',
+          zoom: 1,
+          exposureOffset: 0,
+          capturedAt: DateTime(2026, 1, 1),
+        ),
+      ],
+    );
+    final withoutContext = CameraSessionController();
+    await withoutContext.setPhotos([bytes]);
+
+    expect(withContext.state.photos.single.stability, isNull);
+    expect(
+      withContext.state.photos.single.score,
+      closeTo(withoutContext.state.photos.single.score, .001),
+    );
+  });
+
+  test('人像分析结果参与评分并解释推荐原因', () async {
+    final bytes = _testPhoto();
+    final controller = CameraSessionController();
+    final progress = <double>[];
+
+    await controller.setPhotos(
+      [bytes],
+      portraitAnalyzer: (input) async => const PortraitQualityMetrics(
+        faceCount: 2,
+        faceSharpness: 82,
+        eyesOpenScore: 96,
+        smileScore: 70,
+        occlusionRisk: 8,
+      ),
+      onPortraitProgress: progress.add,
+    );
+
+    final photo = controller.state.photos.single;
+    expect(photo.portrait, isNotNull);
+    expect(photo.portrait!.faceCount, 2);
+    expect(photo.reasons, contains('全员睁眼'));
+    expect(photo.reasons, contains('人物清晰'));
+    expect(progress, [1]);
+  });
+
+  test('人像检测失败时保留通用评分', () async {
+    final bytes = _testPhoto();
+    final controller = CameraSessionController();
+
+    await controller.setPhotos(
+      [bytes],
+      portraitAnalyzer: (input) async => throw StateError('face model missing'),
+    );
+
+    final photo = controller.state.photos.single;
+    expect(photo.portrait, isNull);
+    expect(photo.score, greaterThan(0));
+    expect(photo.qualityLabel, isNotEmpty);
+  });
+
+  test('没有人物时人像分析不会改变评分', () async {
+    final bytes = _testPhoto();
+    final baseline = CameraSessionController();
+    await baseline.setPhotos([bytes]);
+    final controller = CameraSessionController();
+
+    await controller.setPhotos(
+      [bytes],
+      portraitAnalyzer: (input) async => const PortraitQualityMetrics(
+        faceCount: 0,
+        faceSharpness: 0,
+        eyesOpenScore: 0,
+        smileScore: 0,
+        occlusionRisk: 0,
+      ),
+    );
+
+    expect(controller.state.photos.single.portrait, isNull);
+    expect(
+      controller.state.photos.single.score,
+      closeTo(baseline.state.photos.single.score, .001),
+    );
   });
 }

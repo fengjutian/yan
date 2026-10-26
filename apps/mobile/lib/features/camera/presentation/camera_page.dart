@@ -5,6 +5,9 @@ import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
+import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
+import 'package:ai_image_studio/features/camera/data/portrait_quality_analyzer.dart';
+import 'package:ai_image_studio/features/camera/data/stability_analyzer.dart';
 import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -94,7 +97,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _maxExposure = 0;
   double _levelAngle = 0;
   double _motionLevel = 0;
-  (double, double, double)? _lastAcceleration;
   double _brightness = 128;
   List<double> _histogram = List<double>.filled(32, 0);
   List<double> _redHistogram = List<double>.filled(32, 0);
@@ -118,6 +120,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   int _initializationToken = 0;
   String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
   Offset? _focusPoint;
+  final StabilityAnalyzer _stabilityAnalyzer = StabilityAnalyzer();
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
@@ -158,6 +161,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _lensHintsPreference = 'camera.lens_cleaning_hints';
   static const _enhancementPreference = 'camera.capture_enhancement';
 
+  StabilitySnapshot get _stability => _stabilityAnalyzer.snapshot;
+
+  /// 夜景、HDR 或弱光环境下使用更严格的稳定阈值；
+  /// 普通拍摄保持宽松，避免用户长时间等不到“可以拍摄”。
+  StabilityRequirement get _stabilityRequirement {
+    final enhancement = _burstCount == 1 && !_scanMode
+        ? _captureEnhancement
+        : CaptureEnhancement.standard;
+    final lowLight = _brightness < 58;
+    return enhancement != CaptureEnhancement.standard || lowLight
+        ? StabilityRequirement.strict
+        : StabilityRequirement.standard;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -167,22 +184,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
           samplingPeriod: const Duration(milliseconds: 120),
         ).listen((event) {
           final angle = math.atan2(event.x, event.y) * 180 / math.pi;
-          final previous = _lastAcceleration;
-          _lastAcceleration = (event.x, event.y, event.z);
-          final movement = previous == null
-              ? 0.0
-              : math.sqrt(
-                  math.pow(event.x - previous.$1, 2) +
-                      math.pow(event.y - previous.$2, 2) +
-                      math.pow(event.z - previous.$3, 2),
-                );
+          // 同一份加速度数据同时驱动水平仪和稳定度分析，
+          // 避免为了新能力重复订阅传感器。
+          _stabilityAnalyzer.setRequirement(_stabilityRequirement);
+          final snapshot = _stabilityAnalyzer.ingest(
+            event.x,
+            event.y,
+            event.z,
+          );
           if (mounted) {
             setState(() {
               _levelAngle = angle.clamp(-45, 45);
-              _motionLevel = _motionLevel * .72 + movement * .28;
+              _motionLevel = snapshot.motion;
             });
           }
-        }, onError: (_) {});
+        }, onError: (_) {
+          // 没有加速度计时隐藏稳定度提示，评分自动退化为不含稳定分。
+          _stabilityAnalyzer.reset();
+          if (mounted) setState(() => _motionLevel = 0);
+        });
     _applyTemplateParams();
     unawaited(_activateHardwareControls());
     unawaited(_loadPreferences());
@@ -370,6 +390,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await controller.dispose();
         return;
       }
+      // 切换镜头后重建稳定窗口，避免把上一支镜头的运动状态带入新会话。
+      _stabilityAnalyzer.reset();
+      _stabilityAnalyzer.setRequirement(_stabilityRequirement);
       _minZoom = await controller.getMinZoomLevel().timeout(
         const Duration(seconds: 3),
       );
@@ -677,7 +700,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
       SmartShutterMode.smile => analysis.smileDetected,
       SmartShutterMode.gesture => analysis.gestureDetected,
     };
-    _smartSignalFrames = detected ? _smartSignalFrames + 1 : 0;
+    // 智能快门只在画面连续稳定后触发；传感器不可用或数据过期时
+    // 不做稳定度限制，保证基础拍摄能力不受影响。
+    final stability = _stability;
+    final stabilityKnown = stability.hasSamples && !stability.isStale();
+    final stable = !stabilityKnown || stability.stable;
+    _smartSignalFrames = detected && stable ? _smartSignalFrames + 1 : 0;
     if (_smartSignalFrames < 3 || _capturing) return;
     final now = DateTime.now();
     if (now.difference(_lastSmartCapture) < const Duration(seconds: 6)) return;
@@ -828,6 +856,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
       }
       final values = <Uint8List>[];
       final rawFrames = <Uint8List>[];
+      // 每次快门触发时记录稳定度，供选片和后续元数据使用。
+      final capturedContexts = <CaptureContext>[];
       Uint8List? firstOriginal;
       XFile? analysisFile;
       final enhancement = !continuous && _burstCount == 1 && !_scanMode
@@ -876,6 +906,19 @@ class _CameraPageState extends ConsumerState<CameraPage>
         final file = await controller.takePicture();
         if (mounted) setState(() => _shutterFlash = false);
         analysisFile ??= file;
+        final stability = _stability;
+        capturedContexts.add(
+          CaptureContext(
+            cameraId: controller.description.name,
+            lensType:
+                _activeNativeLens?.type ??
+                controller.description.lensDirection.name,
+            zoom: _zoom,
+            exposureOffset: _exposure,
+            stabilityScore: stability.captureScore,
+            capturedAt: DateTime.now(),
+          ),
+        );
         final bytes = await file.readAsBytes();
         firstOriginal ??= bytes;
         rawFrames.add(bytes);
@@ -940,8 +983,17 @@ class _CameraPageState extends ConsumerState<CameraPage>
           .read(cameraSessionProvider.notifier)
           .setPhotos(
             values,
+            contexts: _contextsForValues(values, capturedContexts),
+            portraitAnalyzer: analyzePortraitQuality,
             onProgress: (progress) {
               if (mounted) setState(() => _processingProgress = progress);
+            },
+            onPortraitProgress: (progress) {
+              if (!mounted) return;
+              setState(() {
+                _processingStatus = '正在分析人像与睁眼状态';
+                _processingProgress = progress;
+              });
             },
           );
       final session = ref.read(cameraSessionProvider);
@@ -998,6 +1050,33 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await _startLightMonitoring(controller);
       }
     }
+  }
+
+  /// 把每次快门的上下文与最终输出对齐：HDR/夜景会多帧合并为一张，
+  /// 此时用所有帧稳定度均值代表这张合成照片。
+  List<CaptureContext?> _contextsForValues(
+    List<Uint8List> values,
+    List<CaptureContext> contexts,
+  ) {
+    if (values.isEmpty || contexts.isEmpty) {
+      return List<CaptureContext?>.filled(values.length, null);
+    }
+    if (contexts.length == values.length) {
+      return List<CaptureContext?>.of(contexts);
+    }
+    final scores = contexts
+        .map((context) => context.stabilityScore)
+        .whereType<double>()
+        .toList(growable: false);
+    final merged = contexts.first.copyWith(
+      stabilityScore: scores.isEmpty
+          ? null
+          : scores.reduce((left, right) => left + right) / scores.length,
+    );
+    return [
+      merged,
+      ...List<CaptureContext?>.filled(values.length - 1, null),
+    ];
   }
 
   void _handleShutterTap() {
@@ -1850,6 +1929,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 right: 70,
                 child: _LensCleaningHint(clarity: _clarityScore),
               ),
+            if (!_scanMode && !_capturing && !_stability.isStale())
+              Positioned(
+                right: 14,
+                bottom: 62,
+                child: _StabilityChip(snapshot: _stability),
+              ),
             if (_processingStatus != null && _countdown == 0)
               Positioned(
                 left: 22,
@@ -2164,19 +2249,38 @@ class _CameraPageState extends ConsumerState<CameraPage>
           if (ref.watch(cameraSessionProvider).selected case final selected?)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(
-                    Icons.auto_awesome,
-                    color: Color(0xFFFFD60A),
-                    size: 14,
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.auto_awesome,
+                        color: Color(0xFFFFD60A),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '智能选片：${selected.qualityLabel} · ${selected.score.round()} 分',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '智能选片：${selected.qualityLabel} · ${selected.score.round()} 分',
-                    style: const TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
+                  if (selected.reasons.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '推荐原因：${selected.recommendationReason}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -3586,6 +3690,51 @@ class _SceneChip extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _StabilityChip extends StatelessWidget {
+  const _StabilityChip({required this.snapshot});
+
+  final StabilitySnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final guidance = snapshot.guidance;
+    if (guidance == null) return const SizedBox.shrink();
+    final stable = snapshot.stable;
+    // 只在明显晃动或已经稳定可拍时出现，接近稳定时不打扰拍摄。
+    if (!stable && snapshot.score >= 65) return const SizedBox.shrink();
+    final color = stable ? const Color(0xFF30D158) : const Color(0xFFFFD60A);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: color.withValues(alpha: .55)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              stable ? Icons.check_circle_outline : Icons.vibration,
+              color: color,
+              size: 13,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              guidance,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _SmartShutterChip extends StatelessWidget {
