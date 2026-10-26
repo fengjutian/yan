@@ -26,19 +26,13 @@ class StyleTransferPage extends ConsumerStatefulWidget {
 class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
   double _sliderPosition = 0.5; // 前后对比滑动条
   bool _retryingStyles = false;
+  bool _initialStyleResolved = false;
   Uint8List? _sourceBytes;
 
   @override
   void initState() {
     super.initState();
     _sourceBytes = widget.sourceBytes;
-    final styleId = widget.initialStyleId;
-    if (styleId != null && styleId.isNotEmpty) {
-      Future<void>.microtask(() {
-        if (!mounted) return;
-        ref.read(styleTransferControllerProvider.notifier).setStyle(styleId);
-      });
-    }
   }
 
   Future<void> _pickSource() async {
@@ -77,6 +71,27 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
     final state = ref.watch(styleTransferControllerProvider);
     final sourceBytes =
         _sourceBytes ?? ref.watch(cameraSessionProvider).selected?.bytes;
+
+    // 从模板/首页带入的风格 id 需要在风格列表加载完成后校验,
+    // 避免当前模式不存在的风格被静默提交给服务端。
+    final loadedStyles = stylesAsync.valueOrNull;
+    if (!_initialStyleResolved && loadedStyles != null) {
+      _initialStyleResolved = true;
+      final wanted = widget.initialStyleId;
+      if (wanted != null && wanted.isNotEmpty) {
+        for (final style in loadedStyles) {
+          if (style.id == wanted || style.slug == wanted) {
+            Future<void>.microtask(() {
+              if (!mounted) return;
+              ref
+                  .read(styleTransferControllerProvider.notifier)
+                  .setStyle(style.id);
+            });
+            break;
+          }
+        }
+      }
+    }
 
     ref.listen<String?>(
       styleTransferControllerProvider.select((value) => value.errorMessage),

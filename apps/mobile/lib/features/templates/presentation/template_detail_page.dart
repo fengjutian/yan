@@ -149,10 +149,10 @@ class _Body extends StatelessWidget {
                 label: _styleLabel(s),
                 emphasized: true,
                 onTap: () {
-                  final styleId = _localStyleId(s);
-                  if (styleId == null) return;
+                  final styleSlug = _recommendedStyleSlug(s);
+                  if (styleSlug == null) return;
                   context.push(
-                    '/style-transfer?style=${Uri.encodeQueryComponent(styleId)}',
+                    '/style-transfer?style=${Uri.encodeQueryComponent(styleSlug)}',
                   );
                 },
               ),
@@ -295,13 +295,14 @@ class _Pill extends StatelessWidget {
   }
 }
 
-String? _localStyleId(String templateStyle) => switch (templateStyle) {
-  'film-soft' || 'film-warm' || 'cafe-warm' => 'local-film',
-  'cinematic-blue' || 'travel-cine' => 'local-cinematic',
-  'cream-portrait' || 'lifestyle' || 'life-soft' => 'local-natural',
-  'food-warm' || 'food-clean' => 'local-clean',
-  _ => null,
-};
+String? _recommendedStyleSlug(String templateStyle) =>
+    switch (templateStyle) {
+      'film-soft' || 'film-warm' || 'cafe-warm' => 'film',
+      'cinematic-blue' || 'travel-cine' => 'cinematic',
+      'cream-portrait' || 'lifestyle' || 'life-soft' => 'natural',
+      'food-warm' || 'food-clean' => 'clean',
+      _ => null,
+    };
 
 String _styleLabel(String id) => switch (id) {
   'film-soft' => '柔和胶片',
