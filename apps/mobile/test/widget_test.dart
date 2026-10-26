@@ -4,6 +4,7 @@ import 'package:ai_image_studio/features/assets/presentation/asset_upload_page.d
 import 'package:ai_image_studio/features/generate/presentation/generate_page.dart';
 import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
 import 'package:ai_image_studio/features/history/presentation/history_page.dart';
+import 'package:ai_image_studio/features/profile/presentation/privacy_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -80,5 +81,14 @@ void main() {
 
     expect(find.text('我的作品'), findsOneWidget);
     expect(find.text('还没有作品，开始第一次创作吧'), findsOneWidget);
+  });
+
+  testWidgets('shows privacy and AI content policy', (tester) async {
+    await tester.pumpWidget(const MaterialApp(home: PrivacyPage()));
+
+    expect(find.text('隐私与协议'), findsOneWidget);
+    expect(find.text('数据存储'), findsOneWidget);
+    expect(find.text('第三方 AI 服务'), findsOneWidget);
+    expect(find.text('AI 生成内容'), findsOneWidget);
   });
 }
