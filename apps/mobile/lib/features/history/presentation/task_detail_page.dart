@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
 import 'package:flutter/material.dart';
@@ -135,6 +135,23 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
             ),
             child: const Center(child: Text('本次生成未产出图片')),
           ),
+        if (value.status == 'FAILED') ...[
+          const SizedBox(height: 12),
+          Card(
+            child: ListTile(
+              leading: Icon(
+                Icons.error_outline,
+                color: Theme.of(context).colorScheme.error,
+              ),
+              title: Text(value.isLocal ? '生成失败' : '生成失败，额度已退回'),
+              subtitle: Text(value.errorMessage ?? '请稍后重试'),
+              trailing: TextButton(
+                onPressed: _busy ? null : () => _retry(value.id),
+                child: const Text('重试'),
+              ),
+            ),
+          ),
+        ],
         Text(value.prompt, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(
@@ -173,6 +190,24 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text(add ? '已存为草稿' : '已从草稿移除')));
+  }
+
+  Future<void> _retry(String taskId) async {
+    setState(() => _busy = true);
+    try {
+      final replacement = await ref
+          .read(generateRepositoryProvider)
+          .retry(taskId);
+      if (!mounted) return;
+      context.pushReplacement('/task/${replacement.id}');
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('重试失败：$error')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<Uint8List?> _downloadImage(GeneratedImage image) =>

@@ -62,7 +62,7 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          '配置仅保存在本机安全存储中。启用后，AI 帮写和分享文案会优先由 APP 直连所选服务，失败时自动回退服务端。',
+                          '配置仅保存在本机安全存储中。启用后，AI 帮写、文生图和分享文案由 APP 直连所选服务；未配置 Key 时 AI 能力不可用，拍摄和编辑仍可离线使用。',
                           style: Theme.of(context).textTheme.bodySmall,
                         ),
                       ],

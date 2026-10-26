@@ -111,6 +111,7 @@ class LocalCreationStore {
       count: count,
       styleId: styleId,
       createdAt: DateTime.now().toUtc(),
+      local: true,
     );
     await _writeMeta(dir, task);
     return task;
@@ -140,6 +141,7 @@ class LocalCreationStore {
       count: count,
       styleId: styleId,
       createdAt: DateTime.now().toUtc(),
+      local: true,
     );
     await _writeMeta(dir, task);
     return task;
@@ -276,6 +278,7 @@ class LocalCreationStore {
       count: raw['count'] is num ? (raw['count'] as num).round() : 1,
       styleId: raw['style_id']?.toString(),
       createdAt: DateTime.tryParse(raw['created_at']?.toString() ?? ''),
+      local: true,
     );
   }
 

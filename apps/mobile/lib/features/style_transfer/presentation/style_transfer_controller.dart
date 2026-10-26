@@ -100,16 +100,18 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
           'local-clean' => '清透日系',
           _ => state.styleId!,
         };
-        final result = await _ref.read(localAIClientProvider).styleTransfer(
-          sourceBytes: sourceBytes,
-          prompt:
-              '$prompt，应用$styleName风格，风格强度${(state.strength * 100).round()}%，'
-              '${state.protectFace ? '保持人物五官，' : ''}'
-              '${state.protectSkin ? '保持自然肤色与肤质，' : ''}'
-              '${state.protectBackground ? '保持原有背景结构，' : ''}'
-              '画面自然精细。',
-          aspectRatio: aspectRatio,
-        );
+        final result = await _ref
+            .read(localAIClientProvider)
+            .styleTransfer(
+              sourceBytes: sourceBytes,
+              prompt:
+                  '$prompt，应用$styleName风格，风格强度${(state.strength * 100).round()}%，'
+                  '${state.protectFace ? '保持人物五官，' : ''}'
+                  '${state.protectSkin ? '保持自然肤色与肤质，' : ''}'
+                  '${state.protectBackground ? '保持原有背景结构，' : ''}'
+                  '画面自然精细。',
+              aspectRatio: aspectRatio,
+            );
         state = state.copyWith(submitting: false, resultBytes: result);
         return null;
       }

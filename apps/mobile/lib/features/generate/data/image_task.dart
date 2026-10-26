@@ -46,6 +46,7 @@ class ImageTask {
     this.count = 1,
     this.styleId,
     this.createdAt,
+    this.local = false,
   });
 
   final String id;
@@ -61,10 +62,13 @@ class ImageTask {
   final String? styleId;
   final DateTime? createdAt;
 
+  /// 本地 BYOK 作品标记；失败任务没有图片，不能用 images 判断。
+  final bool local;
+
   bool get isTerminal =>
       status == 'SUCCEEDED' || status == 'FAILED' || status == 'CANCELED';
 
-  bool get isLocal => images.any((image) => image.isLocal);
+  bool get isLocal => local || images.any((image) => image.isLocal);
 
   factory ImageTask.fromJson(Map<String, dynamic> json) => ImageTask(
     id: (json['id'] as String?) ?? '',
@@ -91,6 +95,7 @@ class ImageTask {
         : 1,
     styleId: json['style_id'] as String?,
     createdAt: DateTime.tryParse(json['created_at'] as String? ?? ''),
+    local: json['local'] == true,
   );
 }
 

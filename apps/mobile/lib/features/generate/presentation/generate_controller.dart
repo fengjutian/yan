@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/generate/data/generate_repository.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -14,6 +15,7 @@ final generateRepositoryProvider = Provider<GenerateRepository>(
         (state) => state.settings.preferLocal,
       ),
     ),
+    localStore: ref.watch(localCreationStoreProvider),
   ),
 );
 final generateControllerProvider =
@@ -87,12 +89,15 @@ class GenerateController extends StateNotifier<GenerateState> {
       state = state.copyWith(prompt: enhanced, enhancing: false);
       return enhanced;
     } catch (error) {
-      state = state.copyWith(enhancing: false, errorMessage: error.toString());
+      state = state.copyWith(enhancing: false, errorMessage: _message(error));
       return null;
     } finally {
       _enhancingInFlight = false;
     }
   }
+
+  String _message(Object error) =>
+      error is StateError ? error.message.toString() : error.toString();
 
   bool _enhancingInFlight = false;
 
@@ -117,7 +122,7 @@ class GenerateController extends StateNotifier<GenerateState> {
         _schedulePoll(task.id, const Duration(seconds: 2));
       }
     } catch (error) {
-      state = state.copyWith(submitting: false, errorMessage: error.toString());
+      state = state.copyWith(submitting: false, errorMessage: _message(error));
     }
   }
 
@@ -141,7 +146,7 @@ class GenerateController extends StateNotifier<GenerateState> {
         );
       }
     } catch (error) {
-      state = state.copyWith(errorMessage: error.toString());
+      state = state.copyWith(errorMessage: _message(error));
       _schedulePoll(taskId, const Duration(seconds: 5));
     }
   }
@@ -157,7 +162,7 @@ class GenerateController extends StateNotifier<GenerateState> {
         clearError: true,
       );
     } catch (error) {
-      state = state.copyWith(errorMessage: error.toString());
+      state = state.copyWith(errorMessage: _message(error));
     }
   }
 
@@ -174,7 +179,7 @@ class GenerateController extends StateNotifier<GenerateState> {
         _schedulePoll(replacement.id, const Duration(seconds: 2));
       }
     } catch (error) {
-      state = state.copyWith(errorMessage: error.toString());
+      state = state.copyWith(errorMessage: _message(error));
     }
   }
 

@@ -4,12 +4,16 @@ class AuthUser {
     required this.email,
     required this.nickname,
     required this.creditsBalance,
+    this.role = 'USER',
   });
 
   final String id;
   final String email;
   final String nickname;
   final int creditsBalance;
+  final String role;
+
+  bool get isGuest => role == 'GUEST';
 
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: (json['id'] as String?) ?? '',
@@ -20,6 +24,7 @@ class AuthUser {
         : (json['credits_balance'] is num)
         ? (json['credits_balance'] as num).round()
         : 0,
+    role: (json['role'] as String?) ?? 'USER',
   );
 }
 

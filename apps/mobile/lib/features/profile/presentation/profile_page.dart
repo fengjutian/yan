@@ -12,7 +12,7 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(authControllerProvider);
     final user = state.user;
-    final isGuest = user?.id.startsWith('guest_') ?? true;
+    final isGuest = user?.isGuest ?? true;
     final themeMode = ref.watch(themeModeProvider);
     final aiSettings = ref.watch(aiSettingsControllerProvider);
 
