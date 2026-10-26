@@ -1,4 +1,6 @@
 import 'package:ai_image_studio/core/widgets/creation_image.dart';
+import 'package:ai_image_studio/features/ai_settings/data/ai_settings_repository.dart';
+import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
 import 'package:flutter/material.dart';
@@ -74,11 +76,32 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
   Widget build(BuildContext context) {
     final state = ref.watch(generateControllerProvider);
     final controller = ref.read(generateControllerProvider.notifier);
+    final ai = ref.watch(aiSettingsControllerProvider).settings;
+    final needsKey =
+        ai.preferLocal &&
+        (!ai.enabled ||
+            ai.apiKey.trim().isEmpty ||
+            ai.provider != AIProvider.miniMax);
     return Scaffold(
       appBar: AppBar(title: const Text('文生图')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          if (needsKey) ...[
+            Card(
+              color: Theme.of(context).colorScheme.secondaryContainer,
+              child: ListTile(
+                leading: const Icon(Icons.key_outlined),
+                title: const Text('需要配置 MiniMax API Key'),
+                subtitle: const Text('独立模式由客户端直连 MiniMax，Key 只保存在本机。'),
+                trailing: TextButton(
+                  onPressed: () => context.push('/settings/ai'),
+                  child: const Text('去设置'),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           TextField(
             controller: _promptController,
             minLines: 4,

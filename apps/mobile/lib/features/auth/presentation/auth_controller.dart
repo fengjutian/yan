@@ -155,10 +155,7 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _repository.logout();
-    state = AuthState(
-      user: AuthUser.localGuest(),
-      initialized: true,
-    );
+    state = AuthState(user: AuthUser.localGuest(), initialized: true);
   }
 
   Future<bool> _submit(Future<AuthSession> Function() operation) async {
