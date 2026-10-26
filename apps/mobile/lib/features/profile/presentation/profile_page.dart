@@ -26,7 +26,6 @@ class ProfilePage extends ConsumerWidget {
             _HeaderCard(
               nickname: user?.nickname ?? '游客',
               email: user?.email ?? '未登录可继续创作',
-              credits: user?.creditsBalance ?? 0,
               isGuest: isGuest,
             ),
             const SizedBox(height: 16),
@@ -61,8 +60,8 @@ class ProfilePage extends ConsumerWidget {
             _SectionTitle('账户'),
             _ProfileTile(
               icon: Icons.workspace_premium_outlined,
-              label: '会员额度',
-              trailing: isGuest ? '游客模式' : '普通用户',
+              label: 'AI 创作方式',
+              trailing: 'BYOK',
               onTap: () => _showMembershipDialog(context),
             ),
             _ProfileTile(
@@ -101,16 +100,16 @@ class ProfilePage extends ConsumerWidget {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('会员额度'),
+        title: const Text('AI 创作方式'),
         content: const Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('· 游客:每日 10 张免费 AI 成片,按自然日恢复'),
+            Text('· 当前为独立 BYOK 模式：AI 调用使用你本机的 MiniMax API Key'),
             SizedBox(height: 4),
-            Text('· 普通用户:每月赠送 100 张,过期不滚存'),
+            Text('· 拍摄、编辑、本地作品库免费使用，不依赖平台额度'),
             SizedBox(height: 4),
-            Text('· 套餐订单模型已就绪,真实支付稍后开放'),
+            Text('· 云端额度与订阅将在后续版本提供'),
           ],
         ),
         actions: [
@@ -208,13 +207,11 @@ class _HeaderCard extends StatelessWidget {
   const _HeaderCard({
     required this.nickname,
     required this.email,
-    required this.credits,
     required this.isGuest,
   });
 
   final String nickname;
   final String email;
-  final int credits;
   final bool isGuest;
 
   @override
@@ -281,17 +278,17 @@ class _HeaderCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 8),
-                Row(
+                const Row(
                   children: [
-                    const Icon(
-                      Icons.brightness_5_rounded,
+                    Icon(
+                      Icons.offline_bolt_outlined,
                       size: 14,
                       color: Color(0xFFE6A33A),
                     ),
-                    const SizedBox(width: 4),
+                    SizedBox(width: 4),
                     Text(
-                      '剩余 $credits 次',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      '本地优先 · BYOK',
+                      style: TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ],
                 ),

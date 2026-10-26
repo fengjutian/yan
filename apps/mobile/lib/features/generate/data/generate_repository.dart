@@ -170,12 +170,11 @@ class GenerateRepository {
   }
 
   Future<ImageTask> get(String taskId) async {
+    // 本地作品不依赖当前选择的 AI 模式；切回后端模式后仍可查看。
+    final local = await _localStore.find(taskId);
+    if (local != null) return local;
     if (localOnly) {
-      try {
-        return await _localStore.require(taskId);
-      } catch (error) {
-        throw StateError(_friendlyError(error));
-      }
+      throw StateError('本地作品不存在，可能已被清理');
     }
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
@@ -226,17 +225,20 @@ class GenerateRepository {
   }
 
   Future<ImageTask> retry(String taskId) async {
-    if (localOnly) {
-      final previous = await _localStore.require(taskId);
-      if (previous.status != 'FAILED' && previous.status != 'CANCELED') {
+    final local = await _localStore.find(taskId);
+    if (local != null) {
+      if (local.status != 'FAILED' && local.status != 'CANCELED') {
         throw StateError('当前作品不需要重试');
       }
-      return create(
-        prompt: previous.prompt,
-        aspectRatio: previous.aspectRatio,
-        count: previous.count,
+      return _createLocal(
+        prompt: local.prompt,
+        aspectRatio: local.aspectRatio,
+        count: local.count,
         promptOptimizer: true,
       );
+    }
+    if (localOnly) {
+      throw StateError('本地作品不存在，可能已被清理');
     }
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
