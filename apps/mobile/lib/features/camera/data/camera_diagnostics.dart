@@ -9,6 +9,7 @@ class CameraDiagnostics {
     this.lastError,
     this.analysisFps = 0,
     this.analysisFormat,
+    this.captureQuality,
     this.activeAnalyzers = const [],
     this.degraded = const [],
     this.freeStorageMb,
@@ -27,6 +28,9 @@ class CameraDiagnostics {
   final String? lastError;
   final double analysisFps;
   final String? analysisFormat;
+
+  /// 本次会话实际使用的拍照分辨率档位，如 720p / 1080p。
+  final String? captureQuality;
   final List<String> activeAnalyzers;
   final List<String> degraded;
   final int? freeStorageMb;
@@ -63,6 +67,7 @@ class CameraDiagnostics {
           : '初始化: $initializationMs ms · ${_sanitize(initializationStage ?? 'ready')}',
       '分析帧率: ${analysisFps.toStringAsFixed(1)} fps'
           '${analysisFormat == null ? '' : ' · ${_sanitize(analysisFormat!)}'}',
+      '拍照分辨率: ${captureQuality ?? '未知'}',
       '启用分析: ${activeAnalyzers.isEmpty ? '无' : activeAnalyzers.map(_sanitize).join('、')}',
       '降级状态: ${degraded.isEmpty ? '无' : degraded.map(_sanitize).join('、')}',
       if (warnings.isNotEmpty) '预警: ${warnings.map(_sanitize).join('、')}',

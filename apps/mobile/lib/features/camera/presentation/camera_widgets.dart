@@ -2,6 +2,42 @@ import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
 import 'package:flutter/material.dart';
 
+/// 相机设置面板的功能分类标签。点击切换分类，选中态使用主色高亮。
+class CameraCategoryChip extends StatelessWidget {
+  const CameraCategoryChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(99),
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFFFFD60A) : const Color(0xFF303033),
+        borderRadius: BorderRadius.circular(99),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected ? Colors.black : Colors.white70,
+          fontSize: 12,
+          fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+        ),
+      ),
+    ),
+  );
+}
+
 /// AF 对焦框。`locked` 表示 AF 锁定，`exposureLocked` 表示 AE 也锁定。
 class CameraFocusRing extends StatelessWidget {
   const CameraFocusRing({

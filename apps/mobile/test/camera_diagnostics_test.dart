@@ -11,6 +11,7 @@ void main() {
       initializationStage: '就绪',
       analysisFps: 3.8,
       analysisFormat: 'nv21',
+      captureQuality: '1080p',
       activeAnalyzers: ['直方图', '稳定度'],
       degraded: ['独立测光点不可用'],
       freeStorageMb: 1536,
@@ -26,6 +27,7 @@ void main() {
     expect(report, contains('平台: android'));
     expect(report, contains('初始化: 820 ms'));
     expect(report, contains('分析帧率: 3.8 fps'));
+    expect(report, contains('拍照分辨率: 1080p'));
     expect(report, contains('启用分析: 直方图、稳定度'));
     expect(report, contains('降级状态: 独立测光点不可用'));
     expect(report, contains('存储: 1.5 GB 可用 / 2.0 GB'));

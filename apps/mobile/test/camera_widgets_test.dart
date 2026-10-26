@@ -5,6 +5,38 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('功能分类标签可切换并高亮当前分类', (tester) async {
+    String? tapped;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              CameraCategoryChip(
+                label: '拍摄',
+                selected: true,
+                onTap: () => tapped = '拍摄',
+              ),
+              CameraCategoryChip(
+                label: '构图',
+                selected: false,
+                onTap: () => tapped = '构图',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final selected = tester.widget<Text>(find.text('拍摄'));
+    expect(selected.style?.color, Colors.black);
+    final unselected = tester.widget<Text>(find.text('构图'));
+    expect(unselected.style?.color, Colors.white70);
+
+    await tester.tap(find.text('构图'));
+    expect(tapped, '构图');
+  });
+
   testWidgets('AE/AF 锁定标签在不同状态下清晰可辨', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
