@@ -14,6 +14,10 @@ apps/mobile/.flutter-plugins
 apps/mobile/.flutter-plugins-dependencies
 apps/mobile/.packages
 apps/mobile/build/
+apps/mobile/android/.kotlin/
+apps/mobile/android/.gradle/
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
 
 # Local data
 .data/
