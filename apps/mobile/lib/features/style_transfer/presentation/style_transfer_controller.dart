@@ -2,6 +2,7 @@ import 'package:ai_image_studio/features/assets/data/asset_repository.dart';
 import 'package:ai_image_studio/features/assets/presentation/asset_upload_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -87,6 +88,10 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       return null;
     }
     if (state.submitting) return null;
+    if (sourceBytes.length > maxUploadBytes) {
+      state = state.copyWith(errorMessage: '图片不能超过 10 MB');
+      return null;
+    }
     state = state.copyWith(submitting: true, clearError: true);
     try {
       final aiSettings = _ref.read(aiSettingsControllerProvider).settings;
@@ -100,20 +105,36 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
           'local-clean' => '清透日系',
           _ => state.styleId!,
         };
+        final effectivePrompt =
+            '$prompt，应用$styleName风格，风格强度${(state.strength * 100).round()}%，'
+            '${state.protectFace ? '保持人物五官，' : ''}'
+            '${state.protectSkin ? '保持自然肤色与肤质，' : ''}'
+            '${state.protectBackground ? '保持原有背景结构，' : ''}'
+            '画面自然精细。';
         final result = await _ref
             .read(localAIClientProvider)
             .styleTransfer(
               sourceBytes: sourceBytes,
-              prompt:
-                  '$prompt，应用$styleName风格，风格强度${(state.strength * 100).round()}%，'
-                  '${state.protectFace ? '保持人物五官，' : ''}'
-                  '${state.protectSkin ? '保持自然肤色与肤质，' : ''}'
-                  '${state.protectBackground ? '保持原有背景结构，' : ''}'
-                  '画面自然精细。',
+              prompt: effectivePrompt,
               aspectRatio: aspectRatio,
             );
         state = state.copyWith(submitting: false, resultBytes: result);
-        return null;
+        try {
+          final task = await _ref
+              .read(localCreationStoreProvider)
+              .saveSuccess(
+                prompt: effectivePrompt,
+                aspectRatio: aspectRatio,
+                count: 1,
+                type: 'STYLE_TRANSFER',
+                images: [result],
+              );
+          state = state.copyWith(taskId: task.id);
+          return task.id;
+        } catch (error) {
+          state = state.copyWith(errorMessage: '成片已生成，但保存到作品库失败：$error');
+          return null;
+        }
       }
       if (sourceBytes.length > maxUploadBytes) {
         throw StateError('图片不能超过 10 MB');

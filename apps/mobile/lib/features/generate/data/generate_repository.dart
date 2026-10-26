@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:ai_image_studio/core/network/api_client.dart';
 import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/features/ai_settings/data/local_ai_client.dart';
@@ -126,6 +128,44 @@ class GenerateRepository {
       return ImageTask.fromJson(response.data!);
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
+    }
+  }
+
+  /// 独立模式下的人物参考：把本地图片转成 base64 直连 MiniMax，
+  /// 结果和文生图一样写入本地作品库。
+  Future<ImageTask> createCharacterReferenceLocal({
+    required String prompt,
+    required Uint8List sourceBytes,
+    required String aspectRatio,
+  }) async {
+    try {
+      final image = await _localAIClient.styleTransfer(
+        sourceBytes: sourceBytes,
+        prompt: prompt,
+        aspectRatio: aspectRatio,
+      );
+      return await _localStore.saveSuccess(
+        prompt: prompt,
+        aspectRatio: aspectRatio,
+        count: 1,
+        type: 'CHARACTER_REFERENCE',
+        images: [image],
+      );
+    } on StateError {
+      rethrow;
+    } catch (error) {
+      final message = _friendlyError(error);
+      try {
+        return await _localStore.saveFailure(
+          prompt: prompt,
+          aspectRatio: aspectRatio,
+          count: 1,
+          type: 'CHARACTER_REFERENCE',
+          errorMessage: message,
+        );
+      } catch (_) {
+        throw StateError(message);
+      }
     }
   }
 

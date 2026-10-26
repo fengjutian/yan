@@ -5,6 +5,7 @@ import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -2085,10 +2086,54 @@ class _CameraPageState extends ConsumerState<CameraPage>
               ],
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+            child: TextButton.icon(
+              onPressed: _saveToLibrary,
+              icon: const Icon(Icons.bookmark_add_outlined),
+              label: const Text('保存到作品库'),
+            ),
+          ),
         ],
       ),
     ),
   );
+
+  Future<void> _saveToLibrary() async {
+    final bytes = _capturedImage;
+    if (bytes == null) return;
+    final aspect = _aspectRatio == .75
+        ? '3:4'
+        : _aspectRatio == .5625
+        ? '9:16'
+        : '1:1';
+    try {
+      final task = await ref
+          .read(localCreationStoreProvider)
+          .saveSuccess(
+            prompt: _initialPrompt?.isNotEmpty == true
+                ? _initialPrompt!
+                : '相机拍摄',
+            aspectRatio: aspect,
+            count: 1,
+            type: 'CAMERA',
+            images: [bytes],
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('已保存到作品库'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () => context.push('/task/${task.id}'),
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('保存到作品库失败：$error');
+    }
+  }
 
   Future<void> _retake() async {
     if (mounted) {

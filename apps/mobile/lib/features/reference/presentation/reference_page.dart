@@ -1,10 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/reference/presentation/reference_controller.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class ReferencePage extends ConsumerStatefulWidget {
   const ReferencePage({
@@ -145,7 +146,7 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
                 ? null
                 : controller.generate,
             icon: const Icon(Icons.auto_awesome),
-            label: const Text('开始生成（10 积分）'),
+            label: const Text('开始生成'),
           ),
           if (state.task != null) ...[
             const SizedBox(height: 20),
@@ -154,22 +155,34 @@ class _ReferencePageState extends ConsumerState<ReferencePage> {
             else if (state.task!.status == 'FAILED')
               Card(
                 child: ListTile(
-                  title: const Text('生成失败，积分已退回'),
+                  title: Text(state.task!.isLocal ? '生成失败' : '生成失败，积分已退回'),
                   subtitle: Text(state.task!.errorMessage ?? '请稍后重试'),
+                  trailing: state.task!.isLocal
+                      ? null
+                      : TextButton(
+                          onPressed: () =>
+                              context.push('/task/${state.task!.id}'),
+                          child: const Text('详情'),
+                        ),
                 ),
               )
-            else
+            else ...[
               for (final image in state.task!.images)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(18),
-                    child: CachedNetworkImage(
-                      imageUrl: image.url,
-                      fit: BoxFit.contain,
-                    ),
+                    child: CreationImage(image: image, fit: BoxFit.contain),
                   ),
                 ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => context.push('/task/${state.task!.id}'),
+                  child: const Text('查看作品 →'),
+                ),
+              ),
+            ],
           ],
         ],
       ),

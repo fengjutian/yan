@@ -208,6 +208,27 @@ class ReferenceController extends StateNotifier<ReferenceState> {
     }
     state = state.copyWith(busy: true, clearError: true);
     try {
+      if (_generate.localOnly) {
+        final bytes = state.previewBytes;
+        if (bytes == null) {
+          throw StateError('本地参考图已丢失，请重新选择');
+        }
+        final styleName = switch (state.styleId) {
+          'local-natural' => '自然人像',
+          'local-film' => '柔和胶片',
+          'local-cinematic' => '电影质感',
+          'local-clean' => '清透日系',
+          _ => '保持当前风格',
+        };
+        final task = await _generate.createCharacterReferenceLocal(
+          prompt: '${state.prompt.trim()}，应用$styleName风格，保持人物主体特征。',
+          sourceBytes: bytes,
+          aspectRatio: state.aspectRatio,
+        );
+        state = state.copyWith(busy: false, task: task);
+        _schedule(task.id);
+        return;
+      }
       final task = await _generate.createCharacterReference(
         prompt: state.prompt.trim(),
         sourceAssetId: state.sourceAsset!.id,
@@ -217,7 +238,12 @@ class ReferenceController extends StateNotifier<ReferenceState> {
       state = state.copyWith(busy: false, task: task);
       _schedule(task.id);
     } catch (error) {
-      state = state.copyWith(busy: false, errorMessage: error.toString());
+      state = state.copyWith(
+        busy: false,
+        errorMessage: error is StateError
+            ? error.message.toString()
+            : error.toString(),
+      );
     }
   }
 

@@ -117,11 +117,12 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
                     aspectRatio: 1,
                     child: CreationImage(image: image),
                   ),
-                  const Positioned(
-                    left: 12,
-                    bottom: 12,
-                    child: _AiWatermarkBadge(),
-                  ),
+                  if (_isAiType(value.type))
+                    const Positioned(
+                      left: 12,
+                      bottom: 12,
+                      child: _AiWatermarkBadge(),
+                    ),
                 ],
               ),
             ),
@@ -154,11 +155,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         ],
         Text(value.prompt, style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(
-          value.type == 'CHARACTER_REFERENCE'
-              ? '人物参考创作 · AI 生成'
-              : '文生图 · AI 生成',
-        ),
+        Text(_typeLabel(value.type)),
         const SizedBox(height: 24),
         _ActionGrid(
           busy: _busy,
@@ -175,6 +172,19 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       ],
     );
   }
+
+  bool _isAiType(String type) =>
+      type == 'TEXT_TO_IMAGE' ||
+      type == 'CHARACTER_REFERENCE' ||
+      type == 'STYLE_TRANSFER';
+
+  String _typeLabel(String type) => switch (type) {
+    'CAMERA' => '相机作品',
+    'EDIT' => '编辑作品',
+    'STYLE_TRANSFER' => 'AI 风格迁移 · AI 生成',
+    'CHARACTER_REFERENCE' => '人物参考创作 · AI 生成',
+    _ => '文生图 · AI 生成',
+  };
 
   Future<void> _toggleFavorite(String taskId) async {
     await ref.read(toggleFavoriteProvider)(taskId);

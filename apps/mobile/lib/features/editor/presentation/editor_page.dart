@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/editor/presentation/editor_controller.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
@@ -126,6 +128,18 @@ class _EditorPageState extends ConsumerState<EditorPage> {
                 ],
               ),
             ),
+          if (_exportPreview != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: _saving ? null : _saveToLibrary,
+                  icon: const Icon(Icons.bookmark_add_outlined),
+                  label: const Text('保存到作品库'),
+                ),
+              ),
+            ),
           _AdjustPanel(state: state, controller: controller),
         ],
       ),
@@ -188,6 +202,40 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _saveToLibrary() async {
+    final bytes = _exportPreview;
+    if (bytes == null) return;
+    setState(() => _saving = true);
+    try {
+      final task = await ref
+          .read(localCreationStoreProvider)
+          .saveSuccess(
+            prompt: '图片编辑',
+            aspectRatio: '1:1',
+            count: 1,
+            type: 'EDIT',
+            images: [bytes],
+          );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('已保存到作品库'),
+          action: SnackBarAction(
+            label: '查看',
+            onPressed: () => context.push('/task/${task.id}'),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存到作品库失败：$e')));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
