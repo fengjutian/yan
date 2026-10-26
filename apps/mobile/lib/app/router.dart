@@ -12,6 +12,7 @@ import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/features/share/presentation/share_workshop_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/favorites_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/drafts_page.dart';
+import 'package:ai_image_studio/features/profile/presentation/privacy_page.dart';
 import 'package:ai_image_studio/features/templates/presentation/templates_home_page.dart';
 import 'package:ai_image_studio/features/templates/presentation/template_detail_page.dart';
 import 'package:ai_image_studio/features/editor/presentation/editor_page.dart';
@@ -115,6 +116,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/me/favorites', builder: (_, __) => const FavoritesPage()),
       GoRoute(path: '/me/drafts', builder: (_, __) => const DraftsPage()),
       GoRoute(path: '/settings/ai', builder: (_, __) => const AISettingsPage()),
+      GoRoute(path: '/privacy', builder: (_, __) => const PrivacyPage()),
       GoRoute(
         path: '/templates',
         builder: (_, __) => const TemplatesHomePage(),

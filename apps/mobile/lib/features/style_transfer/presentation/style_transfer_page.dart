@@ -329,7 +329,8 @@ class _StrengthLegend extends StatelessWidget {
   );
 }
 
-/// 前后对比滑动:拖动滑块显示左侧原图、右侧"模拟成片"(用风格色覆盖表示)。
+/// 前后对比滑动:拖动滑块显示左侧原图、右侧真实成片。
+/// 未生成时只显示原图，不伪造“模拟成片”。
 class _BeforeAfterSlider extends StatelessWidget {
   const _BeforeAfterSlider({
     required this.sourceBytes,
@@ -348,6 +349,40 @@ class _BeforeAfterSlider extends StatelessWidget {
       builder: (context, constraints) {
         final w = constraints.maxWidth;
         final h = (w * 4 / 3).clamp(0.0, 320.0);
+        if (resultBytes == null) {
+          return SizedBox(
+            height: h,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                Container(
+                  color: Colors.black12,
+                  child: sourceBytes == null
+                      ? const Center(child: Text('请从相机/工作室带入原图'))
+                      : Image.memory(sourceBytes!, fit: BoxFit.cover),
+                ),
+                Center(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 8,
+                      ),
+                      child: Text(
+                        '提交后在这里显示成片对比',
+                        style: TextStyle(color: Colors.white, fontSize: 13),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
         return SizedBox(
           height: h,
           child: Stack(
@@ -361,37 +396,14 @@ class _BeforeAfterSlider extends StatelessWidget {
                       : Image.memory(sourceBytes!, fit: BoxFit.cover),
                 ),
               ),
-              // 模拟成片:用柔和米色渐变 + 风格描述,等待真实结果接入
+              // 真实成片
               Positioned(
                 left: position * w,
                 top: 0,
                 bottom: 0,
                 width: w - position * w,
                 child: ClipRect(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFFE6D3B8), Color(0xFFB07E5A)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: resultBytes == null
-                        ? const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Text(
-                                '成片预览 · 提交后可见',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          )
-                        : Image.memory(resultBytes!, fit: BoxFit.cover),
-                  ),
+                  child: Image.memory(resultBytes!, fit: BoxFit.cover),
                 ),
               ),
               // 分割线

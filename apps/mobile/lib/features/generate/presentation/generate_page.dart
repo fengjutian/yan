@@ -125,7 +125,7 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.auto_awesome, size: 19),
-                  label: Text(state.enhancing ? '生成中' : 'AI 帮写'),
+                  label: Text(state.enhancing ? '生成中' : '帮写/灵感'),
                   style: TextButton.styleFrom(
                     foregroundColor: const Color(0xFF7B5152),
                     backgroundColor: const Color(0xFFF1E8E1),
@@ -265,12 +265,14 @@ class _AiPromptSheet extends StatelessWidget {
             children: [
               const Icon(Icons.auto_awesome, size: 22),
               const SizedBox(width: 10),
-              Text('AI 辅助生成', style: Theme.of(context).textTheme.titleLarge),
+              Text('灵感示例', style: Theme.of(context).textTheme.titleLarge),
             ],
           ),
           const SizedBox(height: 6),
           Text(
-            currentPrompt.isEmpty ? '选择一个方向，快速获得完整画面描述。' : '完善当前描述，或换一个创作方向。',
+            currentPrompt.isEmpty
+                ? '选择一个方向，快速填入画面描述；需要 AI 改写时先在 AI 设置中配置 Key。'
+                : '完善当前描述，或换一个创作方向。',
             style: Theme.of(context).textTheme.bodyMedium,
           ),
           const SizedBox(height: 16),

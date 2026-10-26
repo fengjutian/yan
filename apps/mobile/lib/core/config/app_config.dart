@@ -8,6 +8,9 @@ class AppConfig {
     defaultValue: 'development',
   );
 
+  /// 上架构建可通过 --dart-define=SUPPORT_EMAIL=... 配置反馈/举报邮箱。
+  static const supportEmail = String.fromEnvironment('SUPPORT_EMAIL');
+
   /// Android 模拟器里 `localhost` 是模拟器自己,不是宿主机,必须用 10.0.2.2。
   /// 真机调试需要把这里改成局域网 IP 或者用 adb reverse。
   static String get apiBaseUrl {

@@ -21,7 +21,7 @@ void main() {
     expect(await client.complete('测试'), '本地结果');
   });
 
-  test('本地模式未配置 API 时使用设备内基础结果且不访问后端', () async {
+  test('本地模式未配置 API 时提示配置且不访问网络', () async {
     final directAdapter = _JsonAdapter('不应调用');
     final direct = Dio()..httpClientAdapter = directAdapter;
     final backendAdapter = _JsonAdapter('不应调用');
@@ -32,7 +32,16 @@ void main() {
       directClient: direct,
     );
 
-    expect(await client.complete('测试'), contains('测试'));
+    await expectLater(
+      client.complete('测试'),
+      throwsA(
+        isA<StateError>().having(
+          (error) => error.message,
+          'message',
+          contains('AI 设置'),
+        ),
+      ),
+    );
     expect(directAdapter.calls, 0);
     expect(backendAdapter.calls, 0);
   });

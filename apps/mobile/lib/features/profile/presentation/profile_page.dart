@@ -88,7 +88,7 @@ class ProfilePage extends ConsumerWidget {
               icon: Icons.privacy_tip_outlined,
               label: '隐私与协议',
               trailing: 'AI 内容标识',
-              onTap: () => _showPrivacySheet(context),
+              onTap: () => context.push('/privacy'),
             ),
             const SizedBox(height: 16),
             if (!isGuest)
@@ -221,33 +221,6 @@ class ProfilePage extends ConsumerWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-
-  void _showPrivacySheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      builder: (_) => const Padding(
-        padding: EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              '隐私与协议',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-            ),
-            SizedBox(height: 12),
-            Text('· 默认不公开作品,不使用用户照片训练模型'),
-            SizedBox(height: 4),
-            Text('· 生成结果保留「颜 · AI 生成」水印,不可关闭'),
-            SizedBox(height: 4),
-            Text('· 分享时可关闭 EXIF 中的位置/设备元数据'),
-            SizedBox(height: 4),
-            Text('· 完整协议请前往设置页查看(筹备中)'),
-          ],
         ),
       ),
     );
