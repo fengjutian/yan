@@ -27,7 +27,14 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-enum CompositionGuide { thirds, center, symmetry }
+enum CompositionGuide {
+  thirds,
+  center,
+  symmetry,
+  leadingLine,
+  frame,
+  goldenRatio,
+}
 
 enum CameraStyle { standard, vivid, warm, cool, mono }
 
@@ -138,6 +145,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _aspectPreference = 'camera.aspect_ratio';
   static const _timerPreference = 'camera.timer_seconds';
   static const _guidePreference = 'camera.show_guide';
+  static const _guideTypePreference = 'camera.guide_type';
   static const _guidancePreference = 'camera.realtime_guidance';
   static const _mirrorPreference = 'camera.mirror_selfies';
   static const _autoSavePreference = 'camera.auto_save';
@@ -221,6 +229,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
       }
       _countdownSeconds = preferences.getInt(_timerPreference) ?? 0;
       _showGuide = preferences.getBool(_guidePreference) ?? true;
+      final savedGuide = preferences.getString(_guideTypePreference);
+      if (savedGuide != null && widget.templateParams == null) {
+        _guide = CompositionGuide.values.firstWhere(
+          (value) => value.name == savedGuide,
+          orElse: () => _guide,
+        );
+      }
       _showRealtimeGuidance = preferences.getBool(_guidancePreference) ?? true;
       _mirrorSelfies = preferences.getBool(_mirrorPreference) ?? true;
       _autoSave = preferences.getBool(_autoSavePreference) ?? false;
@@ -1186,7 +1201,102 @@ class _CameraPageState extends ConsumerState<CameraPage>
     CompositionGuide.thirds => '三分构图',
     CompositionGuide.center => '中心构图',
     CompositionGuide.symmetry => '对称构图',
+    CompositionGuide.leadingLine => '引导线',
+    CompositionGuide.frame => '框中框',
+    CompositionGuide.goldenRatio => '黄金分割',
   };
+
+  IconData _guideIcon(CompositionGuide guide) => switch (guide) {
+    CompositionGuide.thirds => Icons.grid_3x3,
+    CompositionGuide.center => Icons.center_focus_weak,
+    CompositionGuide.symmetry => Icons.compare,
+    CompositionGuide.leadingLine => Icons.trending_up,
+    CompositionGuide.frame => Icons.crop_free,
+    CompositionGuide.goldenRatio => Icons.grid_goldenratio,
+  };
+
+  Future<void> _selectCompositionGuide() async {
+    final selected = await showModalBottomSheet<CompositionGuide>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF1C1C1E),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 0, 8, 10),
+                child: Text(
+                  '选择构图辅助线',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              GridView.count(
+                crossAxisCount: 3,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: 1.25,
+                children: [
+                  for (final guide in CompositionGuide.values)
+                    InkWell(
+                      onTap: () => Navigator.of(sheetContext).pop(guide),
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        margin: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: guide == _guide
+                              ? const Color(0xFFFFD60A).withValues(alpha: .18)
+                              : Colors.white.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: guide == _guide
+                                ? const Color(0xFFFFD60A)
+                                : Colors.white24,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              _guideIcon(guide),
+                              color: guide == _guide
+                                  ? const Color(0xFFFFD60A)
+                                  : Colors.white70,
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _compositionGuideName(guide),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _guide = selected;
+      _showGuide = true;
+    });
+    unawaited(_savePreference(_guidePreference, true));
+    unawaited(_savePreference(_guideTypePreference, selected.name));
+  }
 
   IconData get _flashIcon => switch (_flashMode) {
     FlashMode.off => Icons.flash_off,
@@ -1462,13 +1572,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 label: _guideName,
                 icon: Icons.grid_3x3,
                 selected: _showGuide,
-                onTap: () => setState(() {
-                  _showGuide = true;
-                  _guide =
-                      CompositionGuide.values[(_guide.index + 1) %
-                          CompositionGuide.values.length];
-                  unawaited(_savePreference(_guidePreference, true));
-                }),
+                onTap: _selectCompositionGuide,
               ),
               _CameraOption(
                 label: '曝光归零',
@@ -3381,7 +3485,7 @@ class _GuidePainter extends CustomPainter {
         paint,
       );
       canvas.drawCircle(Offset(size.width / 2, size.height / 2), 44, paint);
-    } else {
+    } else if (guide == CompositionGuide.symmetry) {
       canvas.drawLine(
         Offset(size.width / 2, 0),
         Offset(size.width / 2, size.height),
@@ -3389,6 +3493,39 @@ class _GuidePainter extends CustomPainter {
       );
       canvas.drawLine(Offset.zero, Offset(size.width, size.height), paint);
       canvas.drawLine(Offset(size.width, 0), Offset(0, size.height), paint);
+    } else if (guide == CompositionGuide.leadingLine) {
+      final horizon = size.height * .38;
+      canvas.drawLine(Offset(0, horizon), Offset(size.width, horizon), paint);
+      canvas.drawLine(
+        Offset(0, size.height),
+        Offset(size.width * .46, horizon),
+        paint,
+      );
+      canvas.drawLine(
+        Offset(size.width, size.height),
+        Offset(size.width * .54, horizon),
+        paint,
+      );
+    } else if (guide == CompositionGuide.frame) {
+      final rect = Rect.fromLTWH(
+        size.width * .12,
+        size.height * .12,
+        size.width * .76,
+        size.height * .76,
+      );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(18)),
+        paint..strokeWidth = 2,
+      );
+    } else {
+      const minor = .382;
+      const major = .618;
+      for (final x in [size.width * minor, size.width * major]) {
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+      }
+      for (final y in [size.height * minor, size.height * major]) {
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+      }
     }
   }
 
@@ -3396,6 +3533,15 @@ class _GuidePainter extends CustomPainter {
   bool shouldRepaint(covariant _GuidePainter oldDelegate) =>
       oldDelegate.guide != guide;
 }
+
+String _compositionGuideName(CompositionGuide guide) => switch (guide) {
+  CompositionGuide.thirds => '三分构图',
+  CompositionGuide.center => '中心构图',
+  CompositionGuide.symmetry => '对称构图',
+  CompositionGuide.leadingLine => '引导线',
+  CompositionGuide.frame => '框中框',
+  CompositionGuide.goldenRatio => '黄金分割',
+};
 
 class _SceneChip extends StatelessWidget {
   const _SceneChip({required this.scene, required this.confidence});
