@@ -29,6 +29,22 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
     Widget child;
     if (state.tasks.isEmpty && state.loading) {
       child = const Center(child: CircularProgressIndicator());
+    } else if (state.tasks.isEmpty && state.errorMessage != null) {
+      child = ListView(
+        children: [
+          const SizedBox(height: 160),
+          const Icon(Icons.cloud_off_outlined, size: 56),
+          const SizedBox(height: 12),
+          Center(child: Text(state.errorMessage!)),
+          const SizedBox(height: 16),
+          Center(
+            child: FilledButton(
+              onPressed: notifier.refresh,
+              child: const Text('重试'),
+            ),
+          ),
+        ],
+      );
     } else if (state.tasks.isEmpty) {
       child = ListView(
         children: const [
@@ -58,14 +74,43 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
           return InkWell(
             onTap: () => context.push('/task/${task.id}'),
             borderRadius: BorderRadius.circular(16),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: image == null
-                  ? const ColoredBox(
-                      color: Colors.black12,
-                      child: Icon(Icons.image_not_supported_outlined),
-                    )
-                  : CreationImage(image: image, preferThumbnail: true),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: image == null
+                      ? const ColoredBox(
+                          color: Colors.black12,
+                          child: Icon(Icons.image_not_supported_outlined),
+                        )
+                      : CreationImage(image: image, preferThumbnail: true),
+                ),
+                if (task.status != 'SUCCEEDED')
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        child: Text(
+                          task.status == 'FAILED' ? '失败' : '已取消',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           );
         },

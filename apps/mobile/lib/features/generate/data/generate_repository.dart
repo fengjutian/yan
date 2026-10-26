@@ -88,7 +88,8 @@ class GenerateRepository {
     } catch (error) {
       final message = _friendlyError(error);
       try {
-        await _localStore.saveFailure(
+        // 失败也进入本地历史，用户可以从作品详情直接重试。
+        return await _localStore.saveFailure(
           prompt: prompt,
           aspectRatio: aspectRatio,
           count: count,
@@ -96,9 +97,8 @@ class GenerateRepository {
           errorMessage: message,
         );
       } catch (_) {
-        // 历史写入失败不应覆盖真正的生成错误。
+        throw StateError(message);
       }
-      throw StateError(message);
     }
   }
 
