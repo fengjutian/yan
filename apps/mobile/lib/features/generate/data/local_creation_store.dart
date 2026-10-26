@@ -19,6 +19,7 @@ class LocalCreationStore {
   LocalCreationStore({Directory? rootOverride}) : _rootOverride = rootOverride;
 
   static const _metaFileName = 'meta.json';
+  static const _schemaVersion = 1;
   static const _thumbnailWidth = 512;
 
   final Directory? _rootOverride;
@@ -148,7 +149,7 @@ class LocalCreationStore {
   }
 
   Future<ImageTask?> find(String id) async {
-    if (id.isEmpty) return null;
+    if (!_isSafeSegment(id)) return null;
     final root = await _root();
     final dir = Directory('${root.path}${Platform.pathSeparator}$id');
     final meta = File('${dir.path}${Platform.pathSeparator}$_metaFileName');
@@ -182,7 +183,8 @@ class LocalCreationStore {
       try {
         final raw = jsonDecode(await meta.readAsString());
         if (raw is Map<String, dynamic>) {
-          tasks.add(_taskFromJson(entity, raw));
+          final task = _taskFromJson(entity, raw);
+          if (_hasUsableFiles(task)) tasks.add(task);
         }
       } on FormatException {
         // 损坏的记录不阻塞整个作品库。
@@ -197,6 +199,9 @@ class LocalCreationStore {
   }
 
   Future<void> delete(String id) async {
+    if (!_isSafeSegment(id)) {
+      throw const FormatException('无效的本地作品 ID');
+    }
     final root = await _root();
     final dir = Directory('${root.path}${Platform.pathSeparator}$id');
     if (await dir.exists()) {
@@ -210,6 +215,76 @@ class LocalCreationStore {
     await for (final entity in root.list(followLinks: false)) {
       await entity.delete(recursive: true);
     }
+  }
+
+  /// 扫描并修复作品库中可安全自动处理的问题。
+  ///
+  /// - 删除中断写入遗留的 `.tmp` 文件；
+  /// - 删除没有有效元数据的空目录；
+  /// - 保留损坏或缺图的非空作品目录，避免静默丢失用户文件；
+  /// - 返回报告供设置页或诊断页展示。
+  Future<LocalLibraryRepairReport> repair() async {
+    final root = await _root();
+    var validRecords = 0;
+    var corruptRecords = 0;
+    var missingFiles = 0;
+    var removedTemporaryFiles = 0;
+    var removedEmptyDirectories = 0;
+
+    await for (final entity in root.list(followLinks: false)) {
+      if (entity is File && entity.path.endsWith('.tmp')) {
+        await entity.delete();
+        removedTemporaryFiles++;
+        continue;
+      }
+      if (entity is! Directory) continue;
+
+      await for (final child in entity.list(followLinks: false)) {
+        if (child is File && child.path.endsWith('.tmp')) {
+          await child.delete();
+          removedTemporaryFiles++;
+        }
+      }
+
+      final meta = File(
+        '${entity.path}${Platform.pathSeparator}$_metaFileName',
+      );
+      if (!await meta.exists()) {
+        if (await entity.list(followLinks: false).isEmpty) {
+          await entity.delete();
+          removedEmptyDirectories++;
+        } else {
+          corruptRecords++;
+        }
+        continue;
+      }
+
+      try {
+        final raw = jsonDecode(await meta.readAsString());
+        if (raw is! Map<String, dynamic>) {
+          corruptRecords++;
+          continue;
+        }
+        final task = _taskFromJson(entity, raw);
+        final missingForTask = await _missingFileCount(task);
+        if (missingForTask > 0) {
+          missingFiles += missingForTask;
+          corruptRecords++;
+        } else {
+          validRecords++;
+        }
+      } on FormatException {
+        corruptRecords++;
+      }
+    }
+
+    return LocalLibraryRepairReport(
+      validRecords: validRecords,
+      corruptRecords: corruptRecords,
+      missingFiles: missingFiles,
+      removedTemporaryFiles: removedTemporaryFiles,
+      removedEmptyDirectories: removedEmptyDirectories,
+    );
   }
 
   Future<void> _writeMeta(Directory dir, ImageTask task) async {
@@ -226,6 +301,7 @@ class LocalCreationStore {
       });
     }
     final payload = <String, dynamic>{
+      'schema_version': _schemaVersion,
       'id': task.id,
       'status': task.status,
       'progress': task.progress,
@@ -257,9 +333,9 @@ class LocalCreationStore {
         if (item is! Map) continue;
         final file = item['file'];
         final thumb = item['thumbnail_file'];
-        if (file is! String || file.isEmpty) continue;
+        if (file is! String || !_isSafeSegment(file)) continue;
         final imagePath = '${dir.path}${Platform.pathSeparator}$file';
-        final thumbPath = thumb is String && thumb.isNotEmpty
+        final thumbPath = thumb is String && _isSafeSegment(thumb)
             ? '${dir.path}${Platform.pathSeparator}$thumb'
             : null;
         images.add(
@@ -296,6 +372,53 @@ class LocalCreationStore {
     final slash = path.lastIndexOf('/');
     return slash >= 0 ? path.substring(slash + 1) : path;
   }
+
+  bool _isSafeSegment(String value) {
+    if (value.isEmpty || value == '.' || value == '..') return false;
+    return !value.contains('/') &&
+        !value.contains('\\') &&
+        !value.contains(Platform.pathSeparator);
+  }
+
+  bool _hasUsableFiles(ImageTask task) {
+    if (task.status != 'SUCCEEDED') return true;
+    if (task.images.isEmpty) return false;
+    return task.images.every(
+      (image) => image.localPath != null && File(image.localPath!).existsSync(),
+    );
+  }
+
+  Future<int> _missingFileCount(ImageTask task) async {
+    var missing = 0;
+    for (final image in task.images) {
+      final path = image.localPath;
+      if (path == null || !await File(path).exists()) missing++;
+      final thumbnailPath = image.localThumbnailPath;
+      if (thumbnailPath != null && !await File(thumbnailPath).exists()) {
+        missing++;
+      }
+    }
+    if (task.status == 'SUCCEEDED' && task.images.isEmpty) missing++;
+    return missing;
+  }
+}
+
+class LocalLibraryRepairReport {
+  const LocalLibraryRepairReport({
+    required this.validRecords,
+    required this.corruptRecords,
+    required this.missingFiles,
+    required this.removedTemporaryFiles,
+    required this.removedEmptyDirectories,
+  });
+
+  final int validRecords;
+  final int corruptRecords;
+  final int missingFiles;
+  final int removedTemporaryFiles;
+  final int removedEmptyDirectories;
+
+  bool get healthy => corruptRecords == 0 && missingFiles == 0;
 }
 
 final localCreationStoreProvider = Provider<LocalCreationStore>(
