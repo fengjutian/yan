@@ -37,6 +37,46 @@ void main() {
     expect(tapped, '构图');
   });
 
+  testWidgets('设置行展示当前值并可点击选择新值', (tester) async {
+    var tapped = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CameraSettingRow(
+            label: '画面比例',
+            value: '3:4',
+            onTap: () => tapped++,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('画面比例'), findsOneWidget);
+    expect(find.text('3:4'), findsOneWidget);
+    await tester.tap(find.byType(CameraSettingRow));
+    expect(tapped, 1);
+  });
+
+  testWidgets('开关行展示当前状态并在点击后回调', (tester) async {
+    bool? changed;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CameraSwitchRow(
+            label: '镜像自拍',
+            value: true,
+            onChanged: (value) => changed = value,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('镜像自拍'), findsOneWidget);
+    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    await tester.tap(find.byType(Switch));
+    expect(changed, isFalse);
+  });
+
   testWidgets('AE/AF 锁定标签在不同状态下清晰可辨', (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
