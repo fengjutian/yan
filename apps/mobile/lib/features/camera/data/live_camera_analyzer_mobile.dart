@@ -64,6 +64,10 @@ class LiveCameraAnalyzer {
   final BarcodeScanner _barcodeScanner;
   bool _processing = false;
   bool _closed = false;
+  bool _poseAvailable = true;
+  bool _labelAvailable = true;
+  bool _faceAvailable = true;
+  bool _barcodeAvailable = true;
   int _frameNumber = 0;
   String _scene = '识别场景中';
   double _sceneConfidence = 0;
@@ -86,30 +90,58 @@ class LiveCameraAnalyzer {
     if (input == null) return null;
     _processing = true;
     try {
-      final poses = await _poseDetector.processImage(input);
+      // 每个分析器独立降级：某一项失败只关闭对应能力，姿态、场景、
+      // 人像和扫码之间互不阻塞，也不会让整次分析返回空。
+      final poses = <Pose>[];
+      if (_poseAvailable) {
+        try {
+          poses.addAll(await _poseDetector.processImage(input));
+        } catch (_) {
+          _poseAvailable = false;
+        }
+      }
+      final frameNumber = _frameNumber++;
       // 图像标签比姿态检测更重，每 5 次姿态推理运行一次。
-      if (_frameNumber++ % 5 == 0) {
-        final labels = await _labeler.processImage(input);
-        final scene = _classifyScene(labels);
-        _scene = scene.$1;
-        _sceneConfidence = scene.$2;
+      if (_labelAvailable && frameNumber % 5 == 0) {
+        try {
+          final labels = await _labeler.processImage(input);
+          final scene = _classifyScene(labels);
+          _scene = scene.$1;
+          _sceneConfidence = scene.$2;
+        } catch (_) {
+          _labelAvailable = false;
+        }
       }
-      if (_frameNumber % 3 == 0) {
-        final faces = await _faceDetector.processImage(input);
-        _smileDetected = faces.any(
-          (face) => (face.smilingProbability ?? 0) >= .75,
-        );
-        _faces = _normalizeFaces(faces, image, camera, rotation);
+      if (_faceAvailable && frameNumber % 3 == 0) {
+        try {
+          final faces = await _faceDetector.processImage(input);
+          _smileDetected = faces.any(
+            (face) => (face.smilingProbability ?? 0) >= .75,
+          );
+          _faces = _normalizeFaces(faces, image, camera, rotation);
+        } catch (_) {
+          _faceAvailable = false;
+          _faces = const [];
+          _smileDetected = false;
+        }
       }
-      if (scanBarcodes && _frameNumber % 2 == 0) {
-        final barcodes = await _barcodeScanner.processImage(input);
-        if (barcodes.isEmpty) {
-          _barcodeValue = null;
-          _barcodeType = null;
-        } else {
-          final barcode = barcodes.first;
-          _barcodeValue = barcode.rawValue ?? barcode.displayValue;
-          _barcodeType = barcode.type.name;
+      if (scanBarcodes && frameNumber % 2 == 0) {
+        if (_barcodeAvailable) {
+          try {
+            final barcodes = await _barcodeScanner.processImage(input);
+            if (barcodes.isEmpty) {
+              _barcodeValue = null;
+              _barcodeType = null;
+            } else {
+              final barcode = barcodes.first;
+              _barcodeValue = barcode.rawValue ?? barcode.displayValue;
+              _barcodeType = barcode.type.name;
+            }
+          } catch (_) {
+            _barcodeAvailable = false;
+            _barcodeValue = null;
+            _barcodeType = null;
+          }
         }
       } else if (!scanBarcodes) {
         _barcodeValue = null;
@@ -118,10 +150,16 @@ class LiveCameraAnalyzer {
       final landmarks = poses.isEmpty
           ? <String, Offset>{}
           : _normalize(poses.first, image, camera, rotation);
-      _smoothed = _smooth(_smoothed, landmarks);
+      if (_poseAvailable) {
+        _smoothed = _smooth(_smoothed, landmarks);
+      } else {
+        _smoothed = const {};
+      }
       return LiveCameraAnalysis(
         landmarks: _smoothed,
-        suggestion: _poseSuggestion(_smoothed),
+        suggestion: _poseAvailable
+            ? _poseSuggestion(_smoothed)
+            : '实时姿态分析暂不可用，仍可正常拍摄',
         scene: _scene,
         sceneConfidence: _sceneConfidence,
         smileDetected: _smileDetected,

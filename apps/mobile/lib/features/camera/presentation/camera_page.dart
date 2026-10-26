@@ -11,6 +11,7 @@ import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_composition_guide.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_quality_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/stability_analyzer.dart';
+import 'package:ai_image_studio/features/camera/presentation/camera_widgets.dart';
 import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
@@ -131,6 +132,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   final StabilityAnalyzer _stabilityAnalyzer = StabilityAnalyzer();
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
+  int _analysisIntervalMs = 260;
+  bool _slowAnalysis = false;
+  int _zebraFrame = 0;
   final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
   final PortraitCompositionAnalyzer _portraitGuide =
       const PortraitCompositionAnalyzer();
@@ -508,16 +512,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
     try {
       await controller.startImageStream((image) {
         final now = DateTime.now();
-        if (now.difference(_lastFrameAt).inMilliseconds < 260 ||
+        if (now.difference(_lastFrameAt).inMilliseconds <
+                _analysisIntervalMs ||
             image.planes.isEmpty) {
           return;
         }
         _lastFrameAt = now;
         _recordAnalysisFrame();
+        final stopwatch = Stopwatch()..start();
+        // 低端设备上进一步降低斑马纹遮罩刷新率，直方图仍保持更新。
+        final collectZebra =
+            _showZebra && (!_slowAnalysis || _zebraFrame.isEven);
+        _zebraFrame++;
         final histogram = _analyzeHistogram(
           image,
           controller.description,
           controller.value.deviceOrientation,
+          collectZebra: collectZebra,
         );
         if (mounted && histogram.samples > 0) {
           final detail = _analyzeSharpness(
@@ -535,7 +546,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _blueHistogram = histogram.blue;
             _clarityScore = detail.clarity;
             _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
-            _zebraPoints = _showZebra ? histogram.zebra : const [];
+            if (collectZebra) _zebraPoints = histogram.zebra;
             final normallyLit = _brightness >= 60 && _brightness <= 215;
             if (_lensCleaningHints && normallyLit && detail.clarity < 6) {
               _softFrameCount = _softFrameCount >= 12
@@ -546,6 +557,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
             }
           });
         }
+        stopwatch.stop();
+        _analysisIntervalMs = _nextAnalysisInterval(
+          stopwatch.elapsedMilliseconds,
+        );
         if (_showRealtimeGuidance ||
             _scanMode ||
             _smartShutterMode != SmartShutterMode.off) {
@@ -564,6 +579,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
       // CameraX use case。实时分析属于增强能力，绑定失败时保留
       // 已经可用的预览与拍照，不让整个相机页面进入错误状态。
       _analysisUnavailable = true;
+      _analysisIntervalMs = 260;
+      _slowAnalysis = false;
+      _zebraFrame = 0;
       if (mounted) {
         setState(() {
           _showRealtimeGuidance = false;
@@ -578,6 +596,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
         });
       }
     }
+  }
+
+  int _nextAnalysisInterval(int elapsedMs) {
+    _slowAnalysis = elapsedMs > 90;
+    if (elapsedMs > 90) return 420;
+    if (elapsedMs < 40) return 220;
+    return 280;
   }
 
   void _recordAnalysisFrame() {
@@ -598,8 +623,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   _FrameHistogram _analyzeHistogram(
     CameraImage image,
     CameraDescription camera,
-    DeviceOrientation orientation,
-  ) {
+    DeviceOrientation orientation, {
+    required bool collectZebra,
+  }) {
     const binCount = 32;
     final luminanceBins = List<int>.filled(binCount, 0);
     final redBins = List<int>.filled(binCount, 0);
@@ -625,7 +651,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (luma >= highlightLevel) {
         highlights++;
         // 斑马纹直接复用直方图的亮度采样结果，避免二次扫描整帧。
-        if (_showZebra && zebra.length < 900) {
+        if (collectZebra && zebra.length < 900) {
           zebra.add(
             _rotateAnalysisPoint(
               Offset(x / image.width, y / image.height),
@@ -1212,7 +1238,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _processingProgress = null;
         });
       }
-      if (controller.value.isInitialized &&
+      if (!_reviewing &&
+          controller.value.isInitialized &&
           !controller.value.isStreamingImages) {
         await _startLightMonitoring(controller);
       }
@@ -1738,7 +1765,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _showMessage(
       degraded
           ? '已应用「${preset.name}」，当前设备不支持'
-                '${_presetEnhancementLabel(preset.enhancement)}，已使用标准拍摄'
+                '${cameraPresetEnhancementLabel(preset.enhancement)}，已使用标准拍摄'
           : '已应用「${preset.name}」预设',
     );
   }
@@ -1825,109 +1852,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
       context: context,
       showDragHandle: true,
       backgroundColor: const Color(0xFF1C1C1E),
-      builder: (sheetContext) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(sheetContext).height * .72,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 8, 4),
-                child: Row(
-                  children: [
-                    const Text(
-                      '场景拍摄预设',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: () => Navigator.of(sheetContext).pop(
-                        const _PresetAction._(_PresetActionType.saveCurrent),
-                      ),
-                      icon: const Icon(Icons.add, size: 16),
-                      label: const Text('保存当前'),
-                    ),
-                  ],
-                ),
-              ),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                  children: [
-                    const _PresetSectionLabel('内置预设'),
-                    for (final preset in catalog.builtIn)
-                      _PresetTile(
-                        preset: preset,
-                        active: preset.id == _activePresetId,
-                        onTap: () => Navigator.of(sheetContext).pop(
-                          _PresetAction._(
-                            _PresetActionType.apply,
-                            preset: preset,
-                          ),
-                        ),
-                        trailing: IconButton(
-                          tooltip: '复制为自定义预设',
-                          onPressed: () => Navigator.of(sheetContext).pop(
-                            _PresetAction._(
-                              _PresetActionType.copy,
-                              preset: preset,
-                            ),
-                          ),
-                          icon: const Icon(
-                            Icons.copy_all_outlined,
-                            color: Colors.white54,
-                            size: 19,
-                          ),
-                        ),
-                      ),
-                    if (catalog.custom.isNotEmpty) ...[
-                      const _PresetSectionLabel('我的预设'),
-                      for (final preset in catalog.custom)
-                        _PresetTile(
-                          preset: preset,
-                          active: preset.id == _activePresetId,
-                          onTap: () => Navigator.of(sheetContext).pop(
-                            _PresetAction._(
-                              _PresetActionType.apply,
-                              preset: preset,
-                            ),
-                          ),
-                          trailing: IconButton(
-                            tooltip: '删除自定义预设',
-                            onPressed: () => Navigator.of(sheetContext).pop(
-                              _PresetAction._(
-                                _PresetActionType.delete,
-                                preset: preset,
-                              ),
-                            ),
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.white38,
-                              size: 19,
-                            ),
-                          ),
-                        ),
-                    ],
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(8, 10, 8, 0),
-                      child: Text(
-                        '复制内置预设或保存当前设置，即可拥有自己的场景参数。',
-                        style: TextStyle(color: Colors.white38, fontSize: 10),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+      builder: (sheetContext) => CameraPresetSheet(
+        builtIn: catalog.builtIn,
+        custom: catalog.custom,
+        activeId: _activePresetId,
+        onApply: (preset) => Navigator.of(sheetContext).pop(
+          _PresetAction._(_PresetActionType.apply, preset: preset),
+        ),
+        onCopy: (preset) => Navigator.of(sheetContext).pop(
+          _PresetAction._(_PresetActionType.copy, preset: preset),
+        ),
+        onDelete: (preset) => Navigator.of(sheetContext).pop(
+          _PresetAction._(_PresetActionType.delete, preset: preset),
+        ),
+        onSaveCurrent: () => Navigator.of(sheetContext).pop(
+          const _PresetAction._(_PresetActionType.saveCurrent),
         ),
       ),
     );
@@ -2180,7 +2119,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             onCopy: _copyDiagnostics,
           ),
           const SizedBox(height: 8),
-          _ProfessionalCapabilityPanel(
+          CameraProfessionalPanel(
             lens: _activeNativeLens,
             exposure: _exposure,
             minExposure: _minExposure,
@@ -2495,7 +2434,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 left: _focusPoint!.dx - 25,
                 top: _focusPoint!.dy - 25,
                 child: IgnorePointer(
-                  child: _FocusRing(
+                  child: CameraFocusRing(
                     locked: _focusLocked,
                     exposureLocked: _exposureLocked,
                   ),
@@ -2511,7 +2450,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     0.0,
                     constraints.maxHeight - 34,
                   ),
-                  child: _MeteringDragHandle(
+                  child: CameraMeteringDragHandle(
                     onPanUpdate: (details) =>
                         _dragMetering(details, constraints),
                   ),
@@ -2522,7 +2461,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   left: _meteringPoint!.dx - 19,
                   top: _meteringPoint!.dy - 19,
                   child: IgnorePointer(
-                    child: _MeteringRing(locked: _exposureLocked),
+                    child: CameraMeteringRing(locked: _exposureLocked),
                   ),
                 ),
             ],
@@ -2724,7 +2663,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
               bytes: _capturedImage,
               onTap: _capturedImage == null
                   ? _importPhoto
-                  : () => setState(() => _reviewing = true),
+                  : () => unawaited(_enterReview()),
             ),
             GestureDetector(
               onTap: _handleShutterTap,
@@ -3046,6 +2985,22 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   double _roundScore(double value) => double.parse(value.toStringAsFixed(2));
+
+  /// 进入照片预览前停止图像流，避免预览页继续占用相机分析资源。
+  Future<void> _enterReview() async {
+    if (_capturing) return;
+    final controller = _controller;
+    if (controller != null &&
+        controller.value.isInitialized &&
+        controller.value.isStreamingImages) {
+      try {
+        await controller.stopImageStream();
+      } catch (_) {
+        // 相机可能正在切换或关闭，预览仍可继续。
+      }
+    }
+    if (mounted) setState(() => _reviewing = true);
+  }
 
   Future<void> _retake() async {
     if (mounted) {
@@ -3376,107 +3331,6 @@ List<double> _styleMatrix(CameraStyle style) => switch (style) {
     0,
   ],
 };
-
-class _FocusRing extends StatelessWidget {
-  const _FocusRing({required this.locked, required this.exposureLocked});
-
-  final bool locked;
-  final bool exposureLocked;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.amber, width: 1.5),
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: 3),
-        child: Text(
-          locked && exposureLocked
-              ? 'AE/AF 锁定'
-              : locked
-              ? 'AF 锁定'
-              : 'AF',
-          style: const TextStyle(
-            color: Colors.amber,
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            shadows: [Shadow(color: Colors.black, blurRadius: 3)],
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _MeteringRing extends StatelessWidget {
-  const _MeteringRing({required this.locked});
-
-  final bool locked;
-
-  @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          border: Border.all(color: Colors.lightBlueAccent, width: 1.5),
-          shape: BoxShape.circle,
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(top: 2),
-        child: Text(
-          locked ? 'AE 锁定' : 'AE',
-          style: const TextStyle(
-            color: Colors.lightBlueAccent,
-            fontSize: 9,
-            fontWeight: FontWeight.w700,
-            shadows: [Shadow(color: Colors.black, blurRadius: 3)],
-          ),
-        ),
-      ),
-    ],
-  );
-}
-
-class _MeteringDragHandle extends StatelessWidget {
-  const _MeteringDragHandle({required this.onPanUpdate});
-
-  final GestureDragUpdateCallback onPanUpdate;
-
-  @override
-  Widget build(BuildContext context) => Semantics(
-    label: '拖动设置独立测光点',
-    child: GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () {},
-      onPanUpdate: onPanUpdate,
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: Colors.black54,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.lightBlueAccent, width: 1.2),
-        ),
-        child: const Icon(
-          Icons.contrast,
-          color: Colors.lightBlueAccent,
-          size: 14,
-        ),
-      ),
-    ),
-  );
-}
 
 class _ScanFrame extends StatelessWidget {
   const _ScanFrame();
@@ -4135,129 +3989,6 @@ class _DiagnosticsPanel extends StatelessWidget {
   }
 }
 
-class _ProfessionalCapabilityPanel extends StatelessWidget {
-  const _ProfessionalCapabilityPanel({
-    required this.lens,
-    required this.exposure,
-    required this.minExposure,
-    required this.maxExposure,
-    required this.onExposureChanged,
-  });
-
-  final NativeCameraLens? lens;
-  final double exposure;
-  final double minExposure;
-  final double maxExposure;
-  final ValueChanged<double> onExposureChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final currentLens = lens;
-    final hasExposureControl = maxExposure - minExposure > .01;
-    final capabilities = <String>[
-      if (currentLens != null && currentLens.maxIso > 0)
-        'ISO ${currentLens.minIso.round()}–${currentLens.maxIso.round()}',
-      if (currentLens != null && currentLens.maxExposureSeconds > 0)
-        '快门 ${_shutterLabel(currentLens.minExposureSeconds)}–${_shutterLabel(currentLens.maxExposureSeconds)}',
-      if (currentLens?.supportsManualFocus == true) '手动对焦',
-      if (currentLens?.supportsRaw == true) 'RAW/DNG',
-    ];
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFF28282B),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.tune, size: 15, color: Color(0xFFFFD60A)),
-              const SizedBox(width: 6),
-              const Text(
-                '专业控制',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const Spacer(),
-              Text(
-                currentLens == null ? '能力检测中' : _lensLabel(currentLens),
-                style: const TextStyle(color: Colors.white54, fontSize: 10),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            capabilities.isEmpty ? '当前镜头未报告专业参数' : capabilities.join(' · '),
-            style: const TextStyle(color: Colors.white60, fontSize: 10),
-          ),
-          if (hasExposureControl) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                SizedBox(
-                  width: 48,
-                  child: Text(
-                    'EV ${exposure >= 0 ? '+' : ''}${exposure.toStringAsFixed(1)}',
-                    style: const TextStyle(color: Colors.white70, fontSize: 10),
-                  ),
-                ),
-                Expanded(
-                  child: SliderTheme(
-                    data: SliderTheme.of(context).copyWith(
-                      trackHeight: 2,
-                      thumbShape: const RoundSliderThumbShape(
-                        enabledThumbRadius: 6,
-                      ),
-                      overlayShape: const RoundSliderOverlayShape(
-                        overlayRadius: 12,
-                      ),
-                    ),
-                    child: Slider(
-                      value: exposure.clamp(minExposure, maxExposure),
-                      min: minExposure,
-                      max: maxExposure,
-                      activeColor: const Color(0xFFFFD60A),
-                      inactiveColor: Colors.white24,
-                      onChanged: onExposureChanged,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  static String _lensLabel(NativeCameraLens lens) {
-    final type = switch (lens.type) {
-      'ultra-wide' => '超广角',
-      'telephoto' => '长焦',
-      'front' || 'true-depth' => '前摄',
-      _ => '主摄',
-    };
-    final zoom = lens.nominalZoom.toStringAsFixed(
-      lens.nominalZoom.roundToDouble() == lens.nominalZoom ? 0 : 1,
-    );
-    return '$type $zoom×';
-  }
-
-  static String _shutterLabel(double seconds) {
-    if (seconds <= 0) return '—';
-    if (seconds < 1) return '1/${(1 / seconds).round()}s';
-    return '${seconds.toStringAsFixed(seconds >= 10 ? 0 : 1)}s';
-  }
-}
-
 class _CameraOption extends StatelessWidget {
   const _CameraOption({
     required this.label,
@@ -4591,38 +4322,6 @@ String _compositionGuideName(CompositionGuide guide) => switch (guide) {
   CompositionGuide.goldenRatio => '黄金分割',
 };
 
-String _presetRatioLabel(double ratio) {
-  if ((ratio - 1).abs() < .01) return '1:1';
-  if ((ratio - .75).abs() < .01) return '3:4';
-  if ((ratio - .5625).abs() < .01) return '9:16';
-  if ((ratio - 16 / 9).abs() < .01) return '16:9';
-  return ratio.toStringAsFixed(2);
-}
-
-String _presetGuideLabel(String guide) => switch (guide) {
-  'center' => '中心',
-  'symmetry' => '对称',
-  'leadingLine' => '引导线',
-  'frame' => '框中框',
-  'goldenRatio' => '黄金分割',
-  _ => '三分',
-};
-
-String _presetEnhancementLabel(String enhancement) => switch (enhancement) {
-  'multiFrameHdr' => 'HDR',
-  'nightDenoise' => '夜景降噪',
-  _ => '标准',
-};
-
-String _presetStyleLabel(String style) => switch (style) {
-  'vivid' => '鲜明',
-  'warm' => '暖色',
-  'cool' => '冷色',
-  'mono' => '黑白',
-  'soft' => '柔和',
-  _ => '标准',
-};
-
 String _formatMb(int? value) {
   if (value == null) return '未知';
   if (value >= 1024) return '${(value / 1024).toStringAsFixed(1)} GB';
@@ -4645,121 +4344,6 @@ class _PresetAction {
 
   final _PresetActionType type;
   final CapturePreset? preset;
-}
-
-class _PresetSectionLabel extends StatelessWidget {
-  const _PresetSectionLabel(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
-    child: Text(
-      label,
-      style: const TextStyle(
-        color: Colors.white54,
-        fontSize: 11,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
-}
-
-class _PresetTile extends StatelessWidget {
-  const _PresetTile({
-    required this.preset,
-    required this.active,
-    required this.onTap,
-    this.trailing,
-  });
-
-  final CapturePreset preset;
-  final bool active;
-  final VoidCallback onTap;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Material(
-      color: active ? const Color(0xFF2E2E31) : const Color(0xFF252527),
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: active ? const Color(0xFFFFD60A) : Colors.white10,
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF343437),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.auto_awesome_motion,
-                  color: Color(0xFFFFD60A),
-                  size: 18,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      preset.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${_presetRatioLabel(preset.aspectRatio)} · '
-                      '${_presetGuideLabel(preset.guide)} · '
-                      '${preset.burstCount > 1 ? '${preset.burstCount} 张连拍' : '单拍'} · '
-                      '${_presetEnhancementLabel(preset.enhancement)} · '
-                      '${_presetStyleLabel(preset.style)}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (active)
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Icon(
-                    Icons.check_circle,
-                    color: Color(0xFFFFD60A),
-                    size: 18,
-                  ),
-                ),
-              if (trailing != null) trailing!,
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 class _SceneChip extends StatelessWidget {
