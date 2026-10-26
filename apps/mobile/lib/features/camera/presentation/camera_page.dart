@@ -3,9 +3,11 @@ import 'dart:math' as math;
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
+import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
+import 'package:ai_image_studio/features/camera/data/portrait_composition_guide.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_quality_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/stability_analyzer.dart';
 import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
@@ -39,7 +41,7 @@ enum CompositionGuide {
   goldenRatio,
 }
 
-enum CameraStyle { standard, vivid, warm, cool, mono }
+enum CameraStyle { standard, vivid, warm, cool, mono, soft }
 
 enum SmartShutterMode { off, smile, gesture }
 
@@ -106,6 +108,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _shadowClipping = 0;
   double _highlightThreshold = .95;
   bool _showHistogram = false;
+  bool _showZebra = false;
+  List<Offset> _zebraPoints = const [];
   bool _showFocusPeaking = false;
   bool _lensCleaningHints = true;
   List<Offset> _focusPeaks = const [];
@@ -120,15 +124,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
   int _initializationToken = 0;
   String _compositionSuggestion = '让主体靠近交叉点，画面会更有呼吸感';
   Offset? _focusPoint;
+  Offset? _meteringPoint;
+  bool _meteringPointSupported = true;
+  DateTime _lastMeteringUpdate = DateTime.fromMillisecondsSinceEpoch(0);
   final StabilityAnalyzer _stabilityAnalyzer = StabilityAnalyzer();
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
   final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
+  final PortraitCompositionAnalyzer _portraitGuide =
+      const PortraitCompositionAnalyzer();
   LiveCameraAnalysis? _liveAnalysis;
+  PortraitCompositionHint? _portraitHint;
+  DateTime _portraitHintUntil = DateTime.fromMillisecondsSinceEpoch(0);
+  DateTime _lastPortraitHintAt = DateTime.fromMillisecondsSinceEpoch(0);
+  String? _lastPortraitHintCode;
   bool _showRealtimeGuidance = true;
   bool _showCameraOptions = false;
   bool _shutterFlash = false;
   bool _focusLocked = false;
+  bool _exposureLocked = false;
   bool _mirrorSelfies = true;
   bool _autoSave = false;
   bool _saveOriginalCopy = false;
@@ -141,6 +155,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   String? _barcodeType;
   DateTime _lastBarcodeAt = DateTime.fromMillisecondsSinceEpoch(0);
   CameraCapabilities _capabilities = const CameraCapabilities.fallback();
+  final CapturePresetRepository _presetRepository = CapturePresetRepository();
+  List<CapturePreset> _customPresets = const [];
+  String? _activePresetId;
   bool _permissionPermanentlyDenied = false;
   String? _processingStatus;
   double? _processingProgress;
@@ -155,6 +172,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _saveOriginalPreference = 'camera.save_original';
   static const _stylePreference = 'camera.photo_style';
   static const _histogramPreference = 'camera.show_histogram';
+  static const _zebraPreference = 'camera.show_zebra';
   static const _highlightThresholdPreference = 'camera.highlight_threshold';
   static const _smartShutterPreference = 'camera.smart_shutter';
   static const _focusPeakingPreference = 'camera.focus_peaking';
@@ -162,6 +180,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
   static const _enhancementPreference = 'camera.capture_enhancement';
 
   StabilitySnapshot get _stability => _stabilityAnalyzer.snapshot;
+
+  /// 只在有效期内展示构图提示，避免 UI 出现过期结果。
+  PortraitCompositionHint? get _activePortraitHint {
+    final hint = _portraitHint;
+    if (hint == null) return null;
+    return DateTime.now().isBefore(_portraitHintUntil) ? hint : null;
+  }
 
   /// 夜景、HDR 或弱光环境下使用更严格的稳定阈值；
   /// 普通拍摄保持宽松，避免用户长时间等不到“可以拍摄”。
@@ -207,6 +232,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     unawaited(_activateHardwareControls());
     unawaited(_loadPreferences());
     unawaited(_loadCapabilities());
+    unawaited(_loadPresets());
     unawaited(_loadCameras());
   }
 
@@ -239,12 +265,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
     if (mounted) setState(() => _capabilities = capabilities);
   }
 
+  Future<void> _loadPresets() async {
+    final catalog = await _presetRepository.load();
+    if (mounted) setState(() => _customPresets = catalog.custom);
+  }
+
   Future<void> _loadPreferences() async {
     final preferences = await SharedPreferences.getInstance();
     if (!mounted) return;
     final savedAspect = preferences.getDouble(_aspectPreference);
     setState(() {
-      if (savedAspect == 1 || savedAspect == .75 || savedAspect == .5625) {
+      if (savedAspect == 1 ||
+          savedAspect == .75 ||
+          savedAspect == .5625 ||
+          savedAspect == 16 / 9) {
         _aspectRatio = savedAspect!;
       }
       _countdownSeconds = preferences.getInt(_timerPreference) ?? 0;
@@ -264,6 +298,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       _style = CameraStyle
           .values[styleIndex.clamp(0, CameraStyle.values.length - 1)];
       _showHistogram = preferences.getBool(_histogramPreference) ?? false;
+      _showZebra = preferences.getBool(_zebraPreference) ?? false;
       final highlightThreshold =
           preferences.getDouble(_highlightThresholdPreference) ?? .95;
       _highlightThreshold = const [.90, .95, .98].contains(highlightThreshold)
@@ -367,6 +402,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         _error = null;
         _permissionPermanentlyDenied = false;
         _controller = null;
+        _clearFocusState();
       });
     }
     await previous?.dispose();
@@ -438,7 +474,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
           return;
         }
         _lastFrameAt = now;
-        final histogram = _analyzeHistogram(image);
+        final histogram = _analyzeHistogram(
+          image,
+          controller.description,
+          controller.value.deviceOrientation,
+        );
         if (mounted && histogram.samples > 0) {
           final detail = _analyzeSharpness(
             image,
@@ -455,6 +495,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _blueHistogram = histogram.blue;
             _clarityScore = detail.clarity;
             _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
+            _zebraPoints = _showZebra ? histogram.zebra : const [];
             final normallyLit = _brightness >= 60 && _brightness <= 215;
             if (_lensCleaningHints && normallyLit && detail.clarity < 6) {
               _softFrameCount = _softFrameCount >= 12
@@ -491,12 +532,17 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _greenHistogram = const [];
           _blueHistogram = const [];
           _focusPeaks = const [];
+          _zebraPoints = const [];
         });
       }
     }
   }
 
-  _FrameHistogram _analyzeHistogram(CameraImage image) {
+  _FrameHistogram _analyzeHistogram(
+    CameraImage image,
+    CameraDescription camera,
+    DeviceOrientation orientation,
+  ) {
     const binCount = 32;
     final luminanceBins = List<int>.filled(binCount, 0);
     final redBins = List<int>.filled(binCount, 0);
@@ -510,16 +556,30 @@ class _CameraPageState extends ConsumerState<CameraPage>
     final pixelStride = plane.bytesPerPixel ?? (isBgra ? 4 : 1);
     final yPlaneSize = rowStride * image.height;
     final step = math.max(6, math.min(image.width, image.height) ~/ 48);
+    final highlightLevel = (_highlightThreshold * 255).round();
+    final zebra = <Offset>[];
     var total = 0;
     var samples = 0;
     var highlights = 0;
     var shadows = 0;
 
-    void addSample(int y, int red, int green, int blue) {
-      total += y;
-      if (y >= (_highlightThreshold * 255).round()) highlights++;
-      if (y <= 10) shadows++;
-      luminanceBins[(y * binCount ~/ 256).clamp(0, binCount - 1)]++;
+    void addSample(int x, int y, int luma, int red, int green, int blue) {
+      total += luma;
+      if (luma >= highlightLevel) {
+        highlights++;
+        // 斑马纹直接复用直方图的亮度采样结果，避免二次扫描整帧。
+        if (_showZebra && zebra.length < 900) {
+          zebra.add(
+            _rotateAnalysisPoint(
+              Offset(x / image.width, y / image.height),
+              camera,
+              orientation,
+            ),
+          );
+        }
+      }
+      if (luma <= 10) shadows++;
+      luminanceBins[(luma * binCount ~/ 256).clamp(0, binCount - 1)]++;
       redBins[(red * binCount ~/ 256).clamp(0, binCount - 1)]++;
       greenBins[(green * binCount ~/ 256).clamp(0, binCount - 1)]++;
       blueBins[(blue * binCount ~/ 256).clamp(0, binCount - 1)]++;
@@ -534,7 +594,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           final green = bytes[index + 1];
           final red = bytes[index + 2];
           final luma = (.299 * red + .587 * green + .114 * blue).round();
-          addSample(luma, red, green, blue);
+          addSample(x, y, luma, red, green, blue);
         } else if (isNv21 && index < yPlaneSize && index < bytes.length) {
           final luma = bytes[index];
           final uvIndex = yPlaneSize + (y ~/ 2) * rowStride + (x & ~1);
@@ -547,7 +607,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
             255,
           );
           final blue = (luma + 1.772 * u).round().clamp(0, 255);
-          addSample(luma, red, green, blue);
+          addSample(x, y, luma, red, green, blue);
         }
       }
     }
@@ -570,6 +630,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       red: normalize(redBins, colorPeak),
       green: normalize(greenBins, colorPeak),
       blue: normalize(blueBins, colorPeak),
+      zebra: zebra,
     );
   }
 
@@ -748,6 +809,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         setState(() {
           _controller = null;
           _initializing = true;
+          _clearFocusState();
         });
       }
       return;
@@ -842,6 +904,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
     unawaited(HapticFeedback.mediumImpact());
     final startingExposure = _exposure;
     final startingFlash = _flashMode;
+    var captureFailed = false;
     try {
       final timerSeconds = continuous ? 0 : _countdownSeconds;
       for (var value = timerSeconds; value > 0; value--) {
@@ -1018,13 +1081,20 @@ class _CameraPageState extends ConsumerState<CameraPage>
       }
       if (mounted) setState(() => _capturedImage = session.selected?.bytes);
     } on CameraException catch (error) {
+      captureFailed = true;
       if (mounted) _showMessage(_cameraError(error));
     } on PlatformException catch (error) {
+      captureFailed = true;
       if (mounted) _showMessage(_cameraError(error));
     } catch (error) {
       // MLKit 失败、文件 IO 失败等都兜到这里,不裸露异常。
+      captureFailed = true;
       if (mounted) _showMessage(_cameraError(error));
     } finally {
+      if (captureFailed) {
+        // 异常可能发生在锁定 AE/AF 之后，恢复自动模式避免污染下一次拍摄。
+        unawaited(_restoreAutoFocus());
+      }
       if ((_exposure - startingExposure).abs() > .01) {
         await _setExposure(startingExposure);
       }
@@ -1126,14 +1196,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
     );
     if (file == null) return;
     final bytes = await file.readAsBytes();
-    await ref.read(cameraSessionProvider.notifier).setPhotos([bytes]);
+    await ref
+        .read(cameraSessionProvider.notifier)
+        .setPhotos([bytes], portraitAnalyzer: analyzePortraitQuality);
     if (mounted) setState(() => _capturedImage = bytes);
   }
 
   Future<void> _focus(
     TapDownDetails details,
     BoxConstraints constraints, {
-    bool keepVisible = false,
+    bool lock = false,
   }) async {
     final controller = _controller;
     if (controller == null) return;
@@ -1142,37 +1214,132 @@ class _CameraPageState extends ConsumerState<CameraPage>
       (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
     );
     try {
-      await controller.setFocusMode(
-        keepVisible ? FocusMode.locked : FocusMode.auto,
-      );
-      await controller.setExposureMode(
-        keepVisible ? ExposureMode.locked : ExposureMode.auto,
-      );
+      await controller.setFocusMode(lock ? FocusMode.locked : FocusMode.auto);
       await controller.setFocusPoint(point);
-      await controller.setExposurePoint(point);
-      setState(() {
-        _focusPoint = details.localPosition;
-        _focusLocked = keepVisible;
-      });
-      if (keepVisible) return;
-      await Future<void>.delayed(const Duration(milliseconds: 800));
-      if (mounted && !_focusLocked) setState(() => _focusPoint = null);
     } on CameraException {
-      /* Device does not support manual focus. */
+      if (mounted) _showMessage('当前设备不支持手动对焦，已保持自动对焦');
+      return;
+    } on PlatformException {
+      if (mounted) _showMessage('当前设备不支持手动对焦，已保持自动对焦');
+      return;
     }
+    if (!mounted) return;
+    setState(() {
+      _focusPoint = details.localPosition;
+      _meteringPoint = null;
+      _focusLocked = lock;
+      _exposureLocked = lock;
+    });
+    try {
+      // 点击会解除上一次锁定并重新对焦；长按则在当前位置锁定 AE/AF。
+      await controller.setExposureMode(
+        lock ? ExposureMode.locked : ExposureMode.auto,
+      );
+      await controller.setExposurePoint(point);
+    } on CameraException {
+      _disableMeteringPoint();
+    } on PlatformException {
+      _disableMeteringPoint();
+    }
+    if (lock) {
+      unawaited(HapticFeedback.selectionClick());
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 1200));
+    if (mounted && !_focusLocked) setState(() => _focusPoint = null);
   }
 
   Future<void> _lockFocus(
     LongPressStartDetails details,
     BoxConstraints constraints,
-  ) async {
-    await _focus(
-      TapDownDetails(localPosition: details.localPosition),
-      constraints,
-      keepVisible: true,
+  ) => _focus(
+    TapDownDetails(localPosition: details.localPosition),
+    constraints,
+    lock: true,
+  );
+
+  /// 从焦点环旁的 AE 手柄拖出独立测光点。
+  void _dragMetering(
+    DragUpdateDetails details,
+    BoxConstraints constraints,
+  ) {
+    if (!_meteringPointSupported) return;
+    final controller = _controller;
+    final base = _meteringPoint ?? _focusPoint;
+    if (controller == null || base == null) return;
+    final next = Offset(
+      (base.dx + details.delta.dx).clamp(0.0, constraints.maxWidth),
+      (base.dy + details.delta.dy).clamp(0.0, constraints.maxHeight),
     );
-    if (!mounted) return;
-    unawaited(HapticFeedback.selectionClick());
+    setState(() {
+      _meteringPoint = next;
+      _exposureLocked = false;
+    });
+    final now = DateTime.now();
+    if (now.difference(_lastMeteringUpdate) <
+        const Duration(milliseconds: 90)) {
+      return;
+    }
+    _lastMeteringUpdate = now;
+    unawaited(
+      _applyMeteringPoint(
+        controller,
+        Offset(
+          next.dx / constraints.maxWidth,
+          next.dy / constraints.maxHeight,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyMeteringPoint(
+    CameraController controller,
+    Offset point,
+  ) async {
+    try {
+      // 测光点独立移动时始终保持曝光自动，只改变测光位置。
+      await controller.setExposureMode(ExposureMode.auto);
+      await controller.setExposurePoint(point);
+    } on CameraException {
+      _disableMeteringPoint();
+    } on PlatformException {
+      _disableMeteringPoint();
+    }
+  }
+
+  void _disableMeteringPoint() {
+    if (!_meteringPointSupported) return;
+    setState(() {
+      _meteringPointSupported = false;
+      _meteringPoint = null;
+      _exposureLocked = false;
+    });
+    if (_focusPoint != null) {
+      _showMessage('当前设备不支持独立测光点，已保留曝光补偿');
+    }
+  }
+
+  void _clearFocusState() {
+    _focusPoint = null;
+    _meteringPoint = null;
+    _focusLocked = false;
+    _exposureLocked = false;
+    _meteringPointSupported = true;
+    _lastMeteringUpdate = DateTime.fromMillisecondsSinceEpoch(0);
+  }
+
+  /// 拍摄异常后恢复自动模式，避免下次进入时仍锁在错误的曝光值上。
+  Future<void> _restoreAutoFocus() async {
+    final controller = _controller;
+    if (controller != null && controller.value.isInitialized) {
+      try {
+        await controller.setFocusMode(FocusMode.auto);
+        await controller.setExposureMode(ExposureMode.auto);
+      } catch (_) {
+        // 相机可能正在关闭，忽略恢复失败。
+      }
+    }
+    if (mounted) setState(_clearFocusState);
   }
 
   void _handleScaleUpdate(ScaleUpdateDetails details) {
@@ -1375,6 +1542,270 @@ class _CameraPageState extends ConsumerState<CameraPage>
     });
     unawaited(_savePreference(_guidePreference, true));
     unawaited(_savePreference(_guideTypePreference, selected.name));
+  }
+
+  String get _activePresetName =>
+      CapturePresetCatalog(
+        builtIn: CapturePresetRepository.builtInPresets,
+        custom: _customPresets,
+      ).byId(_activePresetId)?.name ??
+      '场景预设';
+
+  bool _supportsCaptureEnhancement(CaptureEnhancement enhancement) {
+    final modes = _capabilities.extensionModes;
+    // 原生能力未上报时不阻断预设，避免把“未检测”误判为“不支持”。
+    if (modes.isEmpty) return true;
+    return switch (enhancement) {
+      CaptureEnhancement.standard => true,
+      CaptureEnhancement.multiFrameHdr =>
+        modes.contains('hdr') || modes.contains('auto'),
+      CaptureEnhancement.nightDenoise =>
+        modes.contains('night') || modes.contains('auto'),
+    };
+  }
+
+  void _applyPreset(CapturePreset preset) {
+    final guide = CompositionGuide.values.firstWhere(
+      (value) => value.name == preset.guide,
+      orElse: () => CompositionGuide.thirds,
+    );
+    var enhancement = CaptureEnhancement.values.firstWhere(
+      (value) => value.name == preset.enhancement,
+      orElse: () => CaptureEnhancement.standard,
+    );
+    final style = CameraStyle.values.firstWhere(
+      (value) => value.name == preset.style,
+      orElse: () => CameraStyle.standard,
+    );
+    final degraded = !_supportsCaptureEnhancement(enhancement);
+    if (degraded) enhancement = CaptureEnhancement.standard;
+    setState(() {
+      _guide = guide;
+      _showGuide = true;
+      _aspectRatio = preset.aspectRatio;
+      _burstCount = preset.burstCount >= 5 ? 5 : 1;
+      _scanMode = false;
+      _barcodeValue = null;
+      _captureEnhancement = enhancement;
+      _style = style;
+      _activePresetId = preset.id;
+    });
+    unawaited(_savePreference(_aspectPreference, _aspectRatio));
+    unawaited(_savePreference(_guidePreference, true));
+    unawaited(_savePreference(_guideTypePreference, guide.name));
+    unawaited(_savePreference(_stylePreference, style.index));
+    unawaited(_savePreference(_enhancementPreference, enhancement.index));
+    _showMessage(
+      degraded
+          ? '已应用「${preset.name}」，当前设备不支持'
+                '${_presetEnhancementLabel(preset.enhancement)}，已使用标准拍摄'
+          : '已应用「${preset.name}」预设',
+    );
+  }
+
+  Future<void> _copyPreset(CapturePreset source) async {
+    final copy = source.copyWith(
+      id: 'custom.${DateTime.now().microsecondsSinceEpoch}',
+      name: '${source.name} 自定义',
+      builtIn: false,
+      sourceId: source.id,
+    );
+    final next = [..._customPresets, copy];
+    setState(() => _customPresets = next);
+    await _presetRepository.saveCustom(next);
+    if (mounted) _showMessage('已复制为「${copy.name}」');
+  }
+
+  Future<void> _deleteCustomPreset(CapturePreset preset) async {
+    final next = _customPresets
+        .where((item) => item.id != preset.id)
+        .toList(growable: false);
+    setState(() {
+      _customPresets = next;
+      if (_activePresetId == preset.id) _activePresetId = null;
+    });
+    await _presetRepository.saveCustom(next);
+    if (mounted) _showMessage('已删除自定义预设');
+  }
+
+  Future<void> _saveCurrentAsPreset() async {
+    final controller = TextEditingController(text: '我的场景');
+    String? name;
+    try {
+      name = await showDialog<String>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: const Color(0xFF1C1C1E),
+          title: const Text('保存当前设置'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 12,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(hintText: '预设名称'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: const Text('保存'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      controller.dispose();
+    }
+    if (!mounted || name == null || name.isEmpty) return;
+    final preset = CapturePreset(
+      id: 'custom.${DateTime.now().microsecondsSinceEpoch}',
+      name: name,
+      aspectRatio: _aspectRatio,
+      guide: _guide.name,
+      burstCount: _burstCount,
+      enhancement: _captureEnhancement.name,
+      style: _style.name,
+    );
+    final next = [..._customPresets, preset];
+    setState(() => _customPresets = next);
+    await _presetRepository.saveCustom(next);
+    if (mounted) _showMessage('已保存自定义预设「$name」');
+  }
+
+  Future<void> _openPresetSheet() async {
+    final catalog = CapturePresetCatalog(
+      builtIn: CapturePresetRepository.builtInPresets,
+      custom: _customPresets,
+    );
+    final action = await showModalBottomSheet<_PresetAction>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF1C1C1E),
+      builder: (sheetContext) => SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * .72,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 8, 4),
+                child: Row(
+                  children: [
+                    const Text(
+                      '场景拍摄预设',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(
+                        sheetContext,
+                      ).pop(const _PresetAction._(_PresetActionType.saveCurrent)),
+                      icon: const Icon(Icons.add, size: 16),
+                      label: const Text('保存当前'),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                  children: [
+                    const _PresetSectionLabel('内置预设'),
+                    for (final preset in catalog.builtIn)
+                      _PresetTile(
+                        preset: preset,
+                        active: preset.id == _activePresetId,
+                        onTap: () => Navigator.of(sheetContext).pop(
+                          _PresetAction._(
+                            _PresetActionType.apply,
+                            preset: preset,
+                          ),
+                        ),
+                        trailing: IconButton(
+                          tooltip: '复制为自定义预设',
+                          onPressed: () => Navigator.of(sheetContext).pop(
+                            _PresetAction._(
+                              _PresetActionType.copy,
+                              preset: preset,
+                            ),
+                          ),
+                          icon: const Icon(
+                            Icons.copy_all_outlined,
+                            color: Colors.white54,
+                            size: 19,
+                          ),
+                        ),
+                      ),
+                    if (catalog.custom.isNotEmpty) ...[
+                      const _PresetSectionLabel('我的预设'),
+                      for (final preset in catalog.custom)
+                        _PresetTile(
+                          preset: preset,
+                          active: preset.id == _activePresetId,
+                          onTap: () => Navigator.of(sheetContext).pop(
+                            _PresetAction._(
+                              _PresetActionType.apply,
+                              preset: preset,
+                            ),
+                          ),
+                          trailing: IconButton(
+                            tooltip: '删除自定义预设',
+                            onPressed: () => Navigator.of(sheetContext).pop(
+                              _PresetAction._(
+                                _PresetActionType.delete,
+                                preset: preset,
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.white38,
+                              size: 19,
+                            ),
+                          ),
+                        ),
+                    ],
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(8, 10, 8, 0),
+                      child: Text(
+                        '复制内置预设或保存当前设置，即可拥有自己的场景参数。',
+                        style: TextStyle(color: Colors.white38, fontSize: 10),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action.type) {
+      case _PresetActionType.apply:
+        if (action.preset != null) _applyPreset(action.preset!);
+        break;
+      case _PresetActionType.copy:
+        if (action.preset != null) await _copyPreset(action.preset!);
+        break;
+      case _PresetActionType.delete:
+        if (action.preset != null) await _deleteCustomPreset(action.preset!);
+        break;
+      case _PresetActionType.saveCurrent:
+        await _saveCurrentAsPreset();
+        break;
+    }
   }
 
   IconData get _flashIcon => switch (_flashMode) {
@@ -1615,6 +2046,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 ('1:1', 1.0),
                 ('3:4', .75),
                 ('9:16', .5625),
+                ('16:9', 16 / 9),
               ])
                 _CameraOption(
                   label: ratio.$1,
@@ -1654,6 +2086,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 onTap: _selectCompositionGuide,
               ),
               _CameraOption(
+                label: _activePresetName,
+                icon: Icons.auto_awesome_motion,
+                selected: _activePresetId != null,
+                onTap: _openPresetSheet,
+              ),
+              _CameraOption(
                 label: '曝光归零',
                 icon: Icons.exposure_zero,
                 selected: _exposure.abs() < .05,
@@ -1673,7 +2111,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
               _CameraOption(
                 label: '高光 ${(100 * _highlightThreshold).round()}%',
                 icon: Icons.wb_sunny_outlined,
-                selected: _showHistogram,
+                selected: _showHistogram || _showZebra,
                 onTap: () => setState(() {
                   const thresholds = [.90, .95, .98];
                   final current = thresholds.indexOf(_highlightThreshold);
@@ -1687,6 +2125,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
                     ),
                   );
                   unawaited(_savePreference(_histogramPreference, true));
+                }),
+              ),
+              _CameraOption(
+                label: '斑马纹',
+                icon: Icons.texture,
+                selected: _showZebra,
+                onTap: () => setState(() {
+                  _showZebra = !_showZebra;
+                  if (!_showZebra) _zebraPoints = const [];
+                  unawaited(_savePreference(_zebraPreference, _showZebra));
                 }),
               ),
               _CameraOption(
@@ -1748,6 +2196,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 ('暖色', CameraStyle.warm),
                 ('冷色', CameraStyle.cool),
                 ('黑白', CameraStyle.mono),
+                ('柔和', CameraStyle.soft),
               ])
                 _CameraOption(
                   label: option.$1,
@@ -1886,12 +2335,46 @@ class _CameraPageState extends ConsumerState<CameraPage>
               IgnorePointer(
                 child: CustomPaint(painter: _FocusPeakingPainter(_focusPeaks)),
               ),
-            if (_focusPoint != null)
+            if (_showZebra && _zebraPoints.isNotEmpty)
+              IgnorePointer(
+                child: CustomPaint(painter: _ZebraPainter(_zebraPoints)),
+              ),
+            if (_focusPoint != null) ...[
               Positioned(
                 left: _focusPoint!.dx - 25,
                 top: _focusPoint!.dy - 25,
-                child: IgnorePointer(child: _FocusRing(locked: _focusLocked)),
+                child: IgnorePointer(
+                  child: _FocusRing(
+                    locked: _focusLocked,
+                    exposureLocked: _exposureLocked,
+                  ),
+                ),
               ),
+              if (_meteringPointSupported && !_focusLocked)
+                Positioned(
+                  left: (_focusPoint!.dx + 20).clamp(
+                    0.0,
+                    constraints.maxWidth - 34,
+                  ),
+                  top: (_focusPoint!.dy - 36).clamp(
+                    0.0,
+                    constraints.maxHeight - 34,
+                  ),
+                  child: _MeteringDragHandle(
+                    onPanUpdate: (details) =>
+                        _dragMetering(details, constraints),
+                  ),
+                ),
+              if (_meteringPoint != null &&
+                  (_meteringPoint! - _focusPoint!).distance > 8)
+                Positioned(
+                  left: _meteringPoint!.dx - 19,
+                  top: _meteringPoint!.dy - 19,
+                  child: IgnorePointer(
+                    child: _MeteringRing(locked: _exposureLocked),
+                  ),
+                ),
+            ],
             if (_countdown > 0)
               Center(
                 child: Column(
@@ -2333,6 +2816,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
         ? '3:4'
         : _aspectRatio == .5625
         ? '9:16'
+        : _aspectRatio == 16 / 9
+        ? '16:9'
         : '1:1';
     try {
       final task = await ref
@@ -2387,6 +2872,7 @@ class _FrameHistogram {
     required this.red,
     required this.green,
     required this.blue,
+    required this.zebra,
   });
 
   final int samples;
@@ -2397,6 +2883,9 @@ class _FrameHistogram {
   final List<double> red;
   final List<double> green;
   final List<double> blue;
+
+  /// 高光采样点的归一化坐标，用于绘制斑马纹。
+  final List<Offset> zebra;
 }
 
 class _FrameSharpness {
@@ -2521,6 +3010,8 @@ Uint8List _finishPhoto(
       }
     case CameraStyle.mono:
       cropped = img.grayscale(cropped);
+    case CameraStyle.soft:
+      cropped = img.adjustColor(cropped, saturation: .88, contrast: .94);
   }
   return Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
 }
@@ -2662,11 +3153,36 @@ List<double> _styleMatrix(CameraStyle style) => switch (style) {
     1,
     0,
   ],
+  CameraStyle.soft => const [
+    .94,
+    .03,
+    .03,
+    0,
+    4,
+    .03,
+    .94,
+    .03,
+    0,
+    4,
+    .03,
+    .03,
+    .94,
+    0,
+    4,
+    0,
+    0,
+    0,
+    1,
+    0,
+  ],
 };
 
 class _FocusRing extends StatelessWidget {
-  const _FocusRing({required this.locked});
+  const _FocusRing({required this.locked, required this.exposureLocked});
+
   final bool locked;
+  final bool exposureLocked;
+
   @override
   Widget build(BuildContext context) => Column(
     mainAxisSize: MainAxisSize.min,
@@ -2679,15 +3195,86 @@ class _FocusRing extends StatelessWidget {
           borderRadius: BorderRadius.circular(4),
         ),
       ),
-      if (locked)
-        const Padding(
-          padding: EdgeInsets.only(top: 3),
-          child: Text(
-            '自动曝光/自动对焦锁定',
-            style: TextStyle(color: Colors.amber, fontSize: 9),
+      Padding(
+        padding: const EdgeInsets.only(top: 3),
+        child: Text(
+          locked && exposureLocked
+              ? 'AE/AF 锁定'
+              : locked
+              ? 'AF 锁定'
+              : 'AF',
+          style: const TextStyle(
+            color: Colors.amber,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            shadows: [Shadow(color: Colors.black, blurRadius: 3)],
           ),
         ),
+      ),
     ],
+  );
+}
+
+class _MeteringRing extends StatelessWidget {
+  const _MeteringRing({required this.locked});
+
+  final bool locked;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.lightBlueAccent, width: 1.5),
+          shape: BoxShape.circle,
+        ),
+      ),
+      Padding(
+        padding: const EdgeInsets.only(top: 2),
+        child: Text(
+          locked ? 'AE 锁定' : 'AE',
+          style: const TextStyle(
+            color: Colors.lightBlueAccent,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            shadows: [Shadow(color: Colors.black, blurRadius: 3)],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
+class _MeteringDragHandle extends StatelessWidget {
+  const _MeteringDragHandle({required this.onPanUpdate});
+
+  final GestureDragUpdateCallback onPanUpdate;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: '拖动设置独立测光点',
+    child: GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {},
+      onPanUpdate: onPanUpdate,
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: Colors.black54,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.lightBlueAccent, width: 1.2),
+        ),
+        child: const Icon(
+          Icons.contrast,
+          color: Colors.lightBlueAccent,
+          size: 14,
+        ),
+      ),
+    ),
   );
 }
 
@@ -3056,6 +3643,43 @@ class _FocusPeakingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _FocusPeakingPainter oldDelegate) =>
+      !listEquals(points, oldDelegate.points);
+}
+
+/// 用高光采样点绘制斑马纹遮罩，Path 批量绘制以降低低端设备的绘制开销。
+class _ZebraPainter extends CustomPainter {
+  const _ZebraPainter(this.points);
+
+  final List<Offset> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    final cell = math.max(5.0, math.min(size.width, size.height) / 55);
+    final path = Path();
+    for (final point in points) {
+      final center = Offset(point.dx * size.width, point.dy * size.height);
+      path.moveTo(center.dx - cell / 2, center.dy - cell / 2);
+      path.lineTo(center.dx + cell / 2, center.dy + cell / 2);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.black.withValues(alpha: .5)
+        ..strokeWidth = 3.4
+        ..strokeCap = StrokeCap.square,
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = Colors.white.withValues(alpha: .85)
+        ..strokeWidth = 1.5
+        ..strokeCap = StrokeCap.square,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _ZebraPainter oldDelegate) =>
       !listEquals(points, oldDelegate.points);
 }
 
@@ -3665,6 +4289,162 @@ String _compositionGuideName(CompositionGuide guide) => switch (guide) {
   CompositionGuide.frame => '框中框',
   CompositionGuide.goldenRatio => '黄金分割',
 };
+
+String _presetRatioLabel(double ratio) {
+  if ((ratio - 1).abs() < .01) return '1:1';
+  if ((ratio - .75).abs() < .01) return '3:4';
+  if ((ratio - .5625).abs() < .01) return '9:16';
+  if ((ratio - 16 / 9).abs() < .01) return '16:9';
+  return ratio.toStringAsFixed(2);
+}
+
+String _presetGuideLabel(String guide) => switch (guide) {
+  'center' => '中心',
+  'symmetry' => '对称',
+  'leadingLine' => '引导线',
+  'frame' => '框中框',
+  'goldenRatio' => '黄金分割',
+  _ => '三分',
+};
+
+String _presetEnhancementLabel(String enhancement) => switch (enhancement) {
+  'multiFrameHdr' => 'HDR',
+  'nightDenoise' => '夜景降噪',
+  _ => '标准',
+};
+
+String _presetStyleLabel(String style) => switch (style) {
+  'vivid' => '鲜明',
+  'warm' => '暖色',
+  'cool' => '冷色',
+  'mono' => '黑白',
+  'soft' => '柔和',
+  _ => '标准',
+};
+
+enum _PresetActionType { apply, copy, delete, saveCurrent }
+
+class _PresetAction {
+  const _PresetAction._(this.type, {this.preset});
+
+  final _PresetActionType type;
+  final CapturePreset? preset;
+}
+
+class _PresetSectionLabel extends StatelessWidget {
+  const _PresetSectionLabel(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(8, 12, 8, 6),
+    child: Text(
+      label,
+      style: const TextStyle(
+        color: Colors.white54,
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+      ),
+    ),
+  );
+}
+
+class _PresetTile extends StatelessWidget {
+  const _PresetTile({
+    required this.preset,
+    required this.active,
+    required this.onTap,
+    this.trailing,
+  });
+
+  final CapturePreset preset;
+  final bool active;
+  final VoidCallback onTap;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Material(
+      color: active ? const Color(0xFF2E2E31) : const Color(0xFF252527),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 9, 4, 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: active ? const Color(0xFFFFD60A) : Colors.white10,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF343437),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.auto_awesome_motion,
+                  color: Color(0xFFFFD60A),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      preset.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_presetRatioLabel(preset.aspectRatio)} · '
+                      '${_presetGuideLabel(preset.guide)} · '
+                      '${preset.burstCount > 1 ? '${preset.burstCount} 张连拍' : '单拍'} · '
+                      '${_presetEnhancementLabel(preset.enhancement)} · '
+                      '${_presetStyleLabel(preset.style)}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (active)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(
+                    Icons.check_circle,
+                    color: Color(0xFFFFD60A),
+                    size: 18,
+                  ),
+                ),
+              if (trailing != null) trailing!,
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 class _SceneChip extends StatelessWidget {
   const _SceneChip({required this.scene, required this.confidence});

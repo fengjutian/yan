@@ -1,3 +1,5 @@
+import 'dart:ui' show Rect;
+
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 
@@ -11,6 +13,7 @@ class LiveCameraAnalysis {
     this.sceneConfidence = 0,
     this.smileDetected = false,
     this.gestureDetected = false,
+    this.faces = const [],
     this.barcodeValue,
     this.barcodeType,
   });
@@ -21,6 +24,7 @@ class LiveCameraAnalysis {
   final double sceneConfidence;
   final bool smileDetected;
   final bool gestureDetected;
+  final List<Rect> faces;
   final String? barcodeValue;
   final String? barcodeType;
 }

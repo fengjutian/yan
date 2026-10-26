@@ -112,12 +112,24 @@ class StabilitySnapshot {
 /// 3. 指数平滑抑制单帧尖峰；
 /// 4. 只有连续稳定达到阈值时长才标记为可拍摄。
 class StabilityAnalyzer {
-  StabilityAnalyzer({
+  factory StabilityAnalyzer({
     StabilityRequirement requirement = StabilityRequirement.standard,
-    this.noiseFloor = .06,
-    this.smoothing = .22,
-    this.zeroScoreMotion = .6,
-  }) : _requirement = requirement;
+    double noiseFloor = .06,
+    double smoothing = .22,
+    double zeroScoreMotion = .6,
+  }) => StabilityAnalyzer._(
+    requirement,
+    noiseFloor,
+    smoothing,
+    zeroScoreMotion,
+  );
+
+  StabilityAnalyzer._(
+    this._requirement,
+    this.noiseFloor,
+    this.smoothing,
+    this.zeroScoreMotion,
+  );
 
   /// 传感器噪声地板，低于该值的相邻差值不计入运动。
   final double noiseFloor;

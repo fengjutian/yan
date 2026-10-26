@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:ui' show Rect;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +20,7 @@ class LiveCameraAnalysis {
     required this.sceneConfidence,
     required this.smileDetected,
     required this.gestureDetected,
+    this.faces = const [],
     this.barcodeValue,
     this.barcodeType,
   });
@@ -30,6 +32,9 @@ class LiveCameraAnalysis {
   final double sceneConfidence;
   final bool smileDetected;
   final bool gestureDetected;
+
+  /// 人脸框已归一化并镜像，可直接用于构图判断。
+  final List<Rect> faces;
   final String? barcodeValue;
   final String? barcodeType;
 }
@@ -64,6 +69,7 @@ class LiveCameraAnalyzer {
   String _scene = '识别场景中';
   double _sceneConfidence = 0;
   Map<String, Offset> _smoothed = const {};
+  List<Rect> _faces = const [];
   bool _smileDetected = false;
   String? _barcodeValue;
   String? _barcodeType;
@@ -94,6 +100,7 @@ class LiveCameraAnalyzer {
         _smileDetected = faces.any(
           (face) => (face.smilingProbability ?? 0) >= .75,
         );
+        _faces = _normalizeFaces(faces, image, camera, rotation);
       }
       if (scanBarcodes && _frameNumber % 2 == 0) {
         final barcodes = await _barcodeScanner.processImage(input);
@@ -120,6 +127,7 @@ class LiveCameraAnalyzer {
         sceneConfidence: _sceneConfidence,
         smileDetected: _smileDetected,
         gestureDetected: _hasRaisedHand(_smoothed),
+        faces: _faces,
         barcodeValue: _barcodeValue,
         barcodeType: _barcodeType,
       );
@@ -213,6 +221,36 @@ class LiveCameraAnalyzer {
       final old = previous[key];
       return MapEntry(key, old == null ? point : Offset.lerp(old, point, .35)!);
     });
+  }
+
+  List<Rect> _normalizeFaces(
+    List<Face> faces,
+    CameraImage image,
+    CameraDescription camera,
+    InputImageRotation rotation,
+  ) {
+    final rotated =
+        rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
+    final width = rotated ? image.height.toDouble() : image.width.toDouble();
+    final height = rotated ? image.width.toDouble() : image.height.toDouble();
+    final result = <Rect>[];
+    for (final face in faces) {
+      final box = face.boundingBox;
+      var left = (box.left / width).clamp(0.0, 1.0);
+      var right = (box.right / width).clamp(0.0, 1.0);
+      final top = (box.top / height).clamp(0.0, 1.0);
+      final bottom = (box.bottom / height).clamp(0.0, 1.0);
+      if (camera.lensDirection == CameraLensDirection.front) {
+        final mirroredLeft = 1 - right;
+        right = 1 - left;
+        left = mirroredLeft;
+      }
+      if (right > left && bottom > top) {
+        result.add(Rect.fromLTRB(left, top, right, bottom));
+      }
+    }
+    return result;
   }
 
   String _poseSuggestion(Map<String, Offset> points) {
