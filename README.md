@@ -66,4 +66,5 @@ docker compose -f deploy/compose.yaml up -d mysql redis minio minio-init
 - [技术设计与开发计划](docs/technical-design-and-development-plan.md)
 - [本地 App 优先开发序列](docs/local-app-development-sequence.md)
 - [相机模块增强开发文档](docs/camera-module-development-plan.md)
+- [灵感与工作室模块优化](docs/inspiration-studio-optimization.md)
 - [OpenAPI 接口定义](docs/api.openapi.yaml)

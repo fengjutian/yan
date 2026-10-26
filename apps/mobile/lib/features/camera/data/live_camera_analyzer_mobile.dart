@@ -55,19 +55,19 @@ class LiveCameraAnalyzer {
           enableClassification: true,
           minFaceSize: .15,
         ),
-      ),
-      _barcodeScanner = BarcodeScanner();
+      );
 
   final PoseDetector _poseDetector;
   final ImageLabeler _labeler;
   final FaceDetector _faceDetector;
-  final BarcodeScanner _barcodeScanner;
+  BarcodeScanner? _barcodeScanner;
   bool _processing = false;
   bool _closed = false;
   bool _poseAvailable = true;
   bool _labelAvailable = true;
   bool _faceAvailable = true;
   bool _barcodeAvailable = true;
+  bool _sceneDetectionActive = true;
   int _frameNumber = 0;
   String _scene = '识别场景中';
   double _sceneConfidence = 0;
@@ -82,6 +82,9 @@ class LiveCameraAnalyzer {
     CameraDescription camera,
     DeviceOrientation deviceOrientation, {
     bool scanBarcodes = false,
+    bool detectPose = true,
+    bool detectFace = true,
+    bool detectScene = true,
   }) async {
     if (_processing || _closed || image.planes.length != 1) return null;
     final rotation = _inputRotation(camera, deviceOrientation);
@@ -93,7 +96,7 @@ class LiveCameraAnalyzer {
       // 每个分析器独立降级：某一项失败只关闭对应能力，姿态、场景、
       // 人像和扫码之间互不阻塞，也不会让整次分析返回空。
       final poses = <Pose>[];
-      if (_poseAvailable) {
+      if (detectPose && _poseAvailable) {
         try {
           poses.addAll(await _poseDetector.processImage(input));
         } catch (_) {
@@ -101,8 +104,14 @@ class LiveCameraAnalyzer {
         }
       }
       final frameNumber = _frameNumber++;
-      // 图像标签比姿态检测更重，每 5 次姿态推理运行一次。
-      if (_labelAvailable && frameNumber % 5 == 0) {
+      // 图像标签比姿态检测更重：引导关闭时完全不运行，开启后约 2～4 秒一次。
+      // 从关闭切回开启时强制补一次，避免场景 chip 长时间显示旧结果。
+      final labelDue =
+          detectScene &&
+          _labelAvailable &&
+          (!_sceneDetectionActive || frameNumber % 10 == 0);
+      _sceneDetectionActive = detectScene;
+      if (labelDue) {
         try {
           final labels = await _labeler.processImage(input);
           final scene = _classifyScene(labels);
@@ -112,7 +121,7 @@ class LiveCameraAnalyzer {
           _labelAvailable = false;
         }
       }
-      if (_faceAvailable && frameNumber % 3 == 0) {
+      if (detectFace && _faceAvailable && frameNumber % 3 == 0) {
         try {
           final faces = await _faceDetector.processImage(input);
           _smileDetected = faces.any(
@@ -128,7 +137,10 @@ class LiveCameraAnalyzer {
       if (scanBarcodes && frameNumber % 2 == 0) {
         if (_barcodeAvailable) {
           try {
-            final barcodes = await _barcodeScanner.processImage(input);
+            // 扫码是低频能力，首次进入扫码模式时才创建检测器，避免
+            // 普通拍摄会话也承担模型加载和内存占用。
+            final barcodeScanner = _barcodeScanner ??= BarcodeScanner();
+            final barcodes = await barcodeScanner.processImage(input);
             if (barcodes.isEmpty) {
               _barcodeValue = null;
               _barcodeType = null;
@@ -147,24 +159,24 @@ class LiveCameraAnalyzer {
         _barcodeValue = null;
         _barcodeType = null;
       }
-      final landmarks = poses.isEmpty
-          ? <String, Offset>{}
-          : _normalize(poses.first, image, camera, rotation);
-      if (_poseAvailable) {
-        _smoothed = _smooth(_smoothed, landmarks);
-      } else {
-        _smoothed = const {};
+      final landmarks = detectPose && poses.isNotEmpty
+          ? _normalize(poses.first, image, camera, rotation)
+          : <String, Offset>{};
+      if (detectPose) {
+        _smoothed = _poseAvailable ? _smooth(_smoothed, landmarks) : const {};
       }
       return LiveCameraAnalysis(
-        landmarks: _smoothed,
-        suggestion: _poseAvailable
+        landmarks: detectPose ? _smoothed : const {},
+        suggestion: !detectPose
+            ? '实时姿态指导已关闭'
+            : _poseAvailable
             ? _poseSuggestion(_smoothed)
             : '实时姿态分析暂不可用，仍可正常拍摄',
         scene: _scene,
         sceneConfidence: _sceneConfidence,
-        smileDetected: _smileDetected,
-        gestureDetected: _hasRaisedHand(_smoothed),
-        faces: _faces,
+        smileDetected: detectFace && _smileDetected,
+        gestureDetected: detectPose && _hasRaisedHand(_smoothed),
+        faces: detectFace ? _faces : const [],
         barcodeValue: _barcodeValue,
         barcodeType: _barcodeType,
       );
@@ -347,11 +359,13 @@ class LiveCameraAnalyzer {
   Future<void> close() async {
     if (_closed) return;
     _closed = true;
+    final barcodeScanner = _barcodeScanner;
+    _barcodeScanner = null;
     await Future.wait([
       _poseDetector.close(),
       _labeler.close(),
       _faceDetector.close(),
-      _barcodeScanner.close(),
+      if (barcodeScanner != null) barcodeScanner.close(),
     ]);
   }
 }

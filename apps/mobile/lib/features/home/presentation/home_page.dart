@@ -1,5 +1,10 @@
 import 'package:ai_image_studio/app/theme.dart';
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
+import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/history/presentation/creation_display.dart';
+import 'package:ai_image_studio/features/history/presentation/recent_creations_controller.dart';
+import 'package:ai_image_studio/features/styles/presentation/styles_controller.dart';
 import 'package:ai_image_studio/features/templates/presentation/templates_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,23 +52,27 @@ class _HomePageState extends ConsumerState<HomePage> {
                 _CreditsPill(credits: user?.creditsBalance ?? 0),
               ],
             ),
-            const SizedBox(height: 36),
+            const SizedBox(height: 32),
             Text(
               name == null || name.isEmpty ? '今天，想创造什么？' : '嗨，$name\n今天想创造什么？',
               style: Theme.of(context).textTheme.headlineLarge,
             ),
             const SizedBox(height: 10),
             Text('把灵感变成独一无二的画面。', style: Theme.of(context).textTheme.bodyLarge),
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
+            _SearchEntry(onTap: () => context.push('/templates?focus=search')),
+            const SizedBox(height: 24),
             _HeroCreateCard(onTap: () => context.go('/camera')),
-            const SizedBox(height: 28),
+            const SizedBox(height: 26),
+            const _RecentCreationsSection(),
+            const _PopularStylesSection(),
             Row(
               children: [
                 Text('更多灵感', style: Theme.of(context).textTheme.titleLarge),
                 const Spacer(),
                 TextButton(
                   onPressed: () => context.push('/templates'),
-                  child: const Text('找到你的创作方式 →'),
+                  child: const Text('查看全部 →'),
                 ),
               ],
             ),
@@ -338,29 +347,352 @@ class _InspirationCard extends StatelessWidget {
   );
 }
 
-class _DailyTip extends StatelessWidget {
-  const _DailyTip();
+class _SearchEntry extends StatelessWidget {
+  const _SearchEntry({required this.onTap});
+  final VoidCallback onTap;
+
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white70,
-      borderRadius: BorderRadius.circular(20),
-      border: Border.all(color: AppColors.line),
-    ),
-    child: const Row(
-      children: [
-        Icon(Icons.lightbulb_outline_rounded, color: AppColors.rose, size: 21),
-        SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            '今日灵感：试试加入「柔和光影」和「胶片质感」',
-            style: TextStyle(fontSize: 13, color: AppColors.muted, height: 1.4),
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Material(
+      color: scheme.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outlineVariant),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_rounded,
+                size: 21,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '搜场景、风格或模板',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.blush,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Text(
+                  '搜索',
+                  style: TextStyle(
+                    color: AppColors.rose,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
-      ],
-    ),
-  );
+      ),
+    );
+  }
+}
+
+/// 最近创作:只在本机有作品时出现,避免新用户首页首屏过空或过长。
+class _RecentCreationsSection extends ConsumerWidget {
+  const _RecentCreationsSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final recent = ref.watch(recentCreationsProvider);
+    return recent.maybeWhen(
+      data: (tasks) {
+        if (tasks.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('最近创作', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () => context.push('/history'),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text('全部作品 →'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 142,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: tasks.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) =>
+                      _RecentCreationCard(task: tasks[index]),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _RecentCreationCard extends StatelessWidget {
+  const _RecentCreationCard({required this.task});
+  final ImageTask task;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final image = task.images.isEmpty ? null : task.images.first;
+    return SizedBox(
+      width: 108,
+      child: InkWell(
+        onTap: () => context.push('/task/${task.id}'),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 104,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: scheme.surfaceContainerHighest,
+                border: Border.all(color: scheme.outlineVariant),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: image == null
+                  ? const Center(
+                      child: Icon(Icons.image_not_supported_outlined),
+                    )
+                  : CreationImage(image: image, preferThumbnail: true),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              creationTypeLabel(task.type),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+            Text(
+              creationTimeLabel(task.createdAt),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 10, color: scheme.onSurfaceVariant),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 热门风格:点一下直接带着风格进入迁移页,再由迁移页选照片。
+class _PopularStylesSection extends ConsumerWidget {
+  const _PopularStylesSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final styles = ref.watch(stylesProvider);
+    return styles.maybeWhen(
+      data: (items) {
+        if (items.isEmpty) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text('热门风格', style: Theme.of(context).textTheme.titleLarge),
+                  const Spacer(),
+                  const Text(
+                    '点一下直接试',
+                    style: TextStyle(color: AppColors.muted, fontSize: 12),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 112,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: items.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final style = items[index];
+                    return _StyleCard(
+                      index: index,
+                      name: style.name,
+                      description: style.description,
+                      onTap: () => context.push(
+                        '/style-transfer?style=${Uri.encodeQueryComponent(style.id)}',
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+      orElse: () => const SizedBox.shrink(),
+    );
+  }
+}
+
+class _StyleCard extends StatelessWidget {
+  const _StyleCard({
+    required this.index,
+    required this.name,
+    required this.description,
+    required this.onTap,
+  });
+
+  final int index;
+  final String name;
+  final String description;
+  final VoidCallback onTap;
+
+  static const _gradients = <List<Color>>[
+    [Color(0xFFDCE9E2), Color(0xFFA8C7BA)],
+    [Color(0xFFF3E0CE), Color(0xFFD8B08C)],
+    [Color(0xFFD9DEEA), Color(0xFFA7B6CE)],
+    [Color(0xFFEADFE6), Color(0xFFC9AFC0)],
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _gradients[index % _gradients.length];
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        width: 172,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: colors,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome,
+                  size: 17,
+                  color: Color(0xAA292725),
+                ),
+                const Spacer(),
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .55),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.arrow_forward_rounded,
+                    size: 14,
+                    color: AppColors.ink,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppColors.ink,
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Color(0xCC292725),
+                fontSize: 11,
+                height: 1.3,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DailyTip extends ConsumerWidget {
+  const _DailyTip();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final featured = ref.watch(featuredTemplatesProvider).valueOrNull;
+    String tip = '试试加入「柔和光影」和「胶片质感」';
+    if (featured != null && featured.isNotEmpty) {
+      final day = DateTime.now().difference(DateTime(2024)).inDays;
+      tip = featured[day % featured.length].standingTip;
+    }
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white70,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.line),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.lightbulb_outline_rounded,
+            color: AppColors.rose,
+            size: 21,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '今日灵感：$tip',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.muted,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 /// HomePage 内嵌的"精选模板"横滑条(用 featured 仓储,空时占位)。

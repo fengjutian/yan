@@ -33,6 +33,9 @@ class LiveCameraAnalyzer {
     CameraDescription camera,
     DeviceOrientation deviceOrientation, {
     bool scanBarcodes = false,
+    bool detectPose = true,
+    bool detectFace = true,
+    bool detectScene = true,
   }) async => null;
 
   Future<void> close() async {}

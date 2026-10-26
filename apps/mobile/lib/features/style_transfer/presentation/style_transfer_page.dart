@@ -9,13 +9,15 @@ import 'package:ai_image_studio/features/styles/presentation/styles_controller.d
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// 风格迁移页:选风格 + 强度滑杆 + 保护开关 + 前后对比滑动。
+/// 风格迁移页:选照片 + 选风格 + 强度滑杆 + 保护开关 + 前后对比滑动。
 class StyleTransferPage extends ConsumerStatefulWidget {
-  const StyleTransferPage({this.sourceBytes, super.key});
+  const StyleTransferPage({this.sourceBytes, this.initialStyleId, super.key});
   final Uint8List? sourceBytes;
+  final String? initialStyleId;
 
   @override
   ConsumerState<StyleTransferPage> createState() => _StyleTransferPageState();
@@ -24,11 +26,57 @@ class StyleTransferPage extends ConsumerStatefulWidget {
 class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
   double _sliderPosition = 0.5; // 前后对比滑动条
   bool _retryingStyles = false;
+  Uint8List? _sourceBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _sourceBytes = widget.sourceBytes;
+    final styleId = widget.initialStyleId;
+    if (styleId != null && styleId.isNotEmpty) {
+      Future<void>.microtask(() {
+        if (!mounted) return;
+        ref.read(styleTransferControllerProvider.notifier).setStyle(styleId);
+      });
+    }
+  }
+
+  Future<void> _pickSource() async {
+    if (ref.read(styleTransferControllerProvider).submitting) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('正在生成成片，请稍候')));
+      return;
+    }
+    try {
+      final file = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 4096,
+        maxHeight: 4096,
+        imageQuality: 92,
+      );
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (!mounted) return;
+      ref.read(styleTransferControllerProvider.notifier).clearResult();
+      setState(() {
+        _sourceBytes = bytes;
+        _sliderPosition = .5;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('无法读取照片：$error')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final stylesAsync = ref.watch(stylesProvider);
     final state = ref.watch(styleTransferControllerProvider);
+    final sourceBytes =
+        _sourceBytes ?? ref.watch(cameraSessionProvider).selected?.bytes;
 
     ref.listen<String?>(
       styleTransferControllerProvider.select((value) => value.errorMessage),
@@ -51,6 +99,11 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
           IconButton(
+            tooltip: sourceBytes == null ? '选择照片' : '更换照片',
+            icon: const Icon(Icons.photo_library_outlined),
+            onPressed: state.submitting ? null : _pickSource,
+          ),
+          IconButton(
             tooltip: '分享成片',
             icon: const Icon(Icons.share_outlined),
             onPressed: _shareResult,
@@ -66,10 +119,11 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _BeforeAfterSlider(
-                    sourceBytes: widget.sourceBytes,
+                    sourceBytes: sourceBytes,
                     resultBytes: state.resultBytes,
                     position: _sliderPosition,
                     onChanged: (v) => setState(() => _sliderPosition = v),
+                    onPickSource: _pickSource,
                   ),
                   const SizedBox(height: 12),
                   const _StrengthLegend(),
@@ -262,11 +316,11 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
 
   Future<void> _submit(BuildContext context) async {
     final bytes =
-        widget.sourceBytes ?? ref.read(cameraSessionProvider).selected?.bytes;
+        _sourceBytes ?? ref.read(cameraSessionProvider).selected?.bytes;
     if (bytes == null) {
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text('没有可用的源图,请先在相机或工作室准备一张')));
+      ).showSnackBar(const SnackBar(content: Text('请先选择一张照片')));
       return;
     }
     final taskId = await ref
@@ -337,11 +391,13 @@ class _BeforeAfterSlider extends StatelessWidget {
     required this.resultBytes,
     required this.position,
     required this.onChanged,
+    required this.onPickSource,
   });
   final Uint8List? sourceBytes;
   final Uint8List? resultBytes;
   final double position;
   final ValueChanged<double> onChanged;
+  final VoidCallback onPickSource;
 
   @override
   Widget build(BuildContext context) {
@@ -350,110 +406,161 @@ class _BeforeAfterSlider extends StatelessWidget {
         final w = constraints.maxWidth;
         final h = (w * 4 / 3).clamp(0.0, 320.0);
         if (resultBytes == null) {
-          return SizedBox(
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: SizedBox(
+              height: h,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: Colors.black12,
+                    child: sourceBytes == null
+                        ? null
+                        : Image.memory(sourceBytes!, fit: BoxFit.cover),
+                  ),
+                  if (sourceBytes == null)
+                    ColoredBox(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 42,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 10),
+                            const Text('先选一张照片'),
+                            const SizedBox(height: 4),
+                            Text(
+                              '支持 JPEG、PNG、WebP',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: onPickSource,
+                              icon: const Icon(
+                                Icons.photo_library_outlined,
+                                size: 18,
+                              ),
+                              label: const Text('从相册选择'),
+                              style: FilledButton.styleFrom(
+                                minimumSize: const Size(0, 44),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    Align(
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        margin: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black54,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          '提交后在这里显示成片对比',
+                          style: TextStyle(color: Colors.white, fontSize: 13),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: SizedBox(
             height: h,
             child: Stack(
-              fit: StackFit.expand,
               children: [
-                Container(
-                  color: Colors.black12,
-                  child: sourceBytes == null
-                      ? const Center(child: Text('请从相机/工作室带入原图'))
-                      : Image.memory(sourceBytes!, fit: BoxFit.cover),
+                // 原图(占满)
+                Positioned.fill(
+                  child: Container(
+                    color: Colors.black12,
+                    child: sourceBytes == null
+                        ? const Center(child: Text('请从相机/工作室带入原图'))
+                        : Image.memory(sourceBytes!, fit: BoxFit.cover),
+                  ),
                 ),
-                Center(
-                  child: DecoratedBox(
+                // 真实成片
+                Positioned(
+                  left: position * w,
+                  top: 0,
+                  bottom: 0,
+                  width: w - position * w,
+                  child: ClipRect(
+                    child: Image.memory(resultBytes!, fit: BoxFit.cover),
+                  ),
+                ),
+                // 分割线
+                Positioned(
+                  left: position * w - 1,
+                  top: 0,
+                  bottom: 0,
+                  child: Container(width: 2, color: Colors.white),
+                ),
+                // 把手
+                Positioned(
+                  left: position * w - 18,
+                  top: h / 2 - 18,
+                  child: Container(
+                    width: 36,
+                    height: 36,
                     decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(12),
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x22000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
                     ),
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 8,
-                      ),
-                      child: Text(
-                        '提交后在这里显示成片对比',
-                        style: TextStyle(color: Colors.white, fontSize: 13),
-                      ),
+                    child: const Icon(
+                      Icons.compare_arrows,
+                      color: Colors.black87,
+                      size: 22,
                     ),
+                  ),
+                ),
+                // 滑动热区
+                Positioned.fill(
+                  child: SliderTheme(
+                    data: SliderThemeData(
+                      trackHeight: 0,
+                      thumbShape: const RoundSliderThumbShape(
+                        enabledThumbRadius: 0,
+                      ),
+                      overlayShape: SliderComponentShape.noOverlay,
+                      activeTrackColor: Colors.transparent,
+                      inactiveTrackColor: Colors.transparent,
+                    ),
+                    child: Slider(value: position, onChanged: onChanged),
                   ),
                 ),
               ],
             ),
-          );
-        }
-        return SizedBox(
-          height: h,
-          child: Stack(
-            children: [
-              // 原图(占满)
-              Positioned.fill(
-                child: Container(
-                  color: Colors.black12,
-                  child: sourceBytes == null
-                      ? const Center(child: Text('请从相机/工作室带入原图'))
-                      : Image.memory(sourceBytes!, fit: BoxFit.cover),
-                ),
-              ),
-              // 真实成片
-              Positioned(
-                left: position * w,
-                top: 0,
-                bottom: 0,
-                width: w - position * w,
-                child: ClipRect(
-                  child: Image.memory(resultBytes!, fit: BoxFit.cover),
-                ),
-              ),
-              // 分割线
-              Positioned(
-                left: position * w - 1,
-                top: 0,
-                bottom: 0,
-                child: Container(width: 2, color: Colors.white),
-              ),
-              // 把手
-              Positioned(
-                left: position * w - 18,
-                top: h / 2 - 18,
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x22000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.compare_arrows,
-                    color: Colors.black87,
-                    size: 22,
-                  ),
-                ),
-              ),
-              // 滑动热区
-              Positioned.fill(
-                child: SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 0,
-                    thumbShape: const RoundSliderThumbShape(
-                      enabledThumbRadius: 0,
-                    ),
-                    overlayShape: SliderComponentShape.noOverlay,
-                    activeTrackColor: Colors.transparent,
-                    inactiveTrackColor: Colors.transparent,
-                  ),
-                  child: Slider(value: position, onChanged: onChanged),
-                ),
-              ),
-            ],
           ),
         );
       },

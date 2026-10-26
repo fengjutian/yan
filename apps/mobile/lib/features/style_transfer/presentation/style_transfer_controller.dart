@@ -45,6 +45,7 @@ class StyleTransferState {
     String? errorMessage,
     bool clearError = false,
     bool clearTask = false,
+    bool clearResult = false,
   }) => StyleTransferState(
     styleId: styleId ?? this.styleId,
     strength: strength ?? this.strength,
@@ -53,7 +54,7 @@ class StyleTransferState {
     protectBackground: protectBackground ?? this.protectBackground,
     submitting: submitting ?? this.submitting,
     taskId: clearTask ? null : (taskId ?? this.taskId),
-    resultBytes: resultBytes ?? this.resultBytes,
+    resultBytes: clearResult ? null : (resultBytes ?? this.resultBytes),
     errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
   );
 }
@@ -76,6 +77,13 @@ class StyleTransferController extends StateNotifier<StyleTransferState> {
       state = state.copyWith(protectSkin: v, clearError: true);
   void setProtectBackground(bool v) =>
       state = state.copyWith(protectBackground: v, clearError: true);
+
+  /// 换了一张源图后,旧成片不能再和新原图拼在一起对比。
+  void clearResult() => state = state.copyWith(
+    clearResult: true,
+    clearTask: true,
+    clearError: true,
+  );
 
   /// 上传源图并提交风格迁移任务。
   Future<String?> submit({

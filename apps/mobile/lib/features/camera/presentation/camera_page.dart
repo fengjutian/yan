@@ -102,6 +102,9 @@ class _CameraPageState extends ConsumerState<CameraPage>
   FlashMode _flashMode = FlashMode.off;
   bool _showGuide = true;
   bool _initializing = true;
+  bool _pausedByLifecycle = false;
+  bool _releasedForLifecycle = false;
+  Future<void> _lifecycleQueue = Future.value();
   bool _capturing = false;
   String? _error;
   int _countdownSeconds = 0;
@@ -118,6 +121,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   double _maxExposure = 0;
   double _levelAngle = 0;
   double _motionLevel = 0;
+  bool _lastStabilityStable = false;
+  double _lastStabilityScore = 0;
   double _brightness = 128;
   List<double> _histogram = List<double>.filled(32, 0);
   List<double> _redHistogram = List<double>.filled(32, 0);
@@ -149,13 +154,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
   final StabilityAnalyzer _stabilityAnalyzer = StabilityAnalyzer();
   StreamSubscription<AccelerometerEvent>? _motionSubscription;
   DateTime _lastFrameAt = DateTime.fromMillisecondsSinceEpoch(0);
+  Timer? _streamWatchdog;
+  bool _streamRestarting = false;
   int _analysisIntervalMs = 260;
   bool _slowAnalysis = false;
   int _zebraFrame = 0;
   final LiveCameraAnalyzer _liveAnalyzer = LiveCameraAnalyzer();
   final PortraitCompositionAnalyzer _portraitGuide =
       const PortraitCompositionAnalyzer();
-  LiveCameraAnalysis? _liveAnalysis;
+  final ValueNotifier<LiveCameraAnalysis?> _liveAnalysisNotifier =
+      ValueNotifier<LiveCameraAnalysis?>(null);
   PortraitCompositionHint? _portraitHint;
   DateTime _portraitHintUntil = DateTime.fromMillisecondsSinceEpoch(0);
   DateTime _lastPortraitHintAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -253,16 +261,31 @@ class _CameraPageState extends ConsumerState<CameraPage>
               event.y,
               event.z,
             );
-            if (mounted) {
-              setState(() {
-                _levelAngle = angle.clamp(-45, 45);
-                _motionLevel = snapshot.motion;
-              });
-            }
+            if (!mounted) return;
+            final level = angle.clamp(-45.0, 45.0).toDouble();
+            final motion = snapshot.motion;
+            final score = snapshot.score;
+            // 静止取景时传感器仍以 8 Hz 上报，逐帧重建整页没有意义。
+            // 只有可见状态变化时才刷新，水平仪抖动和稳定度提示不受影响。
+            final changed =
+                (level - _levelAngle).abs() >= .3 ||
+                (motion - _motionLevel).abs() >= .01 ||
+                snapshot.stable != _lastStabilityStable ||
+                (score >= 65) != (_lastStabilityScore >= 65) ||
+                (score - _lastStabilityScore).abs() >= 2;
+            if (!changed) return;
+            _lastStabilityStable = snapshot.stable;
+            _lastStabilityScore = score;
+            setState(() {
+              _levelAngle = level;
+              _motionLevel = motion;
+            });
           },
           onError: (_) {
             // 没有加速度计时隐藏稳定度提示，评分自动退化为不含稳定分。
             _stabilityAnalyzer.reset();
+            _lastStabilityStable = false;
+            _lastStabilityScore = 0;
             if (mounted) setState(() => _motionLevel = 0);
           },
         );
@@ -478,7 +501,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Future<void> _initializeCamera(int index) async {
+    // 已经进入后台时不要再打开相机，等 resumed 再初始化。
+    if (_releasedForLifecycle) return;
     final token = ++_initializationToken;
+    _stopStreamWatchdog();
     final previous = _controller;
     final startedAt = DateTime.now();
     _initStartedAt = startedAt;
@@ -575,6 +601,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   Future<void> _startLightMonitoring(CameraController controller) async {
     try {
+      _lastFrameAt = DateTime.now();
       await controller.startImageStream((image) {
         final now = DateTime.now();
         if (now.difference(_lastFrameAt).inMilliseconds < _analysisIntervalMs ||
@@ -600,26 +627,42 @@ class _CameraPageState extends ConsumerState<CameraPage>
             controller.description,
             controller.value.deviceOrientation,
           );
-          setState(() {
-            _brightness = histogram.brightness;
-            _highlightClipping = histogram.highlightClipping;
-            _shadowClipping = histogram.shadowClipping;
-            _histogram = histogram.luminance;
-            _redHistogram = histogram.red;
-            _greenHistogram = histogram.green;
-            _blueHistogram = histogram.blue;
-            _clarityScore = detail.clarity;
-            _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
-            if (collectZebra) _zebraPoints = histogram.zebra;
-            final normallyLit = _brightness >= 60 && _brightness <= 215;
-            if (_lensCleaningHints && normallyLit && detail.clarity < 6) {
-              _softFrameCount = _softFrameCount >= 12
-                  ? 12
-                  : _softFrameCount + 1;
-            } else {
-              _softFrameCount = _softFrameCount <= 2 ? 0 : _softFrameCount - 2;
-            }
-          });
+          final brightness = histogram.brightness;
+          final clarity = detail.clarity;
+          final normallyLit = brightness >= 60 && brightness <= 215;
+          final softFrameCount =
+              _lensCleaningHints && normallyLit && clarity < 6
+              ? (_softFrameCount >= 12 ? 12 : _softFrameCount + 1)
+              : (_softFrameCount <= 2 ? 0 : _softFrameCount - 2);
+          // 这些字段只参与判断，不直接决定本帧布局，先更新再决定是否重建。
+          final brightnessChanged =
+              (brightness - _brightness).abs() >= 2 ||
+              (brightness < 58) != (_brightness < 58);
+          final lensHintToggled =
+              (_softFrameCount >= 8) != (softFrameCount >= 8);
+          _brightness = brightness;
+          _clarityScore = clarity;
+          _softFrameCount = softFrameCount;
+          final showFrameOverlays =
+              _showHistogram || _showZebra || _showFocusPeaking;
+          final showLensHint = _lensCleaningHints && softFrameCount >= 8;
+          // 没有可见叠加层时不为直方图/清晰度重建整页，只有亮度或
+          // 镜头清洁提示跨过阈值才刷新提示条。
+          if (showFrameOverlays ||
+              showLensHint ||
+              brightnessChanged ||
+              lensHintToggled) {
+            setState(() {
+              _highlightClipping = histogram.highlightClipping;
+              _shadowClipping = histogram.shadowClipping;
+              _histogram = histogram.luminance;
+              _redHistogram = histogram.red;
+              _greenHistogram = histogram.green;
+              _blueHistogram = histogram.blue;
+              _focusPeaks = _showFocusPeaking ? detail.peaks : const [];
+              if (collectZebra) _zebraPoints = histogram.zebra;
+            });
+          }
         }
         stopwatch.stop();
         _analysisIntervalMs = _nextAnalysisInterval(
@@ -638,19 +681,21 @@ class _CameraPageState extends ConsumerState<CameraPage>
         }
       });
       _analysisUnavailable = false;
+      if (mounted) _startStreamWatchdog(controller);
     } catch (_) {
       // 部分 Android 设备无法同时绑定预览、拍照和图像分析三个
       // CameraX use case。实时分析属于增强能力，绑定失败时保留
       // 已经可用的预览与拍照，不让整个相机页面进入错误状态。
+      _stopStreamWatchdog();
       _analysisUnavailable = true;
       _analysisIntervalMs = 260;
       _slowAnalysis = false;
       _zebraFrame = 0;
       if (mounted) {
+        _liveAnalysisNotifier.value = null;
         setState(() {
           _showRealtimeGuidance = false;
           _showHistogram = false;
-          _liveAnalysis = null;
           _histogram = const [];
           _redHistogram = const [];
           _greenHistogram = const [];
@@ -659,6 +704,47 @@ class _CameraPageState extends ConsumerState<CameraPage>
           _zebraPoints = const [];
         });
       }
+    }
+  }
+
+  void _startStreamWatchdog(CameraController controller) {
+    _stopStreamWatchdog();
+    _streamWatchdog = Timer.periodic(const Duration(seconds: 5), (_) {
+      unawaited(_checkStreamHealth(controller));
+    });
+  }
+
+  void _stopStreamWatchdog() {
+    _streamWatchdog?.cancel();
+    _streamWatchdog = null;
+  }
+
+  /// 部分设备在切后台、来电或相机 HAL 重置后会静默停止图像流，
+  /// 此时 UI 仍显示已初始化。连续 4 秒没有新帧时自动重启一次分析流。
+  Future<void> _checkStreamHealth(CameraController controller) async {
+    if (!mounted ||
+        _reviewing ||
+        _pausedByLifecycle ||
+        _releasedForLifecycle ||
+        _capturing ||
+        _initializing ||
+        _analysisUnavailable ||
+        _streamRestarting) {
+      return;
+    }
+    if (DateTime.now().difference(_lastFrameAt) < const Duration(seconds: 4)) {
+      return;
+    }
+    _streamRestarting = true;
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+      await _startLightMonitoring(controller);
+    } catch (_) {
+      _stopStreamWatchdog();
+    } finally {
+      _streamRestarting = false;
     }
   }
 
@@ -873,45 +959,66 @@ class _CameraPageState extends ConsumerState<CameraPage>
     CameraDescription camera,
     DeviceOrientation deviceOrientation,
   ) async {
+    // 扫码时只跑条码模型；姿态/人脸只在实时引导或对应智能快门开启时运行。
+    final guidance = _showRealtimeGuidance && !_scanMode;
+    final smartShutter = _smartShutterMode;
     final result = await _liveAnalyzer.process(
       image,
       camera,
       deviceOrientation,
       scanBarcodes: _scanMode,
+      detectPose: guidance || smartShutter == SmartShutterMode.gesture,
+      detectFace: guidance || smartShutter == SmartShutterMode.smile,
+      detectScene: guidance,
     );
     if (!mounted || result == null) return;
+    // 姿态和场景每帧都在变，交给局部 builder 刷新，不再重建整页。
+    _liveAnalysisNotifier.value = result;
     final goodPose = result.suggestion.startsWith('姿态很好');
     final now = DateTime.now();
-    if (_showRealtimeGuidance && goodPose) {
+    if (guidance && goodPose) {
       _goodPoseSince ??= now;
     } else {
       _goodPoseSince = null;
     }
-    setState(() {
-      _liveAnalysis = result;
-      if (_showRealtimeGuidance) {
-        _compositionSuggestion = result.suggestion;
-        _updatePortraitHint(result, now);
-        final portraitHint = _activePortraitHint;
-        if (portraitHint != null) {
-          _compositionSuggestion = portraitHint.message;
-        }
-        _guidanceOpacity =
-            portraitHint != null ||
-                !(goodPose &&
-                    now.difference(_goodPoseSince!).inMilliseconds > 1800)
-            ? 1
-            : 0;
+    final previousSuggestion = _compositionSuggestion;
+    final previousHint = _portraitHint;
+    final previousOpacity = _guidanceOpacity;
+    var needsBuild = false;
+    if (guidance) {
+      _compositionSuggestion = result.suggestion;
+      _updatePortraitHint(result, now);
+      final portraitHint = _activePortraitHint;
+      if (portraitHint != null) {
+        _compositionSuggestion = portraitHint.message;
       }
-      if (_scanMode && result.barcodeValue != null) {
+      _guidanceOpacity =
+          portraitHint != null ||
+              !(goodPose &&
+                  now.difference(_goodPoseSince!).inMilliseconds > 1800)
+          ? 1
+          : 0;
+      // 文字、淡出状态和构图提示没有变化时，只刷新姿态叠加层。
+      needsBuild =
+          _compositionSuggestion != previousSuggestion ||
+          _guidanceOpacity != previousOpacity ||
+          !identical(_portraitHint, previousHint);
+    }
+    if (_scanMode && result.barcodeValue != null) {
+      if (_barcodeValue != result.barcodeValue ||
+          _barcodeType != result.barcodeType) {
         _barcodeValue = result.barcodeValue;
         _barcodeType = result.barcodeType;
-        _lastBarcodeAt = now;
-      } else if (now.difference(_lastBarcodeAt) > const Duration(seconds: 2)) {
-        _barcodeValue = null;
-        _barcodeType = null;
+        needsBuild = true;
       }
-    });
+      _lastBarcodeAt = now;
+    } else if (now.difference(_lastBarcodeAt) > const Duration(seconds: 2) &&
+        (_barcodeValue != null || _barcodeType != null)) {
+      _barcodeValue = null;
+      _barcodeType = null;
+      needsBuild = true;
+    }
+    if (needsBuild && mounted) setState(() {});
     _handleSmartShutter(result);
   }
 
@@ -988,32 +1095,101 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.inactive) {
-      final controller = _controller;
-      if (controller != null && controller.value.isInitialized) {
-        _activeIndex = _cameras.indexOf(controller.description);
-        if (_activeIndex < 0) _activeIndex = 0;
-        controller.dispose();
+    // 生命周期事件可能连续到达，串行处理，避免 stop/resume 互相覆盖。
+    switch (state) {
+      case AppLifecycleState.inactive:
+        _enqueueLifecycle(_pauseForLifecycle);
+        return;
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        _enqueueLifecycle(_releaseForLifecycle);
+        return;
+      case AppLifecycleState.resumed:
+        _enqueueLifecycle(_restoreAfterLifecycle);
+        return;
+      case AppLifecycleState.detached:
+        _stopStreamWatchdog();
+        return;
+    }
+  }
+
+  void _enqueueLifecycle(Future<void> Function() action) {
+    _lifecycleQueue = _lifecycleQueue
+        .then((_) => action())
+        .catchError((Object _) {});
+  }
+
+  /// 短暂失去焦点（通知栏、控制中心、来电浮层）只暂停预览和分析，
+  /// 保留相机会话，恢复时不用重新打开相机。
+  Future<void> _pauseForLifecycle() async {
+    if (!mounted || _pausedByLifecycle || _releasedForLifecycle) return;
+    _pausedByLifecycle = true;
+    _stopStreamWatchdog();
+    if (_capturing || _reviewing) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
       }
-      if (mounted) {
-        // 必须连同 _initializing 一起置位,避免下一次 build 命中 _controller==null
-        // 但 _initializing==false 的不一致窗口。
-        setState(() {
-          _controller = null;
-          _initializing = true;
-          _clearFocusState();
-          _clearPortraitHint();
-        });
-      }
+    } catch (_) {
+      // 相机可能正在切换，恢复时再重新启动。
+    }
+    try {
+      await controller.pausePreview();
+    } catch (_) {
+      // 部分平台不支持暂停预览，保留会话即可。
+    }
+  }
+
+  /// 真正进入后台时释放相机硬件，避免后台占用摄像头。
+  Future<void> _releaseForLifecycle() async {
+    if (!mounted || _releasedForLifecycle) return;
+    _releasedForLifecycle = true;
+    _pausedByLifecycle = false;
+    // 让还在初始化中的会话失效，避免它继续操作已经释放的 controller。
+    _initializationToken++;
+    _stopStreamWatchdog();
+    final controller = _controller;
+    _controller = null;
+    if (mounted) {
+      _liveAnalysisNotifier.value = null;
+      // _initializing 与 _controller 必须联动，避免 preview 命中 null。
+      setState(() {
+        _initializing = true;
+        _clearFocusState();
+        _clearPortraitHint();
+      });
+    }
+    await controller?.dispose();
+  }
+
+  Future<void> _restoreAfterLifecycle() async {
+    if (!mounted || _cameras.isEmpty) return;
+    if (_releasedForLifecycle) {
+      _releasedForLifecycle = false;
+      await _initializeCamera(_activeIndex);
       return;
     }
-    if (state == AppLifecycleState.resumed) {
-      if (_cameras.isEmpty) return;
-      // 上面的 inactive 已经把 _controller 置 null,所以这里不能再用
-      // "controller == null" 作为 early-return 条件 —— 那会让 resumed 静默退出,
-      // UI 永久卡在 spinner 上。
-      if (_controller != null && _controller!.value.isInitialized) return;
-      unawaited(_initializeCamera(_activeIndex));
+    // 初始化还在进行时不要重复创建 controller，避免 token 互相取消。
+    if (_initializing) {
+      _pausedByLifecycle = false;
+      return;
+    }
+    if (!_pausedByLifecycle) return;
+    _pausedByLifecycle = false;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      await _initializeCamera(_activeIndex);
+      return;
+    }
+    try {
+      await controller.resumePreview();
+    } catch (_) {
+      // 预览恢复失败时下一帧仍可尝试重启分析流。
+    }
+    if (!_reviewing && !_capturing && !controller.value.isStreamingImages) {
+      await _startLightMonitoring(controller);
     }
   }
 
@@ -1773,7 +1949,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (_showHistogram) '直方图',
       if (_showZebra) '斑马纹',
       if (_showFocusPeaking) '峰值对焦',
-      if (_showRealtimeGuidance) '姿态/人像构图',
+      if (_showRealtimeGuidance && !_scanMode) '姿态/人像构图',
       if (_stability.hasSamples) '稳定度',
       if (_smartShutterMode != SmartShutterMode.off) '智能快门',
     ];
@@ -1996,8 +2172,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
   @override
   void dispose() {
     _initializationToken++;
+    _stopStreamWatchdog();
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
+    _liveAnalysisNotifier.dispose();
     unawaited(_liveAnalyzer.close());
     unawaited(_deactivateHardwareControls());
     final controller = _controller;
@@ -2210,10 +2388,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   void _setRealtimeGuidance(bool enabled) {
     if (enabled == _showRealtimeGuidance) return;
+    if (!enabled) _liveAnalysisNotifier.value = null;
     setState(() {
       _showRealtimeGuidance = enabled;
       if (!enabled) {
-        _liveAnalysis = null;
         _clearPortraitHint();
       }
       _guidanceOpacity = 1;
@@ -2668,14 +2846,23 @@ class _CameraPageState extends ConsumerState<CameraPage>
           fit: StackFit.expand,
           children: [
             _CroppedCameraPreview(controller: controller, style: _style),
-            if (_showRealtimeGuidance &&
-                _liveAnalysis?.landmarks.isNotEmpty == true)
-              IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: _guidanceOpacity,
-                  duration: const Duration(milliseconds: 450),
-                  child: CustomPaint(
-                    painter: _PosePainter(_liveAnalysis!.landmarks),
+            if (_showRealtimeGuidance && !_scanMode)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: ValueListenableBuilder<LiveCameraAnalysis?>(
+                    valueListenable: _liveAnalysisNotifier,
+                    builder: (context, analysis, child) {
+                      if (analysis == null || analysis.landmarks.isEmpty) {
+                        return const SizedBox.shrink();
+                      }
+                      return AnimatedOpacity(
+                        opacity: _guidanceOpacity,
+                        duration: const Duration(milliseconds: 450),
+                        child: CustomPaint(
+                          painter: _PosePainter(analysis.landmarks),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
@@ -2762,13 +2949,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 right: 70,
                 child: _LensCleaningHint(clarity: _clarityScore),
               ),
-            if (_showRealtimeGuidance && _liveAnalysis != null)
+            if (_showRealtimeGuidance && !_scanMode)
               Positioned(
                 top: 40,
                 left: 14,
-                child: _SceneChip(
-                  scene: _liveAnalysis!.scene,
-                  confidence: _liveAnalysis!.sceneConfidence,
+                child: ValueListenableBuilder<LiveCameraAnalysis?>(
+                  valueListenable: _liveAnalysisNotifier,
+                  builder: (context, analysis, child) => analysis == null
+                      ? const SizedBox.shrink()
+                      : _SceneChip(
+                          scene: analysis.scene,
+                          confidence: analysis.sceneConfidence,
+                        ),
                 ),
               ),
             if (_showHistogram)
@@ -2785,18 +2977,26 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   shadowClipping: _shadowClipping,
                 ),
               ),
-            if (_smartShutterMode != SmartShutterMode.off &&
-                ((_smartShutterMode == SmartShutterMode.smile &&
-                        _liveAnalysis?.smileDetected == true) ||
-                    (_smartShutterMode == SmartShutterMode.gesture &&
-                        _liveAnalysis?.gestureDetected == true)))
+            if (_smartShutterMode != SmartShutterMode.off)
               Positioned(
                 left: 14,
                 top: 72,
-                child: _SmartShutterChip(
-                  label: _smartShutterMode == SmartShutterMode.smile
-                      ? '保持微笑'
-                      : '已识别举手',
+                child: ValueListenableBuilder<LiveCameraAnalysis?>(
+                  valueListenable: _liveAnalysisNotifier,
+                  builder: (context, analysis, child) {
+                    final visible = switch (_smartShutterMode) {
+                      SmartShutterMode.smile => analysis?.smileDetected == true,
+                      SmartShutterMode.gesture =>
+                        analysis?.gestureDetected == true,
+                      SmartShutterMode.off => false,
+                    };
+                    if (!visible) return const SizedBox.shrink();
+                    return _SmartShutterChip(
+                      label: _smartShutterMode == SmartShutterMode.smile
+                          ? '保持微笑'
+                          : '已识别举手',
+                    );
+                  },
                 ),
               ),
             if (_scanMode) const Center(child: _ScanFrame()),
@@ -3261,6 +3461,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   /// 进入照片预览前停止图像流，避免预览页继续占用相机分析资源。
   Future<void> _enterReview() async {
     if (_capturing) return;
+    _stopStreamWatchdog();
     final controller = _controller;
     if (controller != null &&
         controller.value.isInitialized &&
@@ -3288,6 +3489,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
     if (!controller.value.isStreamingImages) {
       await _startLightMonitoring(controller);
+    } else {
+      _startStreamWatchdog(controller);
     }
   }
 }

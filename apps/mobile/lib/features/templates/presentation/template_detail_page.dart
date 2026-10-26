@@ -86,6 +86,21 @@ class _Body extends StatelessWidget {
           t.subtitle,
           style: const TextStyle(color: AppColors.muted, fontSize: 14),
         ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Icon(
+              Icons.local_fire_department_rounded,
+              size: 15,
+              color: Colors.deepOrange,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${t.popularity} 人用过',
+              style: const TextStyle(color: AppColors.muted, fontSize: 12),
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -118,12 +133,29 @@ class _Body extends StatelessWidget {
         ),
         const SizedBox(height: 24),
         _SectionTitle('推荐风格'),
+        const Padding(
+          padding: EdgeInsets.only(bottom: 8),
+          child: Text(
+            '点一下风格，带一张照片进入工作室套用。',
+            style: TextStyle(color: AppColors.muted, fontSize: 12),
+          ),
+        ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: [
             for (final s in t.recommendedStyles)
-              _Pill(label: _styleLabel(s), emphasized: true),
+              _Pill(
+                label: _styleLabel(s),
+                emphasized: true,
+                onTap: () {
+                  final styleId = _localStyleId(s);
+                  if (styleId == null) return;
+                  context.push(
+                    '/style-transfer?style=${Uri.encodeQueryComponent(styleId)}',
+                  );
+                },
+              ),
           ],
         ),
         const SizedBox(height: 24),
@@ -196,20 +228,32 @@ class _Body extends StatelessWidget {
             );
           },
         ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.auto_awesome_outlined),
+          label: const Text('用示例灵感创作'),
+          onPressed: () {
+            context.push(
+              '/create/text-to-image',
+              extra: {'prompt': t.examplePrompt},
+            );
+          },
+        ),
       ],
     );
   }
 }
 
 class _Pill extends StatelessWidget {
-  const _Pill({required this.label, this.emphasized = false});
+  const _Pill({required this.label, this.emphasized = false, this.onTap});
 
   final String label;
   final bool emphasized;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final content = Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
       decoration: BoxDecoration(
         color: emphasized ? AppColors.blush : Colors.white,
@@ -220,17 +264,44 @@ class _Pill extends StatelessWidget {
               : AppColors.line,
         ),
       ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: emphasized ? AppColors.rose : AppColors.ink,
-          fontSize: 13,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: emphasized ? AppColors.rose : AppColors.ink,
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          if (onTap != null) ...[
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.arrow_outward_rounded,
+              size: 13,
+              color: AppColors.rose,
+            ),
+          ],
+        ],
       ),
+    );
+    if (onTap == null) return content;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(999),
+      child: content,
     );
   }
 }
+
+String? _localStyleId(String templateStyle) => switch (templateStyle) {
+  'film-soft' || 'film-warm' || 'cafe-warm' => 'local-film',
+  'cinematic-blue' || 'travel-cine' => 'local-cinematic',
+  'cream-portrait' || 'lifestyle' || 'life-soft' => 'local-natural',
+  'food-warm' || 'food-clean' => 'local-clean',
+  _ => null,
+};
 
 String _styleLabel(String id) => switch (id) {
   'film-soft' => '柔和胶片',

@@ -1,4 +1,3 @@
-import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
 import 'package:ai_image_studio/features/templates/data/template_models.dart';
 import 'package:ai_image_studio/features/templates/data/template_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,36 +38,35 @@ final templateByIdProvider = FutureProvider.family
     });
 
 /// 模板收藏:本地持久化。登录后迁移到后端 /me/template-favorites。
+///
+/// SharedPreferences 的读取是异步的,但收藏状态需要同步参与构建。
+/// 因此先以空集合启动,初始化完成后再更新状态,避免页面因 preferences
+/// 尚未就绪而抛错。
 class TemplateFavoritesService {
   TemplateFavoritesService(this._prefs);
-  final SharedPreferences _prefs;
+  final Future<SharedPreferences> _prefs;
   static const _key = 'template_favorites';
 
-  Set<String> read() =>
-      (_prefs.getStringList(_key) ?? const <String>[]).toSet();
+  Future<Set<String>> read() async {
+    final prefs = await _prefs;
+    return (prefs.getStringList(_key) ?? const <String>[]).toSet();
+  }
 
   Future<void> toggle(String id) async {
-    final cur = read();
-    if (cur.contains(id)) {
-      cur.remove(id);
+    final prefs = await _prefs;
+    final current = (prefs.getStringList(_key) ?? const <String>[]).toSet();
+    if (current.contains(id)) {
+      current.remove(id);
     } else {
-      cur.add(id);
+      current.add(id);
     }
-    await _prefs.setStringList(_key, cur.toList());
+    await prefs.setStringList(_key, current.toList());
   }
 }
 
-final templateFavoritesServiceProvider = Provider<TemplateFavoritesService>((
-  ref,
-) {
-  final prefs = ref
-      .watch(sharedPreferencesProvider)
-      .maybeWhen(
-        data: (v) => v,
-        orElse: () => throw StateError('sharedPreferencesProvider 未就绪'),
-      );
-  return TemplateFavoritesService(prefs);
-});
+final templateFavoritesServiceProvider = Provider<TemplateFavoritesService>(
+  (ref) => TemplateFavoritesService(SharedPreferences.getInstance()),
+);
 
 final templateFavoritesProvider =
     StateNotifierProvider<TemplateFavoritesNotifier, Set<String>>((ref) {
@@ -77,12 +75,31 @@ final templateFavoritesProvider =
     });
 
 class TemplateFavoritesNotifier extends StateNotifier<Set<String>> {
-  TemplateFavoritesNotifier(this._svc) : super(_svc.read());
+  TemplateFavoritesNotifier(this._svc) : super(const {}) {
+    _ready = _hydrate();
+  }
+
   final TemplateFavoritesService _svc;
+  late final Future<void> _ready;
+
+  Future<void> _hydrate() async {
+    try {
+      final values = await _svc.read();
+      if (mounted) state = values;
+    } catch (_) {
+      // 读取失败时保持空收藏,不阻塞模板浏览。
+    }
+  }
 
   Future<void> toggle(String id) async {
-    await _svc.toggle(id);
-    state = _svc.read();
+    await _ready;
+    try {
+      await _svc.toggle(id);
+      final values = await _svc.read();
+      if (mounted) state = values;
+    } catch (_) {
+      // 写入失败时不改变当前状态,下次启动仍以磁盘数据为准。
+    }
   }
 
   bool contains(String id) => state.contains(id);

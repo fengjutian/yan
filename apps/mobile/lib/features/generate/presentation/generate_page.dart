@@ -9,7 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 class GeneratePage extends ConsumerStatefulWidget {
-  const GeneratePage({super.key});
+  const GeneratePage({this.initialPrompt, super.key});
+  final String? initialPrompt;
   static const ratios = ['1:1', '16:9', '9:16', '4:3'];
 
   @override
@@ -19,6 +20,19 @@ class GeneratePage extends ConsumerStatefulWidget {
 class _GeneratePageState extends ConsumerState<GeneratePage> {
   final _promptController = TextEditingController();
   String? _previousPrompt;
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialPrompt?.trim();
+    if (initial != null && initial.isNotEmpty) {
+      _promptController.value = TextEditingValue(
+        text: initial,
+        selection: TextSelection.collapsed(offset: initial.length),
+      );
+      ref.read(generateControllerProvider.notifier).setPrompt(initial);
+    }
+  }
 
   @override
   void dispose() {

@@ -95,7 +95,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/create/text-to-image',
-        builder: (_, __) => const GeneratePage(),
+        builder: (context, state) {
+          final extra = state.extra;
+          final prompt = extra is Map<String, dynamic>
+              ? extra['prompt'] as String?
+              : null;
+          return GeneratePage(initialPrompt: prompt);
+        },
       ),
       GoRoute(path: '/history', builder: (_, __) => const HistoryPage()),
       GoRoute(
@@ -119,7 +125,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/privacy', builder: (_, __) => const PrivacyPage()),
       GoRoute(
         path: '/templates',
-        builder: (_, __) => const TemplatesHomePage(),
+        builder: (context, state) => TemplatesHomePage(
+          focusSearch: state.uri.queryParameters['focus'] == 'search',
+        ),
       ),
       GoRoute(
         path: '/templates/:templateId',
@@ -136,10 +144,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/style-transfer',
         builder: (context, state) {
-          final bytes = state.extra;
-          return StyleTransferPage(
-            sourceBytes: bytes is Uint8List ? bytes : null,
-          );
+          final extra = state.extra;
+          Uint8List? bytes;
+          String? styleId = state.uri.queryParameters['style'];
+          if (extra is Uint8List) {
+            bytes = extra;
+          } else if (extra is Map<String, dynamic>) {
+            bytes = extra['bytes'] as Uint8List?;
+            styleId = (extra['styleId'] as String?) ?? styleId;
+          }
+          return StyleTransferPage(sourceBytes: bytes, initialStyleId: styleId);
         },
       ),
     ],
