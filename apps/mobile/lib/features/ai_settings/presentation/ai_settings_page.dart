@@ -30,7 +30,12 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
     final state = ref.watch(aiSettingsControllerProvider);
     if (!state.loading && !_synced) {
       _synced = true;
-      _syncFields(state.settings);
+      final settings = state.settings;
+      // 在 build 期间直接改 TextEditingController 会触发 EditableText 的
+      // setState during build；放到首帧后再同步。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _syncFields(settings);
+      });
     }
 
     final provider = state.settings.provider;

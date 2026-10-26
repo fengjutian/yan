@@ -30,6 +30,8 @@ class ShareWorkshopPage extends ConsumerStatefulWidget {
 }
 
 class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
+  final _titleController = TextEditingController();
+  final _captionController = TextEditingController();
   GeneratedImage? _image;
   String? _imagePrompt;
   bool _busy = false;
@@ -40,6 +42,24 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
   void initState() {
     super.initState();
     _loadFromTask();
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _captionController.dispose();
+    super.dispose();
+  }
+
+  void _syncController(TextEditingController controller, String value) {
+    if (controller.text == value) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || controller.text == value) return;
+      controller.value = TextEditingValue(
+        text: value,
+        selection: TextSelection.collapsed(offset: value.length),
+      );
+    });
   }
 
   Future<void> _loadFromTask() async {
@@ -104,6 +124,14 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     final shareState = ref.watch(shareControllerProvider);
     final controller = ref.read(shareControllerProvider.notifier);
     final config = ref.watch(shareConfigProvider);
+    ref.listen<String>(
+      shareControllerProvider.select((value) => value.title),
+      (_, next) => _syncController(_titleController, next),
+    );
+    ref.listen<String>(
+      shareControllerProvider.select((value) => value.caption),
+      (_, next) => _syncController(_captionController, next),
+    );
 
     return Scaffold(
       appBar: AppBar(
@@ -159,10 +187,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
               ),
             ),
           TextField(
-            controller: TextEditingController(text: shareState.title)
-              ..selection = TextSelection.collapsed(
-                offset: shareState.title.length,
-              ),
+            controller: _titleController,
             decoration: const InputDecoration(
               labelText: '标题',
               border: OutlineInputBorder(),
@@ -172,10 +197,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
           ),
           const SizedBox(height: 8),
           TextField(
-            controller: TextEditingController(text: shareState.caption)
-              ..selection = TextSelection.collapsed(
-                offset: shareState.caption.length,
-              ),
+            controller: _captionController,
             maxLines: 4,
             decoration: const InputDecoration(
               labelText: '正文',
