@@ -21,3 +21,4 @@ apps/mobile/ios/.symlinks/
 
 # Local data
 .data/
+.tool-state/

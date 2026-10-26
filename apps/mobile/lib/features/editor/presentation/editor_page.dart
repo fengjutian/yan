@@ -69,6 +69,16 @@ class _EditorPageState extends ConsumerState<EditorPage> {
       appBar: AppBar(
         title: const Text('图片编辑器'),
         actions: [
+          IconButton(
+            onPressed: controller.canUndo ? controller.undo : null,
+            tooltip: '撤销',
+            icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            onPressed: controller.canRedo ? controller.redo : null,
+            tooltip: '重做',
+            icon: const Icon(Icons.redo),
+          ),
           if (state.isDirty)
             TextButton(onPressed: controller.reset, child: const Text('重置')),
           TextButton(

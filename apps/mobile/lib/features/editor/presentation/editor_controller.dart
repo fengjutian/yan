@@ -70,28 +70,74 @@ class CropRectNormalized {
 class EditorController extends StateNotifier<EditorState> {
   EditorController(Uint8List source) : super(EditorState(sourceBytes: source));
 
-  void setBrightness(int v) => state = state.copyWith(brightness: v);
-  void setContrast(int v) => state = state.copyWith(contrast: v);
-  void setSaturation(int v) => state = state.copyWith(saturation: v);
-  void rotateClockwise() => state = state.copyWith(
-    rotationQuarterTurns: (state.rotationQuarterTurns + 1) % 4,
+  static const _maxHistoryLength = 50;
+  final List<EditorState> _undoStack = [];
+  final List<EditorState> _redoStack = [];
+
+  bool get canUndo => _undoStack.isNotEmpty;
+  bool get canRedo => _redoStack.isNotEmpty;
+
+  void setBrightness(int v) => _commit(state.copyWith(brightness: v));
+  void setContrast(int v) => _commit(state.copyWith(contrast: v));
+  void setSaturation(int v) => _commit(state.copyWith(saturation: v));
+  void rotateClockwise() => _commit(
+    state.copyWith(
+      rotationQuarterTurns: (state.rotationQuarterTurns + 1) % 4,
+    ),
   );
   void flipHorizontal() =>
-      state = state.copyWith(flipHorizontal: !state.flipHorizontal);
+      _commit(state.copyWith(flipHorizontal: !state.flipHorizontal));
   void flipVertical() =>
-      state = state.copyWith(flipVertical: !state.flipVertical);
+      _commit(state.copyWith(flipVertical: !state.flipVertical));
   void setCrop(CropRectNormalized rect) =>
-      state = state.copyWith(cropRect: rect);
-  void clearCrop() => state = state.copyWith(clearCrop: true);
+      _commit(state.copyWith(cropRect: rect));
+  void clearCrop() => _commit(state.copyWith(clearCrop: true));
 
   void reset() {
-    state = EditorState(sourceBytes: state.sourceBytes);
+    _commit(EditorState(sourceBytes: state.sourceBytes));
+  }
+
+  void undo() {
+    if (!canUndo) return;
+    _redoStack.add(state);
+    state = _undoStack.removeLast();
+  }
+
+  void redo() {
+    if (!canRedo) return;
+    _undoStack.add(state);
+    state = _redoStack.removeLast();
+  }
+
+  void _commit(EditorState next) {
+    if (_sameAdjustments(state, next)) return;
+    _undoStack.add(state);
+    if (_undoStack.length > _maxHistoryLength) {
+      _undoStack.removeAt(0);
+    }
+    _redoStack.clear();
+    state = next;
   }
 
   /// 应用当前调整并导出 PNG。耗时操作,UI 层应用 compute()。
   Future<Uint8List> exportBytes() async {
     return applyAdjustments(state);
   }
+}
+
+bool _sameAdjustments(EditorState left, EditorState right) {
+  final leftCrop = left.cropRect;
+  final rightCrop = right.cropRect;
+  return left.brightness == right.brightness &&
+      left.contrast == right.contrast &&
+      left.saturation == right.saturation &&
+      left.rotationQuarterTurns == right.rotationQuarterTurns &&
+      left.flipHorizontal == right.flipHorizontal &&
+      left.flipVertical == right.flipVertical &&
+      leftCrop?.left == rightCrop?.left &&
+      leftCrop?.top == rightCrop?.top &&
+      leftCrop?.right == rightCrop?.right &&
+      leftCrop?.bottom == rightCrop?.bottom;
 }
 
 /// 调整算法:在 isolate 内完成(顶层函数,compute() 可调用)。
