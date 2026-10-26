@@ -39,6 +39,11 @@ class ProfilePage extends ConsumerWidget {
               onTap: () => context.push('/me/favorites'),
             ),
             _ProfileTile(
+              icon: Icons.health_and_safety_outlined,
+              label: '检查本地作品库',
+              onTap: () => _repairLocalLibrary(context, ref),
+            ),
+            _ProfileTile(
               icon: Icons.delete_sweep_outlined,
               label: '清除本地作品',
               onTap: () => _clearLocalWorks(context, ref),
@@ -144,6 +149,60 @@ class ProfilePage extends ConsumerWidget {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text('清除失败：$error')));
+    }
+  }
+
+  Future<void> _repairLocalLibrary(BuildContext context, WidgetRef ref) async {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            children: [
+              SizedBox.square(
+                dimension: 24,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+              SizedBox(width: 16),
+              Expanded(child: Text('正在检查本地作品…')),
+            ],
+          ),
+        ),
+      ),
+    );
+    try {
+      final report = await ref.read(localCreationStoreProvider).repair();
+      ref.invalidate(historyControllerProvider);
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(report.healthy ? '作品库状态正常' : '作品库检查完成'),
+          content: Text(
+            '有效作品：${report.validRecords}\n'
+            '异常记录：${report.corruptRecords}\n'
+            '缺失文件：${report.missingFiles}\n'
+            '已清理临时文件：${report.removedTemporaryFiles}\n'
+            '已清理空目录：${report.removedEmptyDirectories}'
+            '${report.healthy ? '' : '\n\n异常目录已保留，避免误删可能恢复的用户文件。'}',
+          ),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('完成'),
+            ),
+          ],
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('检查失败：$error')));
     }
   }
 
