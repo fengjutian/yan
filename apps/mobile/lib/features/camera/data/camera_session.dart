@@ -1,5 +1,4 @@
-import 'dart:math' as math;
-
+import 'package:ai_image_studio/features/camera/data/photo_metrics.dart';
 import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -93,29 +92,51 @@ class CameraSessionController extends StateNotifier<CameraSession> {
     List<Uint8List> values, {
     ValueChanged<double>? onProgress,
     List<CaptureContext?>? contexts,
+    List<PhotoAnalysisMetrics?>? precomputedMetrics,
     PortraitAnalyzer? portraitAnalyzer,
     ValueChanged<double>? onPortraitProgress,
   }) async {
-    // 最多同时解码两张，避免高分辨率连拍触发大量 isolate 和内存峰值。
     final analyzed = <_AnalyzedPhoto>[];
-    const concurrency = 2;
-    for (var offset = 0; offset < values.length; offset += concurrency) {
-      final end = (offset + concurrency).clamp(0, values.length);
-      final batch = await Future.wait([
-        for (var index = offset; index < end; index++)
-          _analyzePhoto(
+    final reuseMetrics =
+        precomputedMetrics != null &&
+        precomputedMetrics.length == values.length &&
+        precomputedMetrics.every((item) => item != null);
+    if (reuseMetrics) {
+      // 拍摄流程已经在裁剪/风格处理的同一个 isolate 里算过指标，
+      // 这里直接复用，省掉每张照片一次全尺寸 JPEG 解码。
+      for (var index = 0; index < values.length; index++) {
+        analyzed.add(
+          _photoWithMetrics(
             values[index],
+            precomputedMetrics[index]!,
             contexts != null && index < contexts.length
                 ? contexts[index]
                 : null,
           ),
-      ]);
-      analyzed.addAll(batch);
-      onProgress?.call(analyzed.length / values.length);
+        );
+        onProgress?.call((index + 1) / values.length);
+      }
+    } else {
+      // 最多同时解码两张，避免高分辨率连拍触发大量 isolate 和内存峰值。
+      const concurrency = 2;
+      for (var offset = 0; offset < values.length; offset += concurrency) {
+        final end = (offset + concurrency).clamp(0, values.length);
+        final batch = await Future.wait([
+          for (var index = offset; index < end; index++)
+            _analyzePhoto(
+              values[index],
+              contexts != null && index < contexts.length
+                  ? contexts[index]
+                  : null,
+            ),
+        ]);
+        analyzed.addAll(batch);
+        onProgress?.call(analyzed.length / values.length);
+      }
     }
     analyzed.sort((a, b) => b.score.compareTo(a.score));
     final unique = <_AnalyzedPhoto>[];
-    final signatures = <_PhotoMetrics>[];
+    final signatures = <PhotoAnalysisMetrics>[];
     for (final item in analyzed) {
       final metrics = item.metrics;
       final duplicate = signatures.any(
@@ -144,16 +165,20 @@ class CameraSessionController extends StateNotifier<CameraSession> {
     CaptureContext? context,
   ) async {
     final metrics = await compute(_analyzeIsolate, bytes);
+    return _photoWithMetrics(bytes, metrics, context);
+  }
+
+  _AnalyzedPhoto _photoWithMetrics(
+    Uint8List bytes,
+    PhotoAnalysisMetrics metrics,
+    CaptureContext? context,
+  ) {
     final stability = context?.stabilityScore;
-    final score = PhotoQualityEvaluator.applyStability(
-      metrics.score,
-      stability,
-    );
     return _AnalyzedPhoto(
       bytes: bytes,
       metrics: metrics,
       context: context,
-      score: score,
+      score: PhotoQualityEvaluator.applyStability(metrics.score, stability),
     );
   }
 
@@ -181,7 +206,7 @@ class CameraSessionController extends StateNotifier<CameraSession> {
           _buildPhoto(
             _AnalyzedPhoto(
               bytes: photo.bytes,
-              metrics: _PhotoMetrics(
+              metrics: PhotoAnalysisMetrics(
                 score: photo.score,
                 sharpness: photo.sharpness,
                 exposure: photo.exposure,
@@ -250,115 +275,19 @@ class _AnalyzedPhoto {
     this.context,
   });
   final Uint8List bytes;
-  final _PhotoMetrics metrics;
+  final PhotoAnalysisMetrics metrics;
   final double score;
   final CaptureContext? context;
 }
 
-class _PhotoMetrics {
-  const _PhotoMetrics({
-    required this.score,
-    required this.sharpness,
-    required this.exposure,
-    required this.contrast,
-    required this.clippingPenalty,
-    required this.averageLuminance,
-    required this.hash,
-  });
-  final double score;
-  final double sharpness;
-  final double exposure;
-  final double contrast;
-  final double clippingPenalty;
-  final double averageLuminance;
-  final int hash;
-}
-
 /// 必须是顶层函数才能用 compute() 丢到 isolate。
-_PhotoMetrics _analyzeIsolate(Uint8List bytes) {
+///
+/// 拍摄流程会通过 [setPhotos] 的 precomputedMetrics 直接复用指标；
+/// 只有相册导入等没有预计算的路径才需要在这里解码。
+PhotoAnalysisMetrics _analyzeIsolate(Uint8List bytes) {
   final decoded = img.decodeImage(bytes);
-  if (decoded == null) {
-    return const _PhotoMetrics(
-      score: 0,
-      sharpness: 0,
-      exposure: 0,
-      contrast: 0,
-      clippingPenalty: 100,
-      averageLuminance: 0,
-      hash: 0,
-    );
-  }
-  final image = img.copyResize(decoded, width: 120);
-  var luminance = 0.0;
-  var squaredLuminance = 0.0;
-  var edges = 0.0;
-  var clippedHighlights = 0;
-  var clippedShadows = 0;
-  var count = 0;
-  for (var y = 1; y < image.height - 1; y += 2) {
-    for (var x = 1; x < image.width - 1; x += 2) {
-      double gray(img.Pixel p) => .299 * p.r + .587 * p.g + .114 * p.b;
-      final center = gray(image.getPixel(x, y));
-      luminance += center;
-      squaredLuminance += center * center;
-      edges += (center - gray(image.getPixel(x + 1, y))).abs();
-      edges += (center - gray(image.getPixel(x, y + 1))).abs();
-      if (center >= 248) clippedHighlights++;
-      if (center <= 7) clippedShadows++;
-      count++;
-    }
-  }
-  if (count == 0) {
-    return const _PhotoMetrics(
-      score: 0,
-      sharpness: 0,
-      exposure: 0,
-      contrast: 0,
-      clippingPenalty: 100,
-      averageLuminance: 0,
-      hash: 0,
-    );
-  }
-  final light = luminance / count;
-  final variance = math.max(0, squaredLuminance / count - light * light);
-  final sharpness = (edges / count * 2.2).clamp(0, 100).toDouble();
-  final exposure = ((1 - (light - 135).abs() / 135) * 100)
-      .clamp(0, 100)
-      .toDouble();
-  final contrast = (math.sqrt(variance) * 2.4).clamp(0, 100).toDouble();
-  final clippingPenalty = ((clippedHighlights + clippedShadows) / count * 100)
-      .clamp(0, 100)
-      .toDouble();
-  final score =
-      (sharpness * .48 +
-              exposure * .30 +
-              contrast * .22 -
-              clippingPenalty * .35)
-          .clamp(0, 100)
-          .toDouble();
-  return _PhotoMetrics(
-    score: score,
-    sharpness: sharpness,
-    exposure: exposure,
-    contrast: contrast,
-    clippingPenalty: clippingPenalty,
-    averageLuminance: light,
-    hash: _averageHash(decoded),
-  );
-}
-
-int _averageHash(img.Image source) {
-  final tiny = img.copyResize(source, width: 8, height: 8);
-  final values = <double>[];
-  for (final pixel in tiny) {
-    values.add(.299 * pixel.r + .587 * pixel.g + .114 * pixel.b);
-  }
-  final average = values.fold<double>(0, (sum, value) => sum + value) / 64;
-  var hash = 0;
-  for (var index = 0; index < values.length; index++) {
-    if (values[index] >= average) hash |= 1 << index;
-  }
-  return hash;
+  if (decoded == null) return PhotoAnalysisMetrics.unavailable;
+  return analyzePhotoMetrics(decoded);
 }
 
 int _hammingDistance(int left, int right) {

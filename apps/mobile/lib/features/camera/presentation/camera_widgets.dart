@@ -38,6 +38,105 @@ class CameraCategoryChip extends StatelessWidget {
   );
 }
 
+/// 相机设置行：左侧名称，右侧当前值，点击弹出可选项。
+class CameraSettingRow extends StatelessWidget {
+  const CameraSettingRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onTap,
+    this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData? icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
+      child: Row(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 16, color: Colors.white54),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              value,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+              style: const TextStyle(color: Colors.white54, fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 2),
+          const Icon(Icons.chevron_right, size: 16, color: Colors.white30),
+        ],
+      ),
+    ),
+  );
+}
+
+/// 相机开关行：左侧名称，右侧开关，适合即时生效的开关项。
+class CameraSwitchRow extends StatelessWidget {
+  const CameraSwitchRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.icon,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+    child: Row(
+      children: [
+        if (icon != null) ...[
+          Icon(icon, size: 16, color: Colors.white54),
+          const SizedBox(width: 8),
+        ],
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+          ),
+        ),
+        Switch(
+          value: value,
+          onChanged: onChanged,
+          activeThumbColor: const Color(0xFFFFD60A),
+          activeTrackColor: const Color(0x66FFD60A),
+          inactiveThumbColor: Colors.white70,
+          inactiveTrackColor: const Color(0xFF303033),
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+      ],
+    ),
+  );
+}
+
 /// AF 对焦框。`locked` 表示 AF 锁定，`exposureLocked` 表示 AE 也锁定。
 class CameraFocusRing extends StatelessWidget {
   const CameraFocusRing({

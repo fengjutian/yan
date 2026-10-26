@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
+import 'package:ai_image_studio/features/camera/data/photo_metrics.dart';
 import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -49,6 +50,33 @@ void main() {
       expect(item.clippingPenalty, inInclusiveRange(0, 100));
       expect(item.qualityLabel, isNotEmpty);
     }
+  });
+
+  test('复用预计算指标时不再解码照片', () async {
+    final controller = CameraSessionController();
+    // 无效 JPEG：如果仍走解码评分，分数会是 0。
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+
+    await controller.setPhotos(
+      [bytes],
+      precomputedMetrics: const [
+        PhotoAnalysisMetrics(
+          score: 88,
+          sharpness: 90,
+          exposure: 80,
+          contrast: 70,
+          clippingPenalty: 2,
+          averageLuminance: 128,
+          hash: 42,
+        ),
+      ],
+    );
+
+    final photo = controller.state.photos.single;
+    expect(photo.score, closeTo(88, .001));
+    expect(photo.sharpness, 90);
+    expect(photo.bytes, bytes);
+    expect(photo.reasons, isNotEmpty);
   });
 
   test('感知哈希会移除完全相同的连拍照片', () async {

@@ -8,6 +8,7 @@ import 'package:ai_image_studio/features/camera/data/camera_diagnostics.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
+import 'package:ai_image_studio/features/camera/data/photo_metrics.dart';
 import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_composition_guide.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_quality_analyzer.dart';
@@ -1110,6 +1111,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
         await controller.stopImageStream();
       }
       final values = <Uint8List>[];
+      final valueMetrics = <PhotoAnalysisMetrics>[];
       final rawFrames = <Uint8List>[];
       // 每次快门触发时记录稳定度，供选片和后续元数据使用。
       final capturedContexts = <CaptureContext>[];
@@ -1181,14 +1183,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
             _mirrorSelfies &&
             controller.description.lensDirection == CameraLensDirection.front;
         if (enhancement == CaptureEnhancement.standard) {
-          values.add(
-            await compute(_processPhoto, (
-              bytes,
-              _aspectRatio,
-              mirror,
-              _style.index,
-            )),
-          );
+          final processed = await compute(_processPhoto, (
+            bytes,
+            _aspectRatio,
+            mirror,
+            _style.index,
+          ));
+          values.add(processed.$1);
+          valueMetrics.add(processed.$2);
         }
         if (mounted) {
           setState(() {
@@ -1215,15 +1217,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
         final mirror =
             _mirrorSelfies &&
             controller.description.lensDirection == CameraLensDirection.front;
-        values.add(
-          await compute(_mergeAndProcessPhotos, (
-            rawFrames,
-            _aspectRatio,
-            mirror,
-            _style.index,
-            enhancement.index,
-          )),
-        );
+        final merged = await compute(_mergeAndProcessPhotos, (
+          rawFrames,
+          _aspectRatio,
+          mirror,
+          _style.index,
+          enhancement.index,
+        ));
+        values.add(merged.$1);
+        valueMetrics.add(merged.$2);
       }
       if (mounted && values.isNotEmpty) {
         setState(() => _capturedImage = values.first);
@@ -1239,6 +1241,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
           .setPhotos(
             values,
             contexts: _contextsForValues(values, capturedContexts),
+            precomputedMetrics: valueMetrics,
             portraitAnalyzer: analyzePortraitQuality,
             onProgress: (progress) {
               if (mounted) setState(() => _processingProgress = progress);
@@ -1963,6 +1966,33 @@ class _CameraPageState extends ConsumerState<CameraPage>
     _ => Icons.flash_on,
   };
 
+  String get _flashLabel => switch (_flashMode) {
+    FlashMode.off => '关闭',
+    FlashMode.auto => '自动',
+    _ => '开启',
+  };
+
+  String get _smartShutterLabel => switch (_smartShutterMode) {
+    SmartShutterMode.off => '关闭',
+    SmartShutterMode.smile => '笑脸识别',
+    SmartShutterMode.gesture => '举手识别',
+  };
+
+  String get _styleLabel => switch (_style) {
+    CameraStyle.standard => '标准',
+    CameraStyle.vivid => '鲜明',
+    CameraStyle.warm => '暖色',
+    CameraStyle.cool => '冷色',
+    CameraStyle.mono => '黑白',
+    CameraStyle.soft => '柔和',
+  };
+
+  String get _enhancementLabel => switch (_captureEnhancement) {
+    CaptureEnhancement.standard => '标准拍摄',
+    CaptureEnhancement.multiFrameHdr => '多帧 HDR',
+    CaptureEnhancement.nightDenoise => '夜景降噪',
+  };
+
   @override
   void dispose() {
     _initializationToken++;
@@ -2127,23 +2157,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
               context.canPop() ? context.pop() : context.go('/home'),
           icon: const Icon(Icons.close_rounded, color: Colors.white),
         ),
+        const Spacer(),
+        // 拍摄组：闪光灯。
         IconButton(
-          tooltip: '闪光灯',
+          tooltip: '闪光灯：$_flashLabel',
           onPressed: _toggleFlash,
           icon: Icon(_flashIcon, color: Colors.white),
         ),
-        const Spacer(),
-        _CameraCircleButton(
-          tooltip: '相机设置',
-          onTap: () {
-            if (!_showCameraOptions) unawaited(_loadDiagnostics());
-            setState(() => _showCameraOptions = !_showCameraOptions);
-          },
-          icon: _showCameraOptions
-              ? Icons.keyboard_arrow_up_rounded
-              : Icons.keyboard_arrow_down_rounded,
-        ),
-        const Spacer(),
+        const _TopBarGroupDivider(),
+        // 辅助组：实时姿态指导、构图线。
         IconButton(
           tooltip: '实时姿态指导',
           onPressed: _toggleRealtimeGuidance,
@@ -2167,20 +2189,38 @@ class _CameraPageState extends ConsumerState<CameraPage>
             color: _showGuide ? const Color(0xFFFFD60A) : Colors.white70,
           ),
         ),
+        const _TopBarGroupDivider(),
+        // 设置组：更多拍摄设置。
+        _CameraCircleButton(
+          tooltip: '相机设置',
+          onTap: () {
+            if (!_showCameraOptions) unawaited(_loadDiagnostics());
+            setState(() => _showCameraOptions = !_showCameraOptions);
+          },
+          icon: _showCameraOptions
+              ? Icons.keyboard_arrow_up_rounded
+              : Icons.keyboard_arrow_down_rounded,
+        ),
       ],
     ),
   );
 
-  void _toggleRealtimeGuidance() => setState(() {
-    _showRealtimeGuidance = !_showRealtimeGuidance;
-    if (!_showRealtimeGuidance) {
-      _liveAnalysis = null;
-      _clearPortraitHint();
-    }
-    _guidanceOpacity = 1;
-    _goodPoseSince = null;
-    unawaited(_savePreference(_guidancePreference, _showRealtimeGuidance));
-  });
+  void _toggleRealtimeGuidance() =>
+      _setRealtimeGuidance(!_showRealtimeGuidance);
+
+  void _setRealtimeGuidance(bool enabled) {
+    if (enabled == _showRealtimeGuidance) return;
+    setState(() {
+      _showRealtimeGuidance = enabled;
+      if (!enabled) {
+        _liveAnalysis = null;
+        _clearPortraitHint();
+      }
+      _guidanceOpacity = 1;
+      _goodPoseSince = null;
+    });
+    unawaited(_savePreference(_guidancePreference, enabled));
+  }
 
   Widget _buildCameraOptions({required double maxHeight}) => Container(
     key: const ValueKey('camera-options'),
@@ -2227,44 +2267,118 @@ class _CameraPageState extends ConsumerState<CameraPage>
   /// 按功能分类展示相机设置，避免几十个开关挤在同一个列表里。
   Widget _buildOptionCategoryContent(_CameraOptionCategory category) =>
       switch (category) {
-        _CameraOptionCategory.capture => _buildOptionWrap([
-          ..._aspectOptions(),
-          ..._timerOptions(),
-          ..._flashOptions(),
-          ..._smartShutterOptions(),
-          _CameraOption(
-            label: '镜像自拍',
+        _CameraOptionCategory.capture => _buildSettingList([
+          CameraSettingRow(
+            icon: Icons.aspect_ratio,
+            label: '画面比例',
+            value: cameraPresetRatioLabel(_aspectRatio),
+            onTap: () => _showOptionSheet<double>(
+              title: '画面比例',
+              selected: _aspectRatio,
+              options: const [
+                ('1:1', 1.0),
+                ('3:4', .75),
+                ('9:16', .5625),
+                ('16:9', 16 / 9),
+              ],
+              onSelected: (value) => setState(() {
+                _aspectRatio = value;
+                unawaited(_savePreference(_aspectPreference, value));
+              }),
+            ),
+          ),
+          CameraSettingRow(
+            icon: Icons.timer_outlined,
+            label: '定时拍摄',
+            value: _countdownSeconds == 0 ? '关闭' : '$_countdownSeconds 秒',
+            onTap: () => _showOptionSheet<int>(
+              title: '定时拍摄',
+              selected: _countdownSeconds,
+              options: const [('关闭', 0), ('3 秒', 3), ('5 秒', 5), ('10 秒', 10)],
+              onSelected: (value) => setState(() {
+                _countdownSeconds = value;
+                unawaited(_savePreference(_timerPreference, value));
+              }),
+            ),
+          ),
+          CameraSettingRow(
+            icon: _flashIcon,
+            label: '闪光灯',
+            value: _flashLabel,
+            onTap: () => _showOptionSheet<FlashMode>(
+              title: '闪光灯',
+              selected: _flashMode,
+              options: const [
+                ('关闭', FlashMode.off),
+                ('自动', FlashMode.auto),
+                ('开启', FlashMode.always),
+              ],
+              onSelected: _setFlashMode,
+            ),
+          ),
+          CameraSettingRow(
+            icon: Icons.touch_app_outlined,
+            label: '智能快门',
+            value: _smartShutterLabel,
+            onTap: () => _showOptionSheet<SmartShutterMode>(
+              title: '智能快门',
+              selected: _smartShutterMode,
+              options: const [
+                ('关闭', SmartShutterMode.off),
+                ('笑脸识别', SmartShutterMode.smile),
+                ('举手识别', SmartShutterMode.gesture),
+              ],
+              onSelected: (value) => setState(() {
+                _smartShutterMode = value;
+                _smartSignalFrames = 0;
+                unawaited(
+                  _savePreference(_smartShutterPreference, value.index),
+                );
+              }),
+            ),
+          ),
+          CameraSwitchRow(
             icon: Icons.flip,
-            selected: _mirrorSelfies,
-            onTap: () => setState(() {
-              _mirrorSelfies = !_mirrorSelfies;
-              unawaited(_savePreference(_mirrorPreference, _mirrorSelfies));
+            label: '镜像自拍',
+            value: _mirrorSelfies,
+            onChanged: (value) => setState(() {
+              _mirrorSelfies = value;
+              unawaited(_savePreference(_mirrorPreference, value));
             }),
           ),
         ]),
-        _CameraOptionCategory.compose => _buildOptionWrap([
-          _CameraOption(
-            label: _guideName,
+        _CameraOptionCategory.compose => _buildSettingList([
+          CameraSwitchRow(
             icon: Icons.grid_3x3,
-            selected: _showGuide,
+            label: '构图辅助线',
+            value: _showGuide,
+            onChanged: (value) => setState(() {
+              _showGuide = value;
+              unawaited(_savePreference(_guidePreference, value));
+            }),
+          ),
+          CameraSettingRow(
+            icon: Icons.grid_goldenratio,
+            label: '辅助线类型',
+            value: _guideName,
             onTap: _selectCompositionGuide,
           ),
-          _CameraOption(
-            label: _activePresetName,
+          CameraSettingRow(
             icon: Icons.auto_awesome_motion,
-            selected: _activePresetId != null,
+            label: '场景预设',
+            value: _activePresetName,
             onTap: _openPresetSheet,
           ),
-          _CameraOption(
-            label: '实时姿态指导',
+          CameraSwitchRow(
             icon: Icons.accessibility_new,
-            selected: _showRealtimeGuidance,
-            onTap: _toggleRealtimeGuidance,
+            label: '实时姿态指导',
+            value: _showRealtimeGuidance,
+            onChanged: _setRealtimeGuidance,
           ),
         ]),
         _CameraOptionCategory.exposure => Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             CameraProfessionalPanel(
               lens: _activeNativeLens,
@@ -2274,44 +2388,133 @@ class _CameraPageState extends ConsumerState<CameraPage>
               onExposureChanged: (value) => unawaited(_setExposure(value)),
             ),
             const SizedBox(height: 8),
-            _buildOptionWrap(_exposureOptions()),
+            _buildSettingList([
+              CameraSettingRow(
+                icon: Icons.exposure_zero,
+                label: '曝光归零',
+                value:
+                    '${_exposure >= 0 ? '+' : ''}'
+                    '${_exposure.toStringAsFixed(1)} EV',
+                onTap: () => unawaited(_setExposure(0)),
+              ),
+              CameraSwitchRow(
+                icon: Icons.bar_chart,
+                label: '直方图',
+                value: _showHistogram,
+                onChanged: (value) => setState(() {
+                  _showHistogram = value;
+                  unawaited(_savePreference(_histogramPreference, value));
+                }),
+              ),
+              CameraSettingRow(
+                icon: Icons.wb_sunny_outlined,
+                label: '高光阈值',
+                value: '${(100 * _highlightThreshold).round()}%',
+                onTap: () => _showOptionSheet<double>(
+                  title: '高光阈值',
+                  selected: _highlightThreshold,
+                  options: const [('90%', .90), ('95%', .95), ('98%', .98)],
+                  onSelected: (value) => setState(() {
+                    _highlightThreshold = value;
+                    _showHistogram = true;
+                    unawaited(
+                      _savePreference(_highlightThresholdPreference, value),
+                    );
+                    unawaited(_savePreference(_histogramPreference, true));
+                  }),
+                ),
+              ),
+              CameraSwitchRow(
+                icon: Icons.texture,
+                label: '斑马纹',
+                value: _showZebra,
+                onChanged: (value) => setState(() {
+                  _showZebra = value;
+                  if (!value) _zebraPoints = const [];
+                  unawaited(_savePreference(_zebraPreference, value));
+                }),
+              ),
+              CameraSwitchRow(
+                icon: Icons.center_focus_strong,
+                label: '峰值对焦',
+                value: _showFocusPeaking,
+                onChanged: (value) => setState(() {
+                  _showFocusPeaking = value;
+                  if (!value) _focusPeaks = const [];
+                  unawaited(_savePreference(_focusPeakingPreference, value));
+                }),
+              ),
+            ]),
           ],
         ),
-        _CameraOptionCategory.quality => _buildOptionWrap([
-          ..._styleOptions(),
-          ..._enhancementOptions(),
-          _CameraOption(
-            label: '镜头清洁提醒',
+        _CameraOptionCategory.quality => _buildSettingList([
+          CameraSettingRow(
+            icon: Icons.filter_vintage_outlined,
+            label: '照片风格',
+            value: _styleLabel,
+            onTap: () => _showOptionSheet<CameraStyle>(
+              title: '照片风格',
+              selected: _style,
+              options: const [
+                ('标准', CameraStyle.standard),
+                ('鲜明', CameraStyle.vivid),
+                ('暖色', CameraStyle.warm),
+                ('冷色', CameraStyle.cool),
+                ('黑白', CameraStyle.mono),
+                ('柔和', CameraStyle.soft),
+              ],
+              onSelected: (value) => setState(() {
+                _style = value;
+                unawaited(_savePreference(_stylePreference, value.index));
+              }),
+            ),
+          ),
+          CameraSettingRow(
+            icon: Icons.auto_fix_high,
+            label: '拍摄增强',
+            value: _enhancementLabel,
+            onTap: () => _showOptionSheet<CaptureEnhancement>(
+              title: '拍摄增强',
+              selected: _captureEnhancement,
+              options: const [
+                ('标准拍摄', CaptureEnhancement.standard),
+                ('多帧 HDR', CaptureEnhancement.multiFrameHdr),
+                ('夜景降噪', CaptureEnhancement.nightDenoise),
+              ],
+              onSelected: (value) => setState(() {
+                _captureEnhancement = value;
+                unawaited(_savePreference(_enhancementPreference, value.index));
+              }),
+            ),
+          ),
+          CameraSwitchRow(
             icon: Icons.cleaning_services_outlined,
-            selected: _lensCleaningHints,
-            onTap: () => setState(() {
-              _lensCleaningHints = !_lensCleaningHints;
+            label: '镜头清洁提醒',
+            value: _lensCleaningHints,
+            onChanged: (value) => setState(() {
+              _lensCleaningHints = value;
               _softFrameCount = 0;
-              unawaited(
-                _savePreference(_lensHintsPreference, _lensCleaningHints),
-              );
+              unawaited(_savePreference(_lensHintsPreference, value));
             }),
           ),
         ]),
-        _CameraOptionCategory.save => _buildOptionWrap([
-          _CameraOption(
-            label: '自动存相册',
+        _CameraOptionCategory.save => _buildSettingList([
+          CameraSwitchRow(
             icon: Icons.save_alt,
-            selected: _autoSave,
-            onTap: () => setState(() {
-              _autoSave = !_autoSave;
-              unawaited(_savePreference(_autoSavePreference, _autoSave));
+            label: '自动存相册',
+            value: _autoSave,
+            onChanged: (value) => setState(() {
+              _autoSave = value;
+              unawaited(_savePreference(_autoSavePreference, value));
             }),
           ),
-          _CameraOption(
-            label: '同时保存原图',
+          CameraSwitchRow(
             icon: Icons.photo_library_outlined,
-            selected: _saveOriginalCopy,
-            onTap: () => setState(() {
-              _saveOriginalCopy = !_saveOriginalCopy;
-              unawaited(
-                _savePreference(_saveOriginalPreference, _saveOriginalCopy),
-              );
+            label: '同时保存原图',
+            value: _saveOriginalCopy,
+            onChanged: (value) => setState(() {
+              _saveOriginalCopy = value;
+              unawaited(_savePreference(_saveOriginalPreference, value));
             }),
           ),
         ]),
@@ -2328,168 +2531,85 @@ class _CameraPageState extends ConsumerState<CameraPage>
         ),
       };
 
-  Widget _buildOptionWrap(List<Widget> options) => Wrap(
-    alignment: WrapAlignment.start,
-    spacing: 8,
-    runSpacing: 8,
-    children: options,
+  /// 单一取值设置的选择面板：列表展示所有可选项，当前项高亮。
+  void _showOptionSheet<T>({
+    required String title,
+    required T selected,
+    required List<(String, T)> options,
+    required ValueChanged<T> onSelected,
+  }) {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: const Color(0xFF1C1C1E),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 12),
+                children: [
+                  for (final option in options)
+                    ListTile(
+                      dense: true,
+                      title: Text(
+                        option.$1,
+                        style: TextStyle(
+                          color: option.$2 == selected
+                              ? const Color(0xFFFFD60A)
+                              : Colors.white,
+                          fontSize: 14,
+                          fontWeight: option.$2 == selected
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      ),
+                      trailing: option.$2 == selected
+                          ? const Icon(
+                              Icons.check,
+                              color: Color(0xFFFFD60A),
+                              size: 18,
+                            )
+                          : null,
+                      onTap: () {
+                        Navigator.of(sheetContext).pop();
+                        onSelected(option.$2);
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingList(List<Widget> rows) => Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (var index = 0; index < rows.length; index++) ...[
+        if (index > 0)
+          const Divider(height: 1, thickness: .5, color: Colors.white12),
+        rows[index],
+      ],
+    ],
   );
-
-  List<Widget> _aspectOptions() => [
-    for (final ratio in const [
-      ('1:1', 1.0),
-      ('3:4', .75),
-      ('9:16', .5625),
-      ('16:9', 16 / 9),
-    ])
-      _CameraOption(
-        label: ratio.$1,
-        selected: _aspectRatio == ratio.$2,
-        onTap: () => setState(() {
-          _aspectRatio = ratio.$2;
-          unawaited(_savePreference(_aspectPreference, _aspectRatio));
-        }),
-      ),
-  ];
-
-  List<Widget> _timerOptions() => [
-    for (final seconds in const [0, 3, 5, 10])
-      _CameraOption(
-        label: seconds == 0 ? '定时关闭' : '$seconds 秒',
-        icon: seconds == 0 ? Icons.timer_off_outlined : Icons.timer_outlined,
-        selected: _countdownSeconds == seconds,
-        onTap: () => setState(() {
-          _countdownSeconds = seconds;
-          unawaited(_savePreference(_timerPreference, seconds));
-        }),
-      ),
-  ];
-
-  List<Widget> _flashOptions() => [
-    for (final option in const [
-      ('闪光关', FlashMode.off, Icons.flash_off),
-      ('闪光自动', FlashMode.auto, Icons.flash_auto),
-      ('闪光开', FlashMode.always, Icons.flash_on),
-    ])
-      _CameraOption(
-        label: option.$1,
-        icon: option.$3,
-        selected: _flashMode == option.$2,
-        onTap: () => _setFlashMode(option.$2),
-      ),
-  ];
-
-  List<Widget> _smartShutterOptions() => [
-    for (final option in const [
-      ('智能快门关', SmartShutterMode.off, Icons.touch_app_outlined),
-      ('笑脸快门', SmartShutterMode.smile, Icons.sentiment_satisfied_alt),
-      ('举手快门', SmartShutterMode.gesture, Icons.back_hand_outlined),
-    ])
-      _CameraOption(
-        label: option.$1,
-        icon: option.$3,
-        selected: _smartShutterMode == option.$2,
-        onTap: () => setState(() {
-          _smartShutterMode = option.$2;
-          _smartSignalFrames = 0;
-          unawaited(
-            _savePreference(_smartShutterPreference, _smartShutterMode.index),
-          );
-        }),
-      ),
-  ];
-
-  List<Widget> _exposureOptions() => [
-    _CameraOption(
-      label: '曝光归零',
-      icon: Icons.exposure_zero,
-      selected: _exposure.abs() < .05,
-      onTap: () => _setExposure(0),
-    ),
-    _CameraOption(
-      label: '直方图',
-      icon: Icons.bar_chart,
-      selected: _showHistogram,
-      onTap: () => setState(() {
-        _showHistogram = !_showHistogram;
-        unawaited(_savePreference(_histogramPreference, _showHistogram));
-      }),
-    ),
-    _CameraOption(
-      label: '高光 ${(100 * _highlightThreshold).round()}%',
-      icon: Icons.wb_sunny_outlined,
-      selected: _showHistogram || _showZebra,
-      onTap: () => setState(() {
-        const thresholds = [.90, .95, .98];
-        final current = thresholds.indexOf(_highlightThreshold);
-        _highlightThreshold = thresholds[(current + 1) % thresholds.length];
-        _showHistogram = true;
-        unawaited(
-          _savePreference(_highlightThresholdPreference, _highlightThreshold),
-        );
-        unawaited(_savePreference(_histogramPreference, true));
-      }),
-    ),
-    _CameraOption(
-      label: '斑马纹',
-      icon: Icons.texture,
-      selected: _showZebra,
-      onTap: () => setState(() {
-        _showZebra = !_showZebra;
-        if (!_showZebra) _zebraPoints = const [];
-        unawaited(_savePreference(_zebraPreference, _showZebra));
-      }),
-    ),
-    _CameraOption(
-      label: '峰值对焦',
-      icon: Icons.center_focus_strong,
-      selected: _showFocusPeaking,
-      onTap: () => setState(() {
-        _showFocusPeaking = !_showFocusPeaking;
-        if (!_showFocusPeaking) _focusPeaks = const [];
-        unawaited(_savePreference(_focusPeakingPreference, _showFocusPeaking));
-      }),
-    ),
-  ];
-
-  List<Widget> _styleOptions() => [
-    for (final option in const [
-      ('标准', CameraStyle.standard),
-      ('鲜明', CameraStyle.vivid),
-      ('暖色', CameraStyle.warm),
-      ('冷色', CameraStyle.cool),
-      ('黑白', CameraStyle.mono),
-      ('柔和', CameraStyle.soft),
-    ])
-      _CameraOption(
-        label: option.$1,
-        icon: Icons.filter_vintage_outlined,
-        selected: _style == option.$2,
-        onTap: () => setState(() {
-          _style = option.$2;
-          unawaited(_savePreference(_stylePreference, _style.index));
-        }),
-      ),
-  ];
-
-  List<Widget> _enhancementOptions() => [
-    for (final option in const [
-      ('标准拍摄', CaptureEnhancement.standard, Icons.camera_alt_outlined),
-      ('多帧 HDR', CaptureEnhancement.multiFrameHdr, Icons.hdr_on),
-      ('夜景降噪', CaptureEnhancement.nightDenoise, Icons.nightlight_outlined),
-    ])
-      _CameraOption(
-        label: option.$1,
-        icon: option.$3,
-        selected: _captureEnhancement == option.$2,
-        onTap: () => setState(() {
-          _captureEnhancement = option.$2;
-          unawaited(
-            _savePreference(_enhancementPreference, _captureEnhancement.index),
-          );
-        }),
-      ),
-  ];
 
   Widget _buildPreview() {
     // _initializing 和 _controller 必须联动:前者 true 时后者允许为 null,
@@ -3205,9 +3325,11 @@ class _FrameSharpness {
   final List<Offset> peaks;
 }
 
-Uint8List _processPhoto((Uint8List, double, bool, int) input) {
+(Uint8List, PhotoAnalysisMetrics) _processPhoto(
+  (Uint8List, double, bool, int) input,
+) {
   final decoded = img.decodeImage(input.$1);
-  if (decoded == null) return input.$1;
+  if (decoded == null) return (input.$1, PhotoAnalysisMetrics.unavailable);
   return _finishPhoto(
     img.bakeOrientation(decoded),
     aspectRatio: input.$2,
@@ -3216,7 +3338,7 @@ Uint8List _processPhoto((Uint8List, double, bool, int) input) {
   );
 }
 
-Uint8List _mergeAndProcessPhotos(
+(Uint8List, PhotoAnalysisMetrics) _mergeAndProcessPhotos(
   (List<Uint8List>, double, bool, int, int) input,
 ) {
   final decoded = <img.Image>[];
@@ -3229,7 +3351,9 @@ Uint8List _mergeAndProcessPhotos(
     }
     decoded.add(frame);
   }
-  if (decoded.isEmpty) return Uint8List(0);
+  if (decoded.isEmpty) {
+    return (Uint8List(0), PhotoAnalysisMetrics.unavailable);
+  }
   final first = decoded.first;
   final frames = <img.Image>[first];
   for (final frame in decoded.skip(1)) {
@@ -3284,7 +3408,7 @@ Uint8List _mergeAndProcessPhotos(
   );
 }
 
-Uint8List _finishPhoto(
+(Uint8List, PhotoAnalysisMetrics) _finishPhoto(
   img.Image source, {
   required double aspectRatio,
   required bool mirror,
@@ -3329,7 +3453,9 @@ Uint8List _finishPhoto(
     case CameraStyle.soft:
       cropped = img.adjustColor(cropped, saturation: .88, contrast: .94);
   }
-  return Uint8List.fromList(img.encodeJpg(cropped, quality: 95));
+  // 指标在同一个 isolate 里从最终像素直接计算，选片阶段无需再次解码。
+  final metrics = analyzePhotoMetrics(cropped);
+  return (Uint8List.fromList(img.encodeJpg(cropped, quality: 95)), metrics);
 }
 
 class _CroppedCameraPreview extends StatelessWidget {
@@ -3973,6 +4099,19 @@ class _TemplateChip extends StatelessWidget {
   }
 }
 
+/// 顶部工具栏的分组分隔线：拍摄 | 辅助 | 设置。
+class _TopBarGroupDivider extends StatelessWidget {
+  const _TopBarGroupDivider();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 1,
+    height: 18,
+    margin: const EdgeInsets.symmetric(horizontal: 6),
+    color: Colors.white24,
+  );
+}
+
 class _CameraCircleButton extends StatelessWidget {
   const _CameraCircleButton({
     required this.icon,
@@ -4149,55 +4288,6 @@ class _DiagnosticsPanel extends StatelessWidget {
       ),
     );
   }
-}
-
-class _CameraOption extends StatelessWidget {
-  const _CameraOption({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-    this.icon,
-  });
-
-  final String label;
-  final IconData? icon;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(99),
-    child: AnimatedContainer(
-      duration: const Duration(milliseconds: 160),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: selected ? Colors.white : const Color(0xFF303033),
-        borderRadius: BorderRadius.circular(99),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (icon != null) ...[
-            Icon(
-              icon,
-              color: selected ? Colors.black : Colors.white70,
-              size: 15,
-            ),
-            const SizedBox(width: 5),
-          ],
-          Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.black : Colors.white,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _CameraModeLabel extends StatelessWidget {
