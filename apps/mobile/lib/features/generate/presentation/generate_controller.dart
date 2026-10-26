@@ -113,7 +113,9 @@ class GenerateController extends StateNotifier<GenerateState> {
         promptOptimizer: state.promptOptimizer,
       );
       state = state.copyWith(submitting: false, task: task);
-      _schedulePoll(task.id, const Duration(seconds: 2));
+      if (!task.isTerminal) {
+        _schedulePoll(task.id, const Duration(seconds: 2));
+      }
     } catch (error) {
       state = state.copyWith(submitting: false, errorMessage: error.toString());
     }
@@ -168,7 +170,9 @@ class GenerateController extends StateNotifier<GenerateState> {
     try {
       final replacement = await _repository.retry(task.id);
       state = state.copyWith(task: replacement, clearError: true);
-      _schedulePoll(replacement.id, const Duration(seconds: 2));
+      if (!replacement.isTerminal) {
+        _schedulePoll(replacement.id, const Duration(seconds: 2));
+      }
     } catch (error) {
       state = state.copyWith(errorMessage: error.toString());
     }

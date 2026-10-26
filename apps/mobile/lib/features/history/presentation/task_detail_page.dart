@@ -1,15 +1,16 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
+import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
 import 'package:share_plus/share_plus.dart';
@@ -33,15 +34,14 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
 
   void _schedulePoll() {
     _pollTimer?.cancel();
-    _pollTimer = Timer(const Duration(seconds: 3), () async {
+    _pollTimer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
+      final current = ref
+          .read(taskDetailProvider(widget.taskId))
+          .valueOrNull;
+      if (current != null && current.isTerminal) return;
       ref.invalidate(taskDetailProvider(widget.taskId));
-      final current = ref.read(taskDetailProvider(widget.taskId));
-      final isDone = current.maybeWhen(
-        data: (t) => t.isTerminal,
-        orElse: () => false,
-      );
-      if (!isDone && mounted) _schedulePoll();
+      _schedulePoll();
     });
   }
 
@@ -80,6 +80,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       body: RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(taskDetailProvider(widget.taskId));
+          await ref.read(taskDetailProvider(widget.taskId).future);
         },
         child: task.when(
           loading: () => const Center(child: CircularProgressIndicator()),
@@ -116,9 +117,8 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
                 children: [
                   AspectRatio(
                     aspectRatio: 1,
-                    child: CachedNetworkImage(
-                      imageUrl: image.url,
-                      fit: BoxFit.cover,
+                    child: CreationImage(
+                      image: image,
                     ),
                   ),
                   const Positioned(
@@ -149,10 +149,12 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         const SizedBox(height: 24),
         _ActionGrid(
           busy: _busy,
-          onSave: () =>
-              _save(value.images.isNotEmpty ? value.images.first.url : null),
-          onShare: () =>
-              _share(value.images.isNotEmpty ? value.images.first.url : null),
+          onSave: () => _save(
+            value.images.isNotEmpty ? value.images.first : null,
+          ),
+          onShare: () => _share(
+            value.images.isNotEmpty ? value.images.first : null,
+          ),
           onShareWorkshop: () =>
               context.push('/share?taskId=${Uri.encodeComponent(value.id)}'),
           onToggleDraft: () => _toggleDraft(value.id, true),
@@ -179,18 +181,15 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     ).showSnackBar(SnackBar(content: Text(add ? '已存为草稿' : '已从草稿移除')));
   }
 
-  Future<Uint8List?> _downloadImage(String url) async {
-    final response = await http.get(Uri.parse(url));
-    if (response.statusCode != 200) return null;
-    return response.bodyBytes;
-  }
+  Future<Uint8List?> _downloadImage(GeneratedImage image) =>
+      loadCreationImageBytes(image);
 
-  Future<void> _save(String? url) async {
-    if (url == null) return;
+  Future<void> _save(GeneratedImage? image) async {
+    if (image == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _downloadImage(url);
-      if (bytes == null) throw Exception('下载图片失败');
+      final bytes = await _downloadImage(image);
+      if (bytes == null) throw Exception('读取图片失败');
       final result = await SaverGallery.saveImage(
         bytes,
         fileName: 'yan-${DateTime.now().millisecondsSinceEpoch}',
@@ -215,19 +214,20 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     }
   }
 
-  Future<void> _share(String? url) async {
-    if (url == null) return;
+  Future<void> _share(GeneratedImage? image) async {
+    if (image == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = await _downloadImage(url);
-      if (bytes == null) throw Exception('下载图片失败');
+      final bytes = await _downloadImage(image);
+      if (bytes == null) throw Exception('读取图片失败');
+      final (extension, mimeType) = _imageFormat(bytes);
       final dir = await getTemporaryDirectory();
       final file = File(
-        '${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.jpg',
+        '${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}$extension',
       );
       await file.writeAsBytes(bytes, flush: true);
       await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'image/jpeg')],
+        [XFile(file.path, mimeType: mimeType)],
         text: _valuePromptText(ref, widget.taskId),
         subject: _valuePromptText(ref, widget.taskId),
       );
@@ -239,6 +239,25 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  (String, String) _imageFormat(Uint8List bytes) {
+    if (bytes.length >= 8 &&
+        bytes[0] == 0x89 &&
+        bytes[1] == 0x50 &&
+        bytes[2] == 0x4E &&
+        bytes[3] == 0x47) {
+      return ('.png', 'image/png');
+    }
+    if (bytes.length >= 12 &&
+        bytes[0] == 0x52 &&
+        bytes[1] == 0x49 &&
+        bytes[2] == 0x46 &&
+        bytes[3] == 0x46 &&
+        bytes[8] == 0x57) {
+      return ('.webp', 'image/webp');
+    }
+    return ('.jpg', 'image/jpeg');
   }
 }
 

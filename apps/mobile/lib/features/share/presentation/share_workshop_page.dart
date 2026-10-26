@@ -1,15 +1,15 @@
 import 'dart:io';
 
 import 'package:ai_image_studio/app/theme.dart';
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
+import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/data/share_models.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
@@ -30,7 +30,7 @@ class ShareWorkshopPage extends ConsumerStatefulWidget {
 }
 
 class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
-  String? _imageUrl;
+  GeneratedImage? _image;
   String? _imagePrompt;
   bool _busy = false;
   bool _loaded = false;
@@ -51,14 +51,14 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     try {
       final task = await ref.read(taskDetailProvider(id).future);
       if (!mounted) return;
-      final url = task.images.isNotEmpty ? task.images.first.url : null;
+      final image = task.images.isNotEmpty ? task.images.first : null;
       setState(() {
-        _imageUrl = url;
+        _image = image;
         _imagePrompt = task.prompt;
         _loaded = true;
       });
       // 进入页面时自动起一份 AI 文案。
-      if (url != null && task.prompt.isNotEmpty) {
+      if (image != null && task.prompt.isNotEmpty) {
         ref
             .read(shareControllerProvider.notifier)
             .generateCaption(imagePrompt: task.prompt);

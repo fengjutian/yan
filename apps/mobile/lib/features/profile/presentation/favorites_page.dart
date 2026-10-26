@@ -1,6 +1,6 @@
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -68,18 +68,15 @@ class _CollectionRow extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(12),
                   child: taskAsync.maybeWhen(
                     data: (t) {
-                      final url = t.images.isNotEmpty
-                          ? t.images.first.thumbnailUrl
-                          : null;
-                      if (url == null) {
+                      if (t.images.isEmpty) {
                         return const ColoredBox(
                           color: Colors.black12,
                           child: Icon(Icons.image_not_supported_outlined),
                         );
                       }
-                      return CachedNetworkImage(
-                        imageUrl: url,
-                        fit: BoxFit.cover,
+                      return CreationImage(
+                        image: t.images.first,
+                        preferThumbnail: true,
                       );
                     },
                     orElse: () => const ColoredBox(

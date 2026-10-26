@@ -1,6 +1,6 @@
+import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -335,9 +335,9 @@ class _TaskResult extends StatelessWidget {
       itemCount: task.images.length,
       itemBuilder: (context, index) => ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: CachedNetworkImage(
-          imageUrl: task.images[index].thumbnailUrl,
-          fit: BoxFit.cover,
+        child: CreationImage(
+          image: task.images[index],
+          preferThumbnail: true,
         ),
       ),
     );
