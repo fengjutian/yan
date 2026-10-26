@@ -36,9 +36,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
     _pollTimer?.cancel();
     _pollTimer = Timer(const Duration(seconds: 3), () {
       if (!mounted) return;
-      final current = ref
-          .read(taskDetailProvider(widget.taskId))
-          .valueOrNull;
+      final current = ref.read(taskDetailProvider(widget.taskId)).valueOrNull;
       if (current != null && current.isTerminal) return;
       ref.invalidate(taskDetailProvider(widget.taskId));
       _schedulePoll();
@@ -117,9 +115,7 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
                 children: [
                   AspectRatio(
                     aspectRatio: 1,
-                    child: CreationImage(
-                      image: image,
-                    ),
+                    child: CreationImage(image: image),
                   ),
                   const Positioned(
                     left: 12,
@@ -149,12 +145,10 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
         const SizedBox(height: 24),
         _ActionGrid(
           busy: _busy,
-          onSave: () => _save(
-            value.images.isNotEmpty ? value.images.first : null,
-          ),
-          onShare: () => _share(
-            value.images.isNotEmpty ? value.images.first : null,
-          ),
+          onSave: () =>
+              _save(value.images.isNotEmpty ? value.images.first : null),
+          onShare: () =>
+              _share(value.images.isNotEmpty ? value.images.first : null),
           onShareWorkshop: () =>
               context.push('/share?taskId=${Uri.encodeComponent(value.id)}'),
           onToggleDraft: () => _toggleDraft(value.id, true),

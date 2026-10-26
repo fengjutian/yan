@@ -2,6 +2,7 @@ import 'package:ai_image_studio/features/assets/presentation/asset_upload_contro
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class AssetUploadPage extends ConsumerWidget {
   const AssetUploadPage({super.key});
@@ -67,12 +68,44 @@ class AssetUploadPage extends ConsumerWidget {
             const SizedBox(height: 12),
           ],
           if (state.uploadedAsset != null) ...[
-            const Card(
+            Card(
               child: ListTile(
-                leading: Icon(Icons.check_circle, color: Colors.green),
-                title: Text('图片已就绪'),
-                subtitle: Text('图片已保留在本机，可用于后续创作。'),
+                leading: const Icon(Icons.check_circle, color: Colors.green),
+                title: const Text('图片已就绪'),
+                subtitle: Text(
+                  localOnly ? '图片保留在本机，可直接进入编辑或风格迁移。' : '图片已上传，可继续编辑或提交 AI 创作。',
+                ),
               ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: state.previewBytes == null
+                        ? null
+                        : () => context.push(
+                            '/editor',
+                            extra: state.previewBytes,
+                          ),
+                    icon: const Icon(Icons.tune),
+                    label: const Text('去编辑'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: state.previewBytes == null
+                        ? null
+                        : () => context.push(
+                            '/style-transfer',
+                            extra: state.previewBytes,
+                          ),
+                    icon: const Icon(Icons.auto_awesome),
+                    label: const Text('AI 风格迁移'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
           ],

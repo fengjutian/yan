@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ai_image_studio/app/theme.dart';
@@ -8,6 +9,8 @@ import 'package:ai_image_studio/features/styles/presentation/styles_controller.d
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 风格迁移页:选风格 + 强度滑杆 + 保护开关 + 前后对比滑动。
 class StyleTransferPage extends ConsumerStatefulWidget {
@@ -48,9 +51,9 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         leading: BackButton(onPressed: () => context.pop()),
         actions: [
           IconButton(
-            tooltip: '前往分享工作台',
+            tooltip: '分享成片',
             icon: const Icon(Icons.share_outlined),
-            onPressed: () => context.push('/share'),
+            onPressed: _shareResult,
           ),
         ],
       ),
@@ -185,6 +188,37 @@ class _StyleTransferPageState extends ConsumerState<StyleTransferPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _shareResult() async {
+    final state = ref.read(styleTransferControllerProvider);
+    final bytes = state.resultBytes;
+    if (bytes != null) {
+      try {
+        final dir = await getTemporaryDirectory();
+        final file = File(
+          '${dir.path}/yan-style-${DateTime.now().millisecondsSinceEpoch}.jpg',
+        );
+        await file.writeAsBytes(bytes, flush: true);
+        await Share.shareXFiles([
+          XFile(file.path, mimeType: 'image/jpeg'),
+        ], text: '颜 · AI 生成');
+      } catch (error) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('分享失败：$error')));
+      }
+      return;
+    }
+    final taskId = state.taskId;
+    if (taskId != null && taskId.isNotEmpty) {
+      context.push('/task/$taskId');
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('尚无成片可分享')));
   }
 
   Future<void> _retryStyles() async {

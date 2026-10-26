@@ -335,10 +335,7 @@ class _TaskResult extends StatelessWidget {
       itemCount: task.images.length,
       itemBuilder: (context, index) => ClipRRect(
         borderRadius: BorderRadius.circular(16),
-        child: CreationImage(
-          image: task.images[index],
-          preferThumbnail: true,
-        ),
+        child: CreationImage(image: task.images[index], preferThumbnail: true),
       ),
     );
   }

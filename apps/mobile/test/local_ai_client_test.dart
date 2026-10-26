@@ -109,6 +109,30 @@ void main() {
     expect(adapter.lastPath, 'https://api.minimaxi.com/v1/image_generation');
     expect(adapter.lastData?['model'], 'image-01');
     expect(adapter.lastData?['subject_reference'], isNotEmpty);
+    expect(adapter.lastData?['aigc_watermark'], isTrue);
+  });
+
+  test('文生图直接调用 MiniMax 并默认开启 AI 标识', () async {
+    final adapter = _JsonAdapter('unused');
+    final client = LocalAIClient(
+      _MemorySettings(
+        const AISettings(enabled: true, preferLocal: true, apiKey: 'secret'),
+      ),
+      Dio(),
+      directClient: Dio()..httpClientAdapter = adapter,
+    );
+
+    final images = await client.textToImage(
+      prompt: '窗边人像',
+      aspectRatio: '3:4',
+      count: 2,
+    );
+
+    expect(images, hasLength(1));
+    expect(adapter.lastPath, 'https://api.minimaxi.com/v1/image_generation');
+    expect(adapter.lastData?['n'], 2);
+    expect(adapter.lastData?['aspect_ratio'], '3:4');
+    expect(adapter.lastData?['aigc_watermark'], isTrue);
   });
 }
 
@@ -143,7 +167,11 @@ class _JsonAdapter implements HttpClientAdapter {
     final isImage = options.path.endsWith('/image_generation');
     final body = isImage
         ? {
-            'data': {'image_base64': [base64Encode([4, 5, 6])]},
+            'data': {
+              'image_base64': [
+                base64Encode([4, 5, 6]),
+              ],
+            },
             'base_resp': {'status_code': 0, 'status_msg': 'success'},
           }
         : isBackend

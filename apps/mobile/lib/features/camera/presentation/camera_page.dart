@@ -914,12 +914,6 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (mounted && values.isNotEmpty) {
         setState(() => _capturedImage = values.first);
       }
-      if (_autoSave && values.isNotEmpty) {
-        unawaited(_saveToGallery(values.first, suffix: 'styled'));
-        if (_saveOriginalCopy && firstOriginal != null) {
-          unawaited(_saveToGallery(firstOriginal, suffix: 'original'));
-        }
-      }
       if (mounted) {
         setState(() {
           _processingStatus = '正在评选最佳照片';
@@ -935,6 +929,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
             },
           );
       final session = ref.read(cameraSessionProvider);
+      if (_autoSave) {
+        final best = session.selected;
+        if (best != null) {
+          unawaited(_saveToGallery(best.bytes, suffix: 'styled'));
+        }
+        if (_saveOriginalCopy && firstOriginal != null) {
+          unawaited(_saveToGallery(firstOriginal, suffix: 'original'));
+        }
+      }
       final size = controller.value.previewSize;
       if (analysisFile != null && size != null) {
         if (mounted) setState(() => _processingStatus = '正在分析构图');
@@ -1420,8 +1423,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
             children: [
               for (final ratio in const [
                 ('1:1', 1.0),
-                ('4:3', .75),
-                ('16:9', .5625),
+                ('3:4', .75),
+                ('9:16', .5625),
               ])
                 _CameraOption(
                   label: ratio.$1,

@@ -211,9 +211,7 @@ class GenerateRepository {
 
   void _requireBackend(String feature) {
     if (localOnly) {
-      throw StateError(
-        '$feature需要后端服务；独立模式暂未支持，请先在“AI 设置”中关闭本地直连',
-      );
+      throw StateError('$feature需要后端服务；独立模式暂未支持，请先在“AI 设置”中关闭本地直连');
     }
   }
 

@@ -77,8 +77,8 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
     if (!_loaded) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    final url = _imageUrl;
-    if (url == null) {
+    final image = _image;
+    if (image == null) {
       return Scaffold(
         appBar: AppBar(title: const Text('分享')),
         body: Center(
@@ -127,7 +127,7 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _PreviewCanvas(imageUrl: url, config: config),
+          _PreviewCanvas(image: image, config: config),
           const SizedBox(height: 16),
           _PlatformPicker(
             current: config.platform,
@@ -232,14 +232,13 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
   }
 
   Future<void> _saveToGallery(BuildContext context) async {
-    final url = _imageUrl;
-    if (url == null) return;
+    final image = _image;
+    if (image == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = _exportImage(
-        await _downloadImage(url),
-        ref.read(shareConfigProvider),
-      );
+      final source = await loadCreationImageBytes(image);
+      if (source == null) throw Exception('读取图片失败');
+      final bytes = _exportImage(source, ref.read(shareConfigProvider));
       final result = await SaverGallery.saveImage(
         bytes,
         fileName: 'yan-${DateTime.now().millisecondsSinceEpoch}',
@@ -265,14 +264,13 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
   }
 
   Future<void> _systemShare(BuildContext context) async {
-    final url = _imageUrl;
-    if (url == null) return;
+    final image = _image;
+    if (image == null) return;
     setState(() => _busy = true);
     try {
-      final bytes = _exportImage(
-        await _downloadImage(url),
-        ref.read(shareConfigProvider),
-      );
+      final source = await loadCreationImageBytes(image);
+      if (source == null) throw Exception('读取图片失败');
+      final bytes = _exportImage(source, ref.read(shareConfigProvider));
       final dir = await getTemporaryDirectory();
       final file = File(
         '${dir.path}/yan-${DateTime.now().millisecondsSinceEpoch}.png',
@@ -293,14 +291,6 @@ class _ShareWorkshopPageState extends ConsumerState<ShareWorkshopPage> {
       if (mounted) setState(() => _busy = false);
     }
   }
-}
-
-Future<Uint8List> _downloadImage(String url) async {
-  final response = await http.get(Uri.parse(url));
-  if (response.statusCode != 200) {
-    throw Exception('下载图片失败：HTTP ${response.statusCode}');
-  }
-  return response.bodyBytes;
 }
 
 /// 将预览中的裁剪比例和水印真正烘焙到导出文件中。
@@ -339,54 +329,48 @@ Uint8List _exportImage(Uint8List bytes, ShareConfig config) {
     }
   }
 
-  if (config.watermark != WatermarkPosition.hidden) {
-    const label = 'YAN AI';
-    final font = img.arial24;
-    final padding = (image.width * 0.015).round().clamp(8, 24).toInt();
-    final textWidth = label.length * 14;
-    final boxWidth = textWidth + padding * 2;
-    final boxHeight = 24 + padding * 2;
-    final margin = (image.width * 0.025).round().clamp(12, 40).toInt();
-    final (x, y) = switch (config.watermark) {
-      WatermarkPosition.bottomLeft => (
-        margin,
-        image.height - boxHeight - margin,
-      ),
-      WatermarkPosition.bottomRight => (
-        image.width - boxWidth - margin,
-        image.height - boxHeight - margin,
-      ),
-      WatermarkPosition.center => (
-        (image.width - boxWidth) ~/ 2,
-        (image.height - boxHeight) ~/ 2,
-      ),
-      WatermarkPosition.hidden => (0, 0),
-    };
-    img.fillRect(
-      image,
-      x1: x,
-      y1: y,
-      x2: x + boxWidth,
-      y2: y + boxHeight,
-      color: img.ColorRgba8(0, 0, 0, 150),
-      radius: 8,
-    );
-    img.drawString(
-      image,
-      label,
-      font: font,
-      x: x + padding,
-      y: y + padding,
-      color: img.ColorRgb8(255, 255, 255),
-    );
-  }
+  const label = 'YAN AI';
+  final font = img.arial24;
+  final padding = (image.width * 0.015).round().clamp(8, 24).toInt();
+  final textWidth = label.length * 14;
+  final boxWidth = textWidth + padding * 2;
+  final boxHeight = 24 + padding * 2;
+  final margin = (image.width * 0.025).round().clamp(12, 40).toInt();
+  final (x, y) = switch (config.watermark) {
+    WatermarkPosition.bottomLeft => (margin, image.height - boxHeight - margin),
+    WatermarkPosition.bottomRight => (
+      image.width - boxWidth - margin,
+      image.height - boxHeight - margin,
+    ),
+    WatermarkPosition.center => (
+      (image.width - boxWidth) ~/ 2,
+      (image.height - boxHeight) ~/ 2,
+    ),
+  };
+  img.fillRect(
+    image,
+    x1: x,
+    y1: y,
+    x2: x + boxWidth,
+    y2: y + boxHeight,
+    color: img.ColorRgba8(0, 0, 0, 150),
+    radius: 8,
+  );
+  img.drawString(
+    image,
+    label,
+    font: font,
+    x: x + padding,
+    y: y + padding,
+    color: img.ColorRgb8(255, 255, 255),
+  );
 
   return Uint8List.fromList(img.encodePng(image));
 }
 
 class _PreviewCanvas extends StatelessWidget {
-  const _PreviewCanvas({required this.imageUrl, required this.config});
-  final String imageUrl;
+  const _PreviewCanvas({required this.image, required this.config});
+  final GeneratedImage image;
   final ShareConfig config;
 
   @override
@@ -405,32 +389,32 @@ class _PreviewCanvas extends StatelessWidget {
       SharePlatform.portrait4x5 => '4:5',
       SharePlatform.story9x16 => '9:16',
     };
-    Widget image = ClipRRect(
+    Widget preview = ClipRRect(
       borderRadius: BorderRadius.circular(20),
-      child: CachedNetworkImage(
-        imageUrl: imageUrl,
+      child: CreationImage(
+        image: image,
         fit: aspect == null ? BoxFit.contain : BoxFit.cover,
       ),
     );
     if (aspect != null) {
-      image = AspectRatio(aspectRatio: aspect, child: image);
+      preview = AspectRatio(aspectRatio: aspect, child: preview);
     }
-    if (config.watermark != WatermarkPosition.hidden) {
-      image = Stack(
-        children: [
-          image,
+    preview = Stack(
+      children: [
+        preview,
+        if (config.watermark == WatermarkPosition.center)
+          const Positioned.fill(child: Center(child: _Watermark()))
+        else
           Positioned(
             left: config.watermark == WatermarkPosition.bottomLeft ? 12 : null,
             right: config.watermark == WatermarkPosition.bottomRight
                 ? 12
                 : null,
-            top: config.watermark == WatermarkPosition.center ? null : null,
             bottom: 12,
             child: _Watermark(),
           ),
-        ],
-      );
-    }
+      ],
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -454,7 +438,7 @@ class _PreviewCanvas extends StatelessWidget {
             color: Colors.black12,
             borderRadius: BorderRadius.circular(20),
           ),
-          child: image,
+          child: preview,
         ),
       ],
     );
@@ -462,6 +446,8 @@ class _PreviewCanvas extends StatelessWidget {
 }
 
 class _Watermark extends StatelessWidget {
+  const _Watermark();
+
   @override
   Widget build(BuildContext context) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -521,7 +507,6 @@ class _WatermarkPicker extends StatelessWidget {
           for (final w in WatermarkPosition.values)
             ChoiceChip(
               label: Text(switch (w) {
-                WatermarkPosition.hidden => '不添加',
                 WatermarkPosition.bottomLeft => '左下',
                 WatermarkPosition.bottomRight => '右下',
                 WatermarkPosition.center => '居中',

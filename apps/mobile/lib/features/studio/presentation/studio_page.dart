@@ -96,13 +96,6 @@ class StudioPage extends ConsumerWidget {
             onTap: () => context.push('/history'),
           ),
           const SizedBox(height: 12),
-          _StudioCard(
-            icon: Icons.share_outlined,
-            title: '分享工作台',
-            subtitle: '平台裁剪 / AI 文案 / 一键分享',
-            accent: const Color(0xFF4F786C),
-            onTap: () => context.push('/share'),
-          ),
         ],
       ),
     );

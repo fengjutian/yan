@@ -13,8 +13,8 @@ enum SharePlatform {
   final String label;
 }
 
-/// 分享用的水印位置。
-enum WatermarkPosition { hidden, bottomLeft, bottomRight, center }
+/// 分享用的水印位置。AI 生成内容必须保留标识，因此不提供“关闭”选项。
+enum WatermarkPosition { bottomLeft, bottomRight, center }
 
 @immutable
 class ShareConfig {

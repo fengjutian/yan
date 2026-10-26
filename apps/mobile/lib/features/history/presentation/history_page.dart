@@ -65,10 +65,7 @@ class _HistoryPageState extends ConsumerState<HistoryPage> {
                       color: Colors.black12,
                       child: Icon(Icons.image_not_supported_outlined),
                     )
-                  : CreationImage(
-                      image: image,
-                      preferThumbnail: true,
-                    ),
+                  : CreationImage(image: image, preferThumbnail: true),
             ),
           );
         },

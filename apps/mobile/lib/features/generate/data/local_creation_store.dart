@@ -25,7 +25,8 @@ class LocalCreationStore {
   final _uuid = const Uuid();
 
   Future<Directory> _root() async {
-    final root = _rootOverride ??
+    final root =
+        _rootOverride ??
         Directory(
           '${(await getApplicationSupportDirectory()).path}'
           '${Platform.pathSeparator}creations',
@@ -225,12 +226,11 @@ class LocalCreationStore {
       'style_id': task.styleId,
       'error_code': task.errorCode,
       'error_message': task.errorMessage,
-      'created_at': (task.createdAt ?? DateTime.now().toUtc()).toIso8601String(),
+      'created_at': (task.createdAt ?? DateTime.now().toUtc())
+          .toIso8601String(),
       'images': images,
     };
-    final target = File(
-      '${dir.path}${Platform.pathSeparator}$_metaFileName',
-    );
+    final target = File('${dir.path}${Platform.pathSeparator}$_metaFileName');
     final temporary = File('${target.path}.tmp');
     await temporary.writeAsString(jsonEncode(payload), flush: true);
     if (await target.exists()) {
@@ -266,9 +266,7 @@ class LocalCreationStore {
     return ImageTask(
       id: raw['id']?.toString() ?? '',
       status: raw['status']?.toString() ?? 'FAILED',
-      progress: raw['progress'] is num
-          ? (raw['progress'] as num).round()
-          : 0,
+      progress: raw['progress'] is num ? (raw['progress'] as num).round() : 0,
       prompt: raw['prompt']?.toString() ?? '',
       images: images,
       errorCode: raw['error_code']?.toString(),

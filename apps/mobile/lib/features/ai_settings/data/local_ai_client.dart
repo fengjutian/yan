@@ -139,9 +139,7 @@ class LocalAIClient {
     );
     final baseResponse = response.data?['base_resp'];
     if (baseResponse is Map && baseResponse['status_code'] != 0) {
-      throw StateError(
-        baseResponse['status_msg']?.toString() ?? '图片生成失败',
-      );
+      throw StateError(baseResponse['status_msg']?.toString() ?? '图片生成失败');
     }
     final data = response.data?['data'];
     final images = data is Map ? data['image_base64'] : null;

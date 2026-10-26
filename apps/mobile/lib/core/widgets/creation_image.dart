@@ -57,9 +57,7 @@ class CreationImage extends StatelessWidget {
     return errorWidget ??
         ColoredBox(
           color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          child: const Center(
-            child: Icon(Icons.image_not_supported_outlined),
-          ),
+          child: const Center(child: Icon(Icons.image_not_supported_outlined)),
         );
   }
 }

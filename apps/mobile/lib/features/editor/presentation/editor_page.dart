@@ -1,12 +1,18 @@
+import 'dart:io';
+
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/features/editor/presentation/editor_controller.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:saver_gallery/saver_gallery.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 图片编辑器：裁剪 / 旋转 / 翻转 / 亮度 / 对比度 / 饱和度。
-/// 后端不做图像处理，本地 image 包完成。完成后 bytes 走"分享工作台"链路。
+/// 后端不做图像处理，本地 image 包完成。
 class EditorPage extends ConsumerStatefulWidget {
   const EditorPage({this.sourceBytes, super.key});
   final Uint8List? sourceBytes;
@@ -16,34 +22,43 @@ class EditorPage extends ConsumerStatefulWidget {
 }
 
 class _EditorPageState extends ConsumerState<EditorPage> {
-  Uint8List? _fallback;
+  Uint8List? _sourceBytes;
   Uint8List? _exportPreview;
   bool _exporting = false;
+  bool _saving = false;
 
   @override
   void initState() {
     super.initState();
-    if (widget.sourceBytes == null) {
-      _fallback = _placeholder();
-    }
-  }
-
-  Uint8List _placeholder() {
-    final cm = Uint8List(64 * 64 * 4);
-    for (var i = 0; i < cm.length; i += 4) {
-      cm[i] = 230;
-      cm[i + 1] = 211;
-      cm[i + 2] = 184;
-      cm[i + 3] = 255;
-    }
-    return cm;
+    _sourceBytes = widget.sourceBytes;
   }
 
   @override
   Widget build(BuildContext context) {
-    final bytes = widget.sourceBytes ?? _fallback;
+    final bytes = _sourceBytes;
     if (bytes == null) {
-      return const Scaffold(body: Center(child: Text('没有可编辑的图片')));
+      return Scaffold(
+        appBar: AppBar(title: const Text('图片编辑器')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.photo_library_outlined, size: 56),
+                const SizedBox(height: 12),
+                const Text('选择一张照片开始编辑'),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _pickSource,
+                  icon: const Icon(Icons.add_photo_alternate_outlined),
+                  label: const Text('从相册选择'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
     final state = ref.watch(editorControllerProvider(bytes));
     final controller = ref.read(editorControllerProvider(bytes).notifier);
@@ -55,7 +70,7 @@ class _EditorPageState extends ConsumerState<EditorPage> {
           if (state.isDirty)
             TextButton(onPressed: controller.reset, child: const Text('重置')),
           TextButton(
-            onPressed: _exporting ? null : () => _export(bytes, state),
+            onPressed: _exporting ? null : () => _export(state),
             child: const Text('完成'),
           ),
         ],
@@ -87,26 +102,117 @@ class _EditorPageState extends ConsumerState<EditorPage> {
               ),
             ),
           ),
-          if (_exporting) const LinearProgressIndicator(),
+          if (_exporting || _saving) const LinearProgressIndicator(),
+          if (_exportPreview != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _saving ? null : _saveToGallery,
+                      icon: const Icon(Icons.download_outlined),
+                      label: const Text('保存到相册'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _saving ? null : _share,
+                      icon: const Icon(Icons.share_outlined),
+                      label: const Text('分享'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           _AdjustPanel(state: state, controller: controller),
         ],
       ),
     );
   }
 
-  Future<void> _export(Uint8List bytes, EditorState s) async {
+  Future<void> _pickSource() async {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 4096,
+      maxHeight: 4096,
+      imageQuality: 95,
+    );
+    if (file == null) return;
+    final bytes = await file.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _sourceBytes = bytes;
+      _exportPreview = null;
+    });
+  }
+
+  Future<void> _export(EditorState state) async {
     setState(() => _exporting = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final result = await compute(applyAdjustments, s);
+      final result = await compute(applyAdjustments, state);
       if (!mounted) return;
       setState(() => _exportPreview = result);
-      messenger.showSnackBar(const SnackBar(content: Text('导出完成，可前往分享')));
+      messenger.showSnackBar(const SnackBar(content: Text('导出完成，可保存或分享')));
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text('导出失败：$e')));
     } finally {
       if (mounted) setState(() => _exporting = false);
+    }
+  }
+
+  Future<void> _saveToGallery() async {
+    final bytes = _exportPreview;
+    if (bytes == null) return;
+    setState(() => _saving = true);
+    try {
+      final result = await SaverGallery.saveImage(
+        bytes,
+        fileName: 'yan-edit-${DateTime.now().millisecondsSinceEpoch}',
+        albumPath: 'Yan',
+        skipIfExists: false,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            result.isSuccess ? '已保存到相册' : '保存失败：${result.errorMessage}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _share() async {
+    final bytes = _exportPreview;
+    if (bytes == null) return;
+    setState(() => _saving = true);
+    try {
+      final dir = await getTemporaryDirectory();
+      final file = File(
+        '${dir.path}/yan-edit-${DateTime.now().millisecondsSinceEpoch}.png',
+      );
+      await file.writeAsBytes(bytes, flush: true);
+      await Share.shareXFiles([
+        XFile(file.path, mimeType: 'image/png'),
+      ], text: '颜 · AI 编辑');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('分享失败：$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 }
