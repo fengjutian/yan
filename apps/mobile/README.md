@@ -33,6 +33,10 @@ flutter build apk --debug
 flutter build appbundle --release
 ```
 
+Android 商店包必须使用正式上传密钥。先将 `android/key.properties.example`
+复制为 `android/key.properties`，填写上传密钥信息，再执行 AAB 构建。密钥配置和
+`*.jks`/`*.keystore` 已被 Git 忽略；Release 构建不会回退使用调试签名。
+
 iOS 最低版本为 **15.5**（ML Kit 要求），Podfile 已固定平台版本。iOS 构建需要在 macOS 上执行：
 
 ```bash

@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/core/compliance/ai_consent.dart';
 import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/ai_settings/data/ai_settings_repository.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
@@ -28,6 +29,7 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
   Future<void> _openAiAssistant(GenerateController controller) async {
     final prompt = _promptController.text.trim();
     if (prompt.isNotEmpty) {
+      if (!await AiConsent.ensure(context) || !mounted) return;
       _previousPrompt = prompt;
       final result = await controller.enhancePrompt();
       if (result == null || !mounted) return;
@@ -70,6 +72,11 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
       selection: TextSelection.collapsed(offset: result.length),
     );
     controller.setPrompt(result);
+  }
+
+  Future<void> _generate(GenerateController controller) async {
+    if (!await AiConsent.ensure(context) || !mounted) return;
+    await controller.generate();
   }
 
   @override
@@ -190,10 +197,14 @@ class _GeneratePageState extends ConsumerState<GeneratePage> {
                 state.submitting ||
                     (state.task != null && !state.task!.isTerminal)
                 ? null
-                : controller.generate,
+                : () => _generate(controller),
             icon: const Icon(Icons.auto_awesome),
             label: Text(
-              state.submitting ? '正在提交…' : '开始生成（${state.count * 10} 积分）',
+              state.submitting
+                  ? '正在提交…'
+                  : ai.preferLocal
+                  ? '开始生成'
+                  : '开始生成（${state.count * 10} 积分）',
             ),
           ),
           if (state.task != null) ...[
