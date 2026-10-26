@@ -204,6 +204,14 @@ class LocalCreationStore {
     }
   }
 
+  /// 清除本机所有作品。用于“清除本地数据”和隐私合规。
+  Future<void> deleteAll() async {
+    final root = await _root();
+    await for (final entity in root.list(followLinks: false)) {
+      await entity.delete(recursive: true);
+    }
+  }
+
   Future<void> _writeMeta(Directory dir, ImageTask task) async {
     final images = <Map<String, dynamic>>[];
     for (final image in task.images) {

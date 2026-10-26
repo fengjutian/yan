@@ -155,6 +155,12 @@ class LocalCollectionService {
     await _prefs.setStringList(_favKey, cur.toList());
   }
 
+  Future<void> removeFavorite(String taskId) async {
+    final cur = await favorites();
+    cur.remove(taskId);
+    await _prefs.setStringList(_favKey, cur.toList());
+  }
+
   Future<void> addDraft(String taskId) async {
     final cur = await drafts();
     cur.add(taskId);
@@ -165,6 +171,11 @@ class LocalCollectionService {
     final cur = await drafts();
     cur.remove(taskId);
     await _prefs.setStringList(_draftKey, cur.toList());
+  }
+
+  Future<void> clear() async {
+    await _prefs.remove(_favKey);
+    await _prefs.remove(_draftKey);
   }
 }
 

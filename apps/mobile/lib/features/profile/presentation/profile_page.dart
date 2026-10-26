@@ -1,6 +1,9 @@
 import 'package:ai_image_studio/app/theme_controller.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
+import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
+import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -34,6 +37,11 @@ class ProfilePage extends ConsumerWidget {
               icon: Icons.favorite_outline,
               label: '我的收藏',
               onTap: () => context.push('/me/favorites'),
+            ),
+            _ProfileTile(
+              icon: Icons.delete_sweep_outlined,
+              label: '清除本地作品',
+              onTap: () => _clearLocalWorks(context, ref),
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -83,17 +91,60 @@ class ProfilePage extends ConsumerWidget {
               onTap: () => _showPrivacySheet(context),
             ),
             const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: state.submitting
-                  ? null
-                  : () => ref.read(authControllerProvider.notifier).logout(),
-              icon: const Icon(Icons.logout),
-              label: const Text('退出登录'),
-            ),
+            if (!isGuest)
+              OutlinedButton.icon(
+                onPressed: state.submitting
+                    ? null
+                    : () => ref.read(authControllerProvider.notifier).logout(),
+                icon: const Icon(Icons.logout),
+                label: const Text('退出登录'),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _clearLocalWorks(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('清除本地作品'),
+        content: const Text('会删除本机保存的全部图片、缩略图和作品记录，无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('清除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    try {
+      await ref.read(localCreationStoreProvider).deleteAll();
+      ref.invalidate(historyControllerProvider);
+      try {
+        final collections = ref.read(localCollectionServiceProvider);
+        await collections.clear();
+        ref.invalidate(favoritesProvider);
+        ref.invalidate(draftsProvider);
+      } catch (_) {
+        // SharedPreferences 尚未初始化时，作品库清除仍应成功。
+      }
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('本地作品已清除')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('清除失败：$error')));
+    }
   }
 
   void _showMembershipDialog(BuildContext context) {

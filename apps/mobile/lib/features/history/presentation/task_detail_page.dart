@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:ai_image_studio/app/theme.dart';
 import 'package:ai_image_studio/core/widgets/creation_image.dart';
 import 'package:ai_image_studio/features/generate/data/image_task.dart';
+import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
 import 'package:ai_image_studio/features/history/presentation/history_controller.dart';
 import 'package:ai_image_studio/features/share/presentation/share_controller.dart';
@@ -69,6 +70,12 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
                   icon: const Icon(Icons.edit_note),
                   onPressed: () => _toggleDraft(t.id, true),
                 ),
+                if (t.isLocal)
+                  IconButton(
+                    tooltip: '删除作品',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteLocal(t.id),
+                  ),
               ],
             ),
             orElse: () => const SizedBox.shrink(),
@@ -217,6 +224,47 @@ class _TaskDetailPageState extends ConsumerState<TaskDetailPage> {
       ).showSnackBar(SnackBar(content: Text('重试失败：$error')));
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteLocal(String taskId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('删除作品'),
+        content: const Text('删除后本机图片和记录都会被移除，无法恢复。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref.read(localCreationStoreProvider).delete(taskId);
+      try {
+        final collections = ref.read(localCollectionServiceProvider);
+        await collections.removeFavorite(taskId);
+        await collections.removeDraft(taskId);
+        ref.invalidate(favoritesProvider);
+        ref.invalidate(draftsProvider);
+      } catch (_) {
+        // 收藏/草稿清理失败不应阻塞作品删除。
+      }
+      ref.invalidate(historyControllerProvider);
+      if (!mounted) return;
+      context.pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('删除失败：$error')));
     }
   }
 

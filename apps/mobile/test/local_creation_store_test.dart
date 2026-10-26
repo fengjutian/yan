@@ -69,6 +69,50 @@ void main() {
     expect(await store.find(task.id), isNull);
     expect(await store.list(), isEmpty);
   });
+
+  test('相机/编辑作品也能进入本地作品库', () async {
+    final camera = await store.saveSuccess(
+      prompt: '相机拍摄',
+      aspectRatio: '3:4',
+      count: 1,
+      type: 'CAMERA',
+      images: [_png(90, 120)],
+    );
+    final edit = await store.saveSuccess(
+      prompt: '图片编辑',
+      aspectRatio: '1:1',
+      count: 1,
+      type: 'EDIT',
+      images: [_png(80, 80)],
+    );
+
+    expect(camera.isLocal, isTrue);
+    expect(edit.isLocal, isTrue);
+    expect(
+      (await store.list()).map((item) => item.type),
+      containsAll(<String>['CAMERA', 'EDIT']),
+    );
+  });
+
+  test('清除全部作品', () async {
+    await store.saveSuccess(
+      prompt: 'a',
+      aspectRatio: '1:1',
+      count: 1,
+      type: 'CAMERA',
+      images: [_png(32, 32)],
+    );
+    await store.saveFailure(
+      prompt: 'b',
+      aspectRatio: '1:1',
+      count: 1,
+      type: 'TEXT_TO_IMAGE',
+      errorMessage: 'failed',
+    );
+
+    await store.deleteAll();
+    expect(await store.list(), isEmpty);
+  });
 }
 
 Uint8List _png(int width, int height) {
