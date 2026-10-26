@@ -15,6 +15,15 @@ class AuthUser {
 
   bool get isGuest => role == 'GUEST';
 
+  /// 独立客户端在无法连接后端时使用的本地游客身份。
+  factory AuthUser.localGuest() => const AuthUser(
+    id: 'local-guest',
+    email: '',
+    nickname: '游客',
+    creditsBalance: 0,
+    role: 'GUEST',
+  );
+
   factory AuthUser.fromJson(Map<String, dynamic> json) => AuthUser(
     id: (json['id'] as String?) ?? '',
     email: (json['email'] as String?) ?? '',

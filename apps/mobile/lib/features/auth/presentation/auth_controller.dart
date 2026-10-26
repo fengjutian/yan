@@ -97,13 +97,19 @@ class AuthController extends StateNotifier<AuthState> {
       }
       state = AuthState(user: user, initialized: true);
     } catch (error) {
-      // 初始化失败时不要卡在 splash,带上错误但不阻塞后续 retry。
-      state = AuthState(initialized: true, errorMessage: error.toString());
+      // 独立客户端不依赖后端也能使用拍摄/编辑/本地作品；
+      // 后端不可用时退化为本地游客，避免整个 App 处于无会话状态。
+      state = AuthState(
+        user: AuthUser.localGuest(),
+        initialized: true,
+        errorMessage: error.toString(),
+      );
     }
   }
 
   Future<void> refreshProfile() async {
-    // 简单的去重:30 秒内不重复打 /me
+    if (state.user?.id == 'local-guest') return;
+    // 简单的去重: 30 秒内不重复打 /me
     final now = DateTime.now();
     if (now.difference(_lastRefreshAt).inSeconds < 30) return;
     _lastRefreshAt = now;
@@ -117,10 +123,14 @@ class AuthController extends StateNotifier<AuthState> {
     }
   }
 
-  /// 来自 [ApiClient] 的 401 通知:refresh_token 已失效,强制进入未登录态。
+  /// 来自 [ApiClient] 的 401 通知: refresh_token 已失效,退回本地游客态，
+  /// 保证本地功能不被登录状态卡死。
   void onSessionInvalidated() {
-    if (!state.initialized) return;
-    state = AuthState(initialized: true, errorMessage: '登录已过期,请重新登录');
+    state = AuthState(
+      user: AuthUser.localGuest(),
+      initialized: true,
+      errorMessage: '登录已过期，已切换为本地游客',
+    );
   }
 
   DateTime _lastRefreshAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -145,7 +155,10 @@ class AuthController extends StateNotifier<AuthState> {
 
   Future<void> logout() async {
     await _repository.logout();
-    state = const AuthState(initialized: true);
+    state = AuthState(
+      user: AuthUser.localGuest(),
+      initialized: true,
+    );
   }
 
   Future<bool> _submit(Future<AuthSession> Function() operation) async {

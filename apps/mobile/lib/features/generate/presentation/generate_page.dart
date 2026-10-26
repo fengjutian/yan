@@ -3,6 +3,7 @@ import 'package:ai_image_studio/features/generate/data/image_task.dart';
 import 'package:ai_image_studio/features/generate/presentation/generate_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 class GeneratePage extends ConsumerStatefulWidget {
   const GeneratePage({super.key});
@@ -318,25 +319,41 @@ class _TaskResult extends StatelessWidget {
             Icons.error_outline,
             color: Theme.of(context).colorScheme.error,
           ),
-          title: const Text('生成失败，积分已退回'),
+          title: Text(task.isLocal ? '生成失败' : '生成失败，积分已退回'),
           subtitle: Text(task.errorMessage ?? '请稍后重试'),
           trailing: TextButton(onPressed: onRetry, child: const Text('重试')),
         ),
       );
     }
-    return GridView.builder(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: task.images.length,
-      itemBuilder: (context, index) => ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: CreationImage(image: task.images[index], preferThumbnail: true),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: task.images.length,
+          itemBuilder: (context, index) => ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: CreationImage(
+              image: task.images[index],
+              preferThumbnail: true,
+            ),
+          ),
+        ),
+        if (task.images.isNotEmpty)
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => context.push('/task/${task.id}'),
+              child: const Text('查看作品 →'),
+            ),
+          ),
+      ],
     );
   }
 }
