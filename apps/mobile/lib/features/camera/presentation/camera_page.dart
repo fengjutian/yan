@@ -2161,6 +2161,25 @@ class _CameraPageState extends ConsumerState<CameraPage>
                 },
               ),
             ),
+          if (ref.watch(cameraSessionProvider).selected case final selected?)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(
+                    Icons.auto_awesome,
+                    color: Color(0xFFFFD60A),
+                    size: 14,
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '智能选片：${selected.qualityLabel} · ${selected.score.round()} 分',
+                    style: const TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
             child: Text(

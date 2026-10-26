@@ -30,5 +30,29 @@ void main() {
           ..sort((a, b) => b.compareTo(a)),
       ),
     );
+    for (final item in controller.state.photos) {
+      expect(item.sharpness, inInclusiveRange(0, 100));
+      expect(item.exposure, inInclusiveRange(0, 100));
+      expect(item.contrast, inInclusiveRange(0, 100));
+      expect(item.clippingPenalty, inInclusiveRange(0, 100));
+      expect(item.qualityLabel, isNotEmpty);
+    }
+  });
+
+  test('感知哈希会移除完全相同的连拍照片', () async {
+    final image = img.Image(width: 32, height: 32);
+    for (var y = 0; y < image.height; y++) {
+      for (var x = 0; x < image.width; x++) {
+        final value = (x * 7 + y * 3).clamp(0, 255);
+        image.setPixelRgb(x, y, value, 160, 110);
+      }
+    }
+    final bytes = Uint8List.fromList(img.encodeJpg(image));
+    final controller = CameraSessionController();
+
+    await controller.setPhotos([bytes, bytes, bytes]);
+
+    expect(controller.state.photos, hasLength(1));
+    expect(controller.state.selected, isNotNull);
   });
 }
