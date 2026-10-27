@@ -118,6 +118,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _pausedByLifecycle = false;
   bool _releasedForLifecycle = false;
   bool _pausedByRoute = false;
+  bool _openingProDebug = false;
   Route<dynamic>? _route;
   Future<void> _lifecycleQueue = Future.value();
   bool _capturing = false;
@@ -1161,6 +1162,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   Future<void> _resumeForRoute() async {
     if (!_pausedByRoute) return;
     _pausedByRoute = false;
+    // 专业模式调试页返回时由 _openProDebug 统一重新初始化，避免双开。
+    if (_openingProDebug) return;
     if (!mounted || _pausedByLifecycle) return;
     if (_releasedForLifecycle) {
       _releasedForLifecycle = false;
@@ -1948,6 +1951,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   Future<void> _openProDebug() async {
     final lensId = _activeNativeLens?.id;
+    _openingProDebug = true;
     _stopStreamWatchdog();
     final controller = _controller;
     _controller = null;
@@ -1959,14 +1963,18 @@ class _CameraPageState extends ConsumerState<CameraPage>
         _clearPortraitHint();
       });
     }
-    await controller?.dispose();
-    if (!mounted) return;
-    final query = lensId == null || lensId.isEmpty
-        ? ''
-        : '?lensId=${Uri.encodeComponent(lensId)}';
-    await context.push('/debug/pro-camera$query');
-    if (!mounted) return;
-    await _initializeCamera(_activeIndex);
+    try {
+      await controller?.dispose();
+      if (!mounted) return;
+      final query = lensId == null || lensId.isEmpty
+          ? ''
+          : '?lensId=${Uri.encodeComponent(lensId)}';
+      await context.push('/debug/pro-camera$query');
+      if (!mounted) return;
+      await _initializeCamera(_activeIndex);
+    } finally {
+      _openingProDebug = false;
+    }
   }
 
   void _showMessage(String message) => ScaffoldMessenger.of(context)

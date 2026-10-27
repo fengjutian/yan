@@ -23,6 +23,8 @@ class _ProCameraPageState extends State<ProCameraPage> {
   Uint8List? _captured;
   bool _loading = true;
   bool _capturing = false;
+  bool _canPop = false;
+  bool _closing = false;
 
   @override
   void initState() {
@@ -32,8 +34,19 @@ class _ProCameraPageState extends State<ProCameraPage> {
 
   @override
   void dispose() {
-    unawaited(_service.close());
+    if (!_closing) unawaited(_service.close());
     super.dispose();
+  }
+
+  Future<void> _closeAndPop() async {
+    if (_closing) return;
+    _closing = true;
+    await _service.close();
+    if (!mounted) return;
+    setState(() => _canPop = true);
+    // 等 PopScope 收到 canPop 更新后再主动 pop，避免被拦截。
+    await WidgetsBinding.instance.endOfFrame;
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _open() async {
@@ -79,55 +92,61 @@ class _ProCameraPageState extends State<ProCameraPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (_info != null) _buildPreview(_info!),
-            if (_loading)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-            if (_error != null) _buildError(_error!),
-            Positioned(
-              left: 8,
-              top: 4,
-              child: IconButton(
-                tooltip: '返回',
-                onPressed: () => Navigator.of(context).maybePop(),
-                icon: const Icon(Icons.close_rounded, color: Colors.white),
-              ),
-            ),
-            if (_info != null && _captured == null)
+    return PopScope<Object?>(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) unawaited(_closeAndPop());
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: SafeArea(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (_info != null) _buildPreview(_info!),
+              if (_loading)
+                const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+              if (_error != null) _buildError(_error!),
               Positioned(
-                left: 0,
-                right: 0,
-                bottom: 24,
-                child: Center(
-                  child: GestureDetector(
-                    onTap: _capture,
-                    child: Container(
-                      width: 74,
-                      height: 74,
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 3),
-                      ),
-                      child: DecoratedBox(
+                left: 8,
+                top: 4,
+                child: IconButton(
+                  tooltip: '返回',
+                  onPressed: () => unawaited(_closeAndPop()),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white),
+                ),
+              ),
+              if (_info != null && _captured == null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 24,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _capture,
+                      child: Container(
+                        width: 74,
+                        height: 74,
+                        padding: const EdgeInsets.all(6),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: _capturing ? Colors.white38 : Colors.white,
+                          border: Border.all(color: Colors.white, width: 3),
+                        ),
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _capturing ? Colors.white38 : Colors.white,
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            if (_captured != null) _buildCaptured(_captured!),
-          ],
+              if (_captured != null) _buildCaptured(_captured!),
+            ],
+          ),
         ),
       ),
     );
