@@ -109,6 +109,26 @@ class MainActivity : FlutterActivity() {
                     proCameraSession = null
                     result.success(null)
                 }
+                "setManual" -> {
+                    val session = proCameraSession
+                    if (session == null) {
+                        result.error("not-open", "专业模式未打开", null)
+                    } else {
+                        @Suppress("UNCHECKED_CAST")
+                        val args = call.arguments as? Map<String, Any?> ?: emptyMap()
+                        session.setManual(args) { error ->
+                            if (error != null) {
+                                result.error(
+                                    "manual-failed",
+                                    error.message ?: "手动参数应用失败",
+                                    null,
+                                )
+                            } else {
+                                result.success(null)
+                            }
+                        }
+                    }
+                }
                 "isSupported" -> result.success(true)
                 else -> result.notImplemented()
             }

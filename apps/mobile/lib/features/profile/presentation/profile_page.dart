@@ -1,4 +1,5 @@
 import 'package:ai_image_studio/app/theme_controller.dart';
+import 'package:ai_image_studio/core/config/app_config.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:ai_image_studio/features/generate/data/local_creation_store.dart';
@@ -53,12 +54,16 @@ class ProfilePage extends ConsumerWidget {
               secondary: const Icon(Icons.offline_bolt_outlined),
               title: const Text('本地直连大模型'),
               subtitle: Text(
-                aiSettings.settings.preferLocal
+                !AppConfig.backendEnabled
+                    ? '本地模式 · 使用本机 API Key 直连服务商'
+                    : aiSettings.settings.preferLocal
                     ? '已开启 · 使用本机 API Key 直连服务商'
                     : '已关闭 · 上传与 AI 任务使用后端服务',
               ),
-              value: aiSettings.settings.preferLocal,
-              onChanged: aiSettings.loading
+              value: AppConfig.backendEnabled
+                  ? aiSettings.settings.preferLocal
+                  : true,
+              onChanged: (!AppConfig.backendEnabled || aiSettings.loading)
                   ? null
                   : (value) => ref
                         .read(aiSettingsControllerProvider.notifier)

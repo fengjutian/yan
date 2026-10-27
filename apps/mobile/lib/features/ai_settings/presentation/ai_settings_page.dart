@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/core/config/app_config.dart';
 import 'package:ai_image_studio/features/ai_settings/data/ai_settings_repository.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_controller.dart';
 import 'package:flutter/material.dart';
@@ -104,11 +105,19 @@ class _AISettingsPageState extends ConsumerState<AISettingsPage> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('本地直连大模型'),
-                  subtitle: const Text('使用本机保存的 API Key 直接请求服务商'),
-                  value: state.settings.preferLocal,
-                  onChanged: (value) => ref
-                      .read(aiSettingsControllerProvider.notifier)
-                      .setPreferLocal(value),
+                  subtitle: Text(
+                    AppConfig.backendEnabled
+                        ? '使用本机保存的 API Key 直接请求服务商'
+                        : '当前版本仅支持本地直连（云端服务未启用）',
+                  ),
+                  value: AppConfig.backendEnabled
+                      ? state.settings.preferLocal
+                      : true,
+                  onChanged: AppConfig.backendEnabled
+                      ? (value) => ref
+                            .read(aiSettingsControllerProvider.notifier)
+                            .setPreferLocal(value)
+                      : null,
                 ),
                 TextField(
                   controller: _apiKey,

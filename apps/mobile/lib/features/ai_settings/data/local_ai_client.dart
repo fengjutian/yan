@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:ai_image_studio/core/config/app_config.dart';
 import 'package:ai_image_studio/features/ai_settings/data/ai_settings_repository.dart';
 import 'package:dio/dio.dart';
 
@@ -21,6 +22,10 @@ class LocalAIClient {
     String systemMessage = promptSystemMessage,
   }) async {
     final settings = await _settings.load();
+    if (!settings.preferLocal && !AppConfig.backendEnabled) {
+      // 商店版本关闭了开发者后端，只有 BYOK 本地直连可用。
+      throw StateError('当前版本未启用云端服务，请在 AI 设置中开启“本地直连大模型”');
+    }
     if (settings.preferLocal) {
       if (!settings.canCallLocally) {
         throw StateError('请先在 AI 设置中配置并启用 MiniMax/DeepSeek API Key');

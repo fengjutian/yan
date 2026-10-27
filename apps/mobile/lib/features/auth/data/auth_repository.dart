@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/core/config/app_config.dart';
 import 'package:ai_image_studio/core/network/api_client.dart';
 import 'package:ai_image_studio/core/network/api_exception.dart';
 import 'package:ai_image_studio/core/storage/token_storage.dart';
@@ -15,6 +16,7 @@ class AuthRepository {
   final TokenStorage _tokenStorage;
 
   Future<AuthSession> login({required String email, required String password}) {
+    _requireBackend();
     return _authenticate('/auth/login', {
       'email': email,
       'password': password,
@@ -27,6 +29,7 @@ class AuthRepository {
     required String password,
     required String nickname,
   }) {
+    _requireBackend();
     return _authenticate('/auth/register', {
       'email': email,
       'password': password,
@@ -36,13 +39,14 @@ class AuthRepository {
   }
 
   Future<AuthSession> guest() {
+    _requireBackend();
     return _authenticate('/auth/guest', {'device_name': 'flutter-guest'});
   }
 
   Future<void> logout() async {
     final refreshToken = await _tokenStorage.readRefreshToken();
     try {
-      if (refreshToken != null) {
+      if (refreshToken != null && AppConfig.backendEnabled) {
         await _apiClient.dio.post<void>(
           '/auth/logout',
           data: {'refresh_token': refreshToken},
@@ -56,6 +60,11 @@ class AuthRepository {
   }
 
   Future<AuthUser?> restoreSession() async {
+    if (!AppConfig.backendEnabled) {
+      // 本地模式没有账号体系，残留凭据直接清掉。
+      await _tokenStorage.clear();
+      return null;
+    }
     final refreshToken = await _tokenStorage.readRefreshToken();
     if (refreshToken == null) return null;
     try {
@@ -88,5 +97,15 @@ class AuthRepository {
     } on DioException catch (error) {
       throw ApiException.fromDio(error);
     }
+  }
+
+  /// 本地模式的商店包没有账号后端，登录/注册入口要给用户明确提示，
+  /// 而不是抛一个看不懂的网络错误。
+  void _requireBackend() {
+    if (AppConfig.backendEnabled) return;
+    throw const ApiException(
+      code: 'BACKEND_DISABLED',
+      message: '当前版本仅支持本地使用，未启用账号服务',
+    );
   }
 }

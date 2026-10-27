@@ -47,8 +47,27 @@ android {
     buildTypes {
         release {
             // 本地未配置密钥时仍允许编译 release APK 做验收，但绝不回退到
-            // debug 密钥。商店 AAB 必须在 android/key.properties 中配置正式密钥。
+            // debug 密钥。商店包必须在 android/key.properties 中配置正式密钥，
+            // 由 tool/build_android_release.ps1 在打包前强校验。
             signingConfig = signingConfigs.findByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
+        }
+    }
+
+    packaging {
+        resources {
+            // ML Kit / CameraX 的 aar 里带有大量 META-INF 许可文件，
+            // 不排除会在打包期报 "More than one file was found"。
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE*",
+                "META-INF/NOTICE*",
+            )
         }
     }
 }

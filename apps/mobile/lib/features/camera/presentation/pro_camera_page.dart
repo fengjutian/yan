@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:ai_image_studio/features/camera/data/manual_camera_controls.dart';
 import 'package:ai_image_studio/features/camera/data/pro_camera_service.dart';
+import 'package:ai_image_studio/features/camera/presentation/camera_widgets.dart';
 import 'package:flutter/material.dart';
 
-/// Android 原生专业模式 P0 验证页。
+/// Android 原生专业模式验证页。
 ///
-/// 只验证 CameraX 纹理预览、自动拍照和会话关闭；手动参数在 P1 接入。
+/// P0 验证纹理预览和自动拍照；P1 起接入 ISO/快门/白平衡/对焦。
 class ProCameraPage extends StatefulWidget {
   const ProCameraPage({super.key, this.lensId});
 
@@ -25,6 +27,9 @@ class _ProCameraPageState extends State<ProCameraPage> {
   bool _capturing = false;
   bool _canPop = false;
   bool _closing = false;
+  ManualCameraSettings _manualSettings = ManualCameraSettings.auto;
+  Timer? _manualTimer;
+  bool _applyingManual = false;
 
   @override
   void initState() {
@@ -34,6 +39,7 @@ class _ProCameraPageState extends State<ProCameraPage> {
 
   @override
   void dispose() {
+    _manualTimer?.cancel();
     if (!_closing) unawaited(_service.close());
     super.dispose();
   }
@@ -62,6 +68,7 @@ class _ProCameraPageState extends State<ProCameraPage> {
       }
       setState(() {
         _info = info;
+        _manualSettings = ManualCameraSettings.auto.clamped(info.manualRange);
         _loading = false;
       });
     } catch (error) {
@@ -87,6 +94,35 @@ class _ProCameraPageState extends State<ProCameraPage> {
       ).showSnackBar(SnackBar(content: Text('专业模式拍照失败：$error')));
     } finally {
       if (mounted) setState(() => _capturing = false);
+    }
+  }
+
+  void _updateManual(ManualCameraSettings settings) {
+    final info = _info;
+    if (info == null || !info.supportsManual) return;
+    final next = settings.clamped(info.manualRange);
+    setState(() => _manualSettings = next);
+    _manualTimer?.cancel();
+    _manualTimer = Timer(const Duration(milliseconds: 120), () {
+      unawaited(_applyManual(next));
+    });
+  }
+
+  Future<void> _applyManual(ManualCameraSettings settings) async {
+    if (_applyingManual) return;
+    _applyingManual = true;
+    try {
+      await _service.setManual(settings);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('手动参数应用失败：$error')));
+      setState(() {
+        _manualSettings = _manualSettings.copyWith(mode: ManualCameraMode.auto);
+      });
+    } finally {
+      _applyingManual = false;
     }
   }
 
@@ -118,6 +154,25 @@ class _ProCameraPageState extends State<ProCameraPage> {
                   icon: const Icon(Icons.close_rounded, color: Colors.white),
                 ),
               ),
+              if (_info != null && _info!.supportsManual && _captured == null)
+                Positioned(
+                  left: 10,
+                  right: 10,
+                  bottom: 104,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 250),
+                    child: SingleChildScrollView(
+                      child: CameraManualControls(
+                        supported: true,
+                        range: _info!.manualRange,
+                        settings: _manualSettings,
+                        unavailableReason: null,
+                        onChanged: _updateManual,
+                        onReset: () => _updateManual(ManualCameraSettings.auto),
+                      ),
+                    ),
+                  ),
+                ),
               if (_info != null && _captured == null)
                 Positioned(
                   left: 0,

@@ -19,6 +19,11 @@ apps/mobile/android/.gradle/
 apps/mobile/ios/Pods/
 apps/mobile/ios/.symlinks/
 
+# Android 签名与商店产物：绝不入库
+apps/mobile/android/keystores/
+apps/mobile/android/key.properties
+dist/
+
 # Local data
 .data/
 .tool-state/

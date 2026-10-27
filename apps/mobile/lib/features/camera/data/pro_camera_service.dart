@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:ai_image_studio/features/camera/data/manual_camera_controls.dart';
 import 'package:flutter/services.dart';
 
 /// 原生专业模式返回的预览会话信息。
@@ -11,6 +12,15 @@ class ProCameraSessionInfo {
     required this.sensorOrientation,
     required this.minZoom,
     required this.maxZoom,
+    this.supportsManual = false,
+    this.minIso = 0,
+    this.maxIso = 0,
+    this.minShutterSeconds = 0,
+    this.maxShutterSeconds = 0,
+    this.minFocusDiopters = 0,
+    this.maxFocusDiopters = 0,
+    this.minKelvin = 2000,
+    this.maxKelvin = 8000,
   });
 
   factory ProCameraSessionInfo.fromMap(Map<String, Object?> map) =>
@@ -21,6 +31,15 @@ class ProCameraSessionInfo {
         sensorOrientation: (map['sensorOrientation'] as num?)?.toInt() ?? 0,
         minZoom: (map['minZoom'] as num?)?.toDouble() ?? 1,
         maxZoom: (map['maxZoom'] as num?)?.toDouble() ?? 1,
+        supportsManual: map['supportsManual'] as bool? ?? false,
+        minIso: (map['minIso'] as num?)?.toDouble() ?? 0,
+        maxIso: (map['maxIso'] as num?)?.toDouble() ?? 0,
+        minShutterSeconds: (map['minShutterSeconds'] as num?)?.toDouble() ?? 0,
+        maxShutterSeconds: (map['maxShutterSeconds'] as num?)?.toDouble() ?? 0,
+        minFocusDiopters: (map['minFocusDiopters'] as num?)?.toDouble() ?? 0,
+        maxFocusDiopters: (map['maxFocusDiopters'] as num?)?.toDouble() ?? 0,
+        minKelvin: (map['minKelvin'] as num?)?.toDouble() ?? 2000,
+        maxKelvin: (map['maxKelvin'] as num?)?.toDouble() ?? 8000,
       );
 
   final int textureId;
@@ -29,8 +48,28 @@ class ProCameraSessionInfo {
   final int sensorOrientation;
   final double minZoom;
   final double maxZoom;
+  final bool supportsManual;
+  final double minIso;
+  final double maxIso;
+  final double minShutterSeconds;
+  final double maxShutterSeconds;
+  final double minFocusDiopters;
+  final double maxFocusDiopters;
+  final double minKelvin;
+  final double maxKelvin;
 
   double get aspectRatio => width > 0 && height > 0 ? width / height : 4 / 3;
+
+  ManualCameraRange get manualRange => ManualCameraRange(
+    minIso: minIso > 0 ? minIso : 1,
+    maxIso: maxIso > minIso ? maxIso : 3200,
+    minShutterSeconds: minShutterSeconds > 0 ? minShutterSeconds : 0.000125,
+    maxShutterSeconds: maxShutterSeconds > minShutterSeconds
+        ? maxShutterSeconds
+        : 0.5,
+    minKelvin: minKelvin,
+    maxKelvin: maxKelvin > minKelvin ? maxKelvin : 8000,
+  );
 }
 
 /// Android 原生专业模式通道。
@@ -69,6 +108,10 @@ class ProCameraService {
       );
     }
     return File(path).readAsBytes();
+  }
+
+  Future<void> setManual(ManualCameraSettings settings) async {
+    await _channel.invokeMethod<void>('setManual', settings.toMap());
   }
 
   Future<void> close() async {

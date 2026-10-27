@@ -1,3 +1,4 @@
+import 'package:ai_image_studio/core/config/app_config.dart';
 import 'package:ai_image_studio/core/network/api_client.dart';
 import 'package:ai_image_studio/core/storage/token_storage.dart';
 import 'package:ai_image_studio/features/auth/data/auth_models.dart';
@@ -89,6 +90,12 @@ class AuthController extends StateNotifier<AuthState> {
   }
 
   Future<void> _doInitialize() async {
+    // 本地优先的商店版本不连接开发者后端：直接进入本地游客态，
+    // 避免审核/首次启动时出现无谓的网络请求失败。
+    if (!AppConfig.backendEnabled) {
+      state = AuthState(user: AuthUser.localGuest(), initialized: true);
+      return;
+    }
     try {
       var user = await _repository.restoreSession();
       if (user == null) {

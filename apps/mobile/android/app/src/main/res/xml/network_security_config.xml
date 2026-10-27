@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- 商店包（release）只允许 HTTPS。明文流量仅限 debug 构建，
+         见 src/debug/res/xml/network_security_config.xml。 -->
     <base-config cleartextTrafficPermitted="false" />
-    <!-- Android 模拟器访问宿主机开发服务；其他域名仍强制 HTTPS。 -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">10.0.2.2</domain>
-    </domain-config>
 </network-security-config>
