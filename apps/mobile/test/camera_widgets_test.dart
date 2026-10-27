@@ -1,5 +1,6 @@
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
+import 'package:ai_image_studio/features/camera/data/manual_camera_controls.dart';
 import 'package:ai_image_studio/features/camera/presentation/camera_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -167,6 +168,7 @@ void main() {
       minimumFocusDistance: 0,
       nominalZoom: 1,
       supportsRaw: false,
+      supportsManualControls: true,
     );
 
     await tester.pumpWidget(
@@ -219,5 +221,122 @@ void main() {
       find.widgetWithText(CameraParameterChip, 'ISO'),
     );
     expect(iso.enabled, isFalse);
+  });
+
+  testWidgets('权限被永久拒绝时提供系统设置入口', (tester) async {
+    var retried = false;
+    var openedSettings = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CameraErrorView(
+            message: '需要相机权限才能拍摄，请在系统设置中允许访问',
+            permissionPermanentlyDenied: true,
+            onRetry: () => retried = true,
+            onOpenSettings: () => openedSettings = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('前往系统设置'), findsOneWidget);
+    expect(find.text('重试'), findsNothing);
+
+    await tester.tap(find.text('前往系统设置'));
+    expect(openedSettings, isTrue);
+    expect(retried, isFalse);
+  });
+
+  testWidgets('普通相机错误提供重试入口', (tester) async {
+    var retried = false;
+    var openedSettings = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CameraErrorView(
+            message: '相机暂时不可用',
+            permissionPermanentlyDenied: false,
+            onRetry: () => retried = true,
+            onOpenSettings: () => openedSettings = true,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('重试'), findsOneWidget);
+    await tester.tap(find.text('重试'));
+    expect(retried, isTrue);
+    expect(openedSettings, isFalse);
+  });
+
+  testWidgets('手动参数按模式展示对应滑杆', (tester) async {
+    var settings = ManualCameraSettings.auto;
+    const range = ManualCameraRange(
+      minIso: 50,
+      maxIso: 3200,
+      minShutterSeconds: .000125,
+      maxShutterSeconds: .5,
+      minKelvin: 2000,
+      maxKelvin: 8000,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => CameraManualControls(
+              supported: true,
+              range: range,
+              settings: settings,
+              unavailableReason: null,
+              onChanged: (next) => setState(() => settings = next),
+              onReset: () =>
+                  setState(() => settings = ManualCameraSettings.auto),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('自动'), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+
+    await tester.tap(find.text('半自动'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider), findsNWidgets(2));
+
+    await tester.tap(find.text('全手动'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Slider), findsNWidgets(4));
+  });
+
+  testWidgets('不支持手动参数的设备显示原因而不是滑杆', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: CameraManualControls(
+            supported: false,
+            range: const ManualCameraRange(
+              minIso: 50,
+              maxIso: 3200,
+              minShutterSeconds: .000125,
+              maxShutterSeconds: .5,
+              minKelvin: 2000,
+              maxKelvin: 8000,
+            ),
+            settings: ManualCameraSettings.auto,
+            unavailableReason: '当前 Android 相机实现未开放 ISO/快门手动控制',
+            onChanged: (_) {},
+            onReset: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('当前 Android 相机实现未开放 ISO/快门手动控制'), findsOneWidget);
+    expect(find.byType(Slider), findsNothing);
+    expect(find.text('全手动'), findsNothing);
   });
 }

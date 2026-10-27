@@ -62,3 +62,12 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    // 原生专业模式与插件共用同一套 CameraX，版本必须与
+    // camera_android_camerax 保持一致，避免类冲突。
+    val cameraxVersion = "1.6.1"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+}

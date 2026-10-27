@@ -19,6 +19,7 @@ import 'package:ai_image_studio/features/editor/presentation/editor_page.dart';
 import 'package:ai_image_studio/features/style_transfer/presentation/style_transfer_page.dart';
 import 'package:ai_image_studio/features/ai_settings/presentation/ai_settings_page.dart';
 import 'package:ai_image_studio/app/main_shell.dart';
+import 'package:ai_image_studio/app/route_observer.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -27,6 +28,7 @@ import 'dart:typed_data';
 final appRouterProvider = Provider<GoRouter>((ref) {
   final router = GoRouter(
     initialLocation: '/splash',
+    observers: [appRouteObserver],
     errorBuilder: (context, state) => Scaffold(
       appBar: AppBar(title: const Text('页面不存在')),
       body: Center(

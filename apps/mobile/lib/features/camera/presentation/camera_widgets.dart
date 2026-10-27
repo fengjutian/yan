@@ -1,6 +1,58 @@
+import 'dart:math' as math;
+
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
+import 'package:ai_image_studio/features/camera/data/manual_camera_controls.dart';
 import 'package:flutter/material.dart';
+
+/// 相机初始化失败或权限不足时的错误页。
+class CameraErrorView extends StatelessWidget {
+  const CameraErrorView({
+    super.key,
+    required this.message,
+    required this.permissionPermanentlyDenied,
+    required this.onRetry,
+    required this.onOpenSettings,
+  });
+
+  final String message;
+  final bool permissionPermanentlyDenied;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+    color: const Color(0xFF242220),
+    child: Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.no_photography_outlined,
+              color: Colors.white70,
+              size: 45,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              maxLines: 5,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 18),
+            OutlinedButton(
+              onPressed: permissionPermanentlyDenied ? onOpenSettings : onRetry,
+              child: Text(permissionPermanentlyDenied ? '前往系统设置' : '重试'),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
 
 /// 相机设置面板的功能分类标签。点击切换分类，选中态使用主色高亮。
 class CameraCategoryChip extends StatelessWidget {
@@ -561,18 +613,26 @@ class CameraProfessionalPanel extends StatelessWidget {
         label: currentLens == null
             ? 'ISO'
             : 'ISO ${currentLens.minIso.round()}–${currentLens.maxIso.round()}',
-        enabled: currentLens != null && currentLens.maxIso > 0,
+        enabled:
+            currentLens != null &&
+            currentLens.supportsManualControls &&
+            currentLens.maxIso > 0,
       ),
       CameraParameterChip(
         label: currentLens == null
             ? '快门'
             : '快门 ${_shutterLabel(currentLens.minExposureSeconds)}–'
                   '${_shutterLabel(currentLens.maxExposureSeconds)}',
-        enabled: currentLens != null && currentLens.maxExposureSeconds > 0,
+        enabled:
+            currentLens != null &&
+            currentLens.supportsManualControls &&
+            currentLens.maxExposureSeconds > 0,
       ),
       CameraParameterChip(
         label: '手动对焦',
-        enabled: currentLens?.supportsManualFocus == true,
+        enabled:
+            currentLens?.supportsManualControls == true &&
+            currentLens?.supportsManualFocus == true,
       ),
       CameraParameterChip(
         label: 'RAW/DNG',
@@ -613,11 +673,11 @@ class CameraProfessionalPanel extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           if (!anyEnabled)
-            const Padding(
-              padding: EdgeInsets.only(bottom: 4),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
               child: Text(
-                '当前镜头未报告专业参数',
-                style: TextStyle(color: Colors.white60, fontSize: 10),
+                currentLens == null ? '当前镜头未报告专业参数' : '当前相机实现未开放手动参数',
+                style: const TextStyle(color: Colors.white60, fontSize: 10),
               ),
             ),
           Wrap(spacing: 6, runSpacing: 6, children: parameters),
@@ -675,6 +735,260 @@ class CameraProfessionalPanel extends StatelessWidget {
   }
 
   static String _shutterLabel(double seconds) {
+    if (seconds <= 0) return '—';
+    if (seconds < 1) return '1/${(1 / seconds).round()}s';
+    return '${seconds.toStringAsFixed(seconds >= 10 ? 0 : 1)}s';
+  }
+}
+
+/// 手动专业参数面板。
+///
+/// 只有原生能力检测确认支持时才展示可调滑杆；Android CameraX 目前会
+/// 传入不支持原因，面板只显示说明，避免出现可点但无效的控件。
+class CameraManualControls extends StatelessWidget {
+  const CameraManualControls({
+    super.key,
+    required this.supported,
+    required this.range,
+    required this.settings,
+    required this.unavailableReason,
+    required this.onChanged,
+    required this.onReset,
+  });
+
+  final bool supported;
+  final ManualCameraRange range;
+  final ManualCameraSettings settings;
+  final String? unavailableReason;
+  final ValueChanged<ManualCameraSettings> onChanged;
+  final VoidCallback onReset;
+
+  bool get _usable => supported && range.isUsable;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: double.infinity,
+    padding: const EdgeInsets.fromLTRB(10, 8, 10, 6),
+    decoration: BoxDecoration(
+      color: const Color(0xFF28282B),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.white10),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.movie_filter_outlined,
+              size: 15,
+              color: Color(0xFFFFD60A),
+            ),
+            const SizedBox(width: 6),
+            const Text(
+              '手动参数',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const Spacer(),
+            if (_usable)
+              TextButton(
+                onPressed: onReset,
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.white54,
+                  visualDensity: VisualDensity.compact,
+                  textStyle: const TextStyle(fontSize: 11),
+                ),
+                child: const Text('重置'),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        if (!_usable)
+          Text(
+            unavailableReason?.isNotEmpty == true
+                ? unavailableReason!
+                : '当前镜头没有可用的手动参数范围',
+            style: const TextStyle(color: Colors.white60, fontSize: 10),
+          )
+        else ...[
+          Row(
+            children: [
+              _modeChip('自动', ManualCameraMode.auto),
+              const SizedBox(width: 6),
+              _modeChip('半自动', ManualCameraMode.semi),
+              const SizedBox(width: 6),
+              _modeChip('全手动', ManualCameraMode.manual),
+            ],
+          ),
+          if (settings.mode == ManualCameraMode.manual) ...[
+            _sliderRow(
+              context,
+              label: 'ISO',
+              value: settings.iso.round().toString(),
+              position: _logPosition(settings.iso, range.minIso, range.maxIso),
+              onChanged: (position) => _emit(
+                settings.copyWith(
+                  iso: _logValue(position, range.minIso, range.maxIso),
+                ),
+              ),
+            ),
+            _sliderRow(
+              context,
+              label: '快门',
+              value: _formatShutter(settings.shutterSeconds),
+              position: _logPosition(
+                settings.shutterSeconds,
+                range.minShutterSeconds,
+                range.maxShutterSeconds,
+              ),
+              onChanged: (position) => _emit(
+                settings.copyWith(
+                  shutterSeconds: _logValue(
+                    position,
+                    range.minShutterSeconds,
+                    range.maxShutterSeconds,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          if (settings.mode != ManualCameraMode.auto) ...[
+            _sliderRow(
+              context,
+              label: '白平衡',
+              value: '${settings.kelvin.round()}K',
+              position: _linearPosition(
+                settings.kelvin,
+                range.minKelvin,
+                range.maxKelvin,
+              ),
+              onChanged: (position) => _emit(
+                settings.copyWith(
+                  kelvin: _linearValue(
+                    position,
+                    range.minKelvin,
+                    range.maxKelvin,
+                  ),
+                ),
+              ),
+            ),
+            _sliderRow(
+              context,
+              label: '对焦',
+              value: settings.focus.toStringAsFixed(2),
+              position: settings.focus,
+              onChanged: (position) =>
+                  _emit(settings.copyWith(focus: position)),
+            ),
+          ],
+          const Padding(
+            padding: EdgeInsets.only(top: 2),
+            child: Text(
+              '手动模式下 HDR/夜景会使用标准单拍，避免曝光参数冲突。',
+              style: TextStyle(color: Colors.white38, fontSize: 9),
+            ),
+          ),
+        ],
+      ],
+    ),
+  );
+
+  void _emit(ManualCameraSettings next) => onChanged(next.clamped(range));
+
+  Widget _modeChip(String label, ManualCameraMode mode) {
+    final selected = settings.mode == mode;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => _emit(settings.copyWith(mode: mode)),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFFFD60A) : const Color(0xFF303033),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? Colors.black : Colors.white70,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sliderRow(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required double position,
+    required ValueChanged<double> onChanged,
+  }) => Row(
+    children: [
+      SizedBox(
+        width: 44,
+        child: Text(
+          label,
+          style: const TextStyle(color: Colors.white60, fontSize: 10),
+        ),
+      ),
+      Expanded(
+        child: SliderTheme(
+          data: SliderTheme.of(context).copyWith(
+            trackHeight: 2,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+          ),
+          child: Slider(
+            value: position.clamp(0.0, 1.0),
+            activeColor: const Color(0xFFFFD60A),
+            inactiveColor: Colors.white24,
+            onChanged: onChanged,
+          ),
+        ),
+      ),
+      SizedBox(
+        width: 52,
+        child: Text(
+          value,
+          textAlign: TextAlign.right,
+          style: const TextStyle(color: Colors.white70, fontSize: 10),
+        ),
+      ),
+    ],
+  );
+
+  static double _logPosition(double value, double min, double max) {
+    final safeMin = math.max(min, 1e-6);
+    final safeMax = math.max(max, safeMin * 1.0001);
+    final clamped = value.clamp(safeMin, safeMax);
+    return (math.log(clamped) - math.log(safeMin)) /
+        (math.log(safeMax) - math.log(safeMin));
+  }
+
+  static double _logValue(double position, double min, double max) {
+    final safeMin = math.max(min, 1e-6);
+    final safeMax = math.max(max, safeMin * 1.0001);
+    final t = position.clamp(0.0, 1.0);
+    return math.exp(
+      math.log(safeMin) + t * (math.log(safeMax) - math.log(safeMin)),
+    );
+  }
+
+  static double _linearPosition(double value, double min, double max) =>
+      max <= min ? 0 : ((value - min) / (max - min)).clamp(0.0, 1.0);
+
+  static double _linearValue(double position, double min, double max) =>
+      min + (max - min) * position.clamp(0.0, 1.0);
+
+  static String _formatShutter(double seconds) {
     if (seconds <= 0) return '—';
     if (seconds < 1) return '1/${(1 / seconds).round()}s';
     return '${seconds.toStringAsFixed(seconds >= 10 ? 0 : 1)}s';

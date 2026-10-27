@@ -34,6 +34,10 @@ void main() {
                 'minimumFocusDistance': 10,
                 'nominalZoom': 1,
                 'supportsRaw': true,
+                'supportsManualControls': true,
+                'minKelvin': 2000,
+                'maxKelvin': 8000,
+                'manualUnavailableReason': '',
               },
             ],
           };
@@ -52,6 +56,9 @@ void main() {
     expect(value.lenses.single.focalLengths, [6.8]);
     expect(value.lenses.single.supportsManualFocus, isTrue);
     expect(value.lenses.single.supportsRaw, isTrue);
+    expect(value.lenses.single.supportsManualControls, isTrue);
+    expect(value.lenses.single.minKelvin, 2000);
+    expect(value.lenses.single.maxKelvin, 8000);
   });
 
   test('原生桥接不可用时安全回退', () async {

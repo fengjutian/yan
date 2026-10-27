@@ -1,13 +1,16 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:ai_image_studio/app/route_observer.dart';
 import 'package:ai_image_studio/features/camera/data/camera_session.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capabilities.dart';
 import 'package:ai_image_studio/features/camera/data/camera_capture_quality.dart';
 import 'package:ai_image_studio/features/camera/data/camera_diagnostics.dart';
+import 'package:ai_image_studio/features/camera/data/camera_errors.dart';
 import 'package:ai_image_studio/features/camera/data/capture_preset.dart';
 import 'package:ai_image_studio/features/camera/data/face_analyzer.dart';
 import 'package:ai_image_studio/features/camera/data/live_camera_analyzer.dart';
+import 'package:ai_image_studio/features/camera/data/manual_camera_controls.dart';
 import 'package:ai_image_studio/features/camera/data/photo_metrics.dart';
 import 'package:ai_image_studio/features/camera/data/photo_quality.dart';
 import 'package:ai_image_studio/features/camera/data/portrait_composition_guide.dart';
@@ -51,6 +54,16 @@ enum SmartShutterMode { off, smile, gesture }
 
 enum CaptureEnhancement { standard, multiFrameHdr, nightDenoise }
 
+/// 未拿到原生能力时的占位范围，只用于让不支持手动参数的设备也能渲染说明。
+const _fallbackManualRange = ManualCameraRange(
+  minIso: 100,
+  maxIso: 3200,
+  minShutterSeconds: 0.000125,
+  maxShutterSeconds: 0.5,
+  minKelvin: 2000,
+  maxKelvin: 8000,
+);
+
 /// 相机设置面板的功能分类。相机能力越来越多后，把所有开关平铺在一行里
 /// 很难找到目标功能，这里按用途拆成可切换的分类。
 enum _CameraOptionCategory {
@@ -91,7 +104,7 @@ class TemplateParams {
 }
 
 class _CameraPageState extends ConsumerState<CameraPage>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, RouteAware {
   static const _hardwareControls = MethodChannel('yan.camera/controls');
   final _picker = ImagePicker();
   CameraController? _controller;
@@ -104,6 +117,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   bool _initializing = true;
   bool _pausedByLifecycle = false;
   bool _releasedForLifecycle = false;
+  bool _pausedByRoute = false;
+  Route<dynamic>? _route;
   Future<void> _lifecycleQueue = Future.value();
   bool _capturing = false;
   String? _error;
@@ -180,6 +195,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
   CameraStyle _style = CameraStyle.standard;
   SmartShutterMode _smartShutterMode = SmartShutterMode.off;
   CaptureEnhancement _captureEnhancement = CaptureEnhancement.standard;
+  ManualCameraSettings _manualSettings = ManualCameraSettings.auto;
+  ManualCameraRange? _manualRange;
+  Timer? _manualApplyTimer;
+  bool _manualApplying = false;
+  final ManualCameraControlService _manualService =
+      ManualCameraControlService();
   int _smartSignalFrames = 0;
   DateTime _lastSmartCapture = DateTime.fromMillisecondsSinceEpoch(0);
   String? _barcodeValue;
@@ -324,7 +345,12 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   Future<void> _loadCapabilities() async {
     final capabilities = await CameraCapabilitiesService().load();
-    if (mounted) setState(() => _capabilities = capabilities);
+    if (mounted) {
+      setState(() {
+        _capabilities = capabilities;
+        _refreshManualRange();
+      });
+    }
   }
 
   Future<void> _loadPresets() async {
@@ -484,7 +510,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       unawaited(stale?.dispose());
       return;
     }
-    final message = _cameraError(error);
+    final message = cameraErrorMessage(error);
     final startedAt = _initStartedAt;
     setState(() {
       _error = message;
@@ -492,7 +518,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (startedAt != null) {
         _initElapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       }
-      _permissionPermanentlyDenied = _isPermissionError(error);
+      _permissionPermanentlyDenied = isCameraPermissionError(error);
       _initializing = false;
       _controller = null;
     });
@@ -573,13 +599,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
       await controller
           .setFlashMode(_flashMode)
           .timeout(const Duration(seconds: 3));
-      if (_reviewing) {
-        _initStage = '就绪（预览页暂停分析流）';
+      if (_reviewing || _pausedByRoute || _pausedByLifecycle) {
+        _initStage = '就绪（页面不可见，暂停分析流）';
       } else {
         _initStage = '启动分析流';
         await _startLightMonitoring(controller);
         _initStage = '就绪';
       }
+      _resetManualControlsForLens();
       _initElapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
       if (mounted && token == _initializationToken) {
         setState(() => _initializing = false);
@@ -600,6 +627,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Future<void> _startLightMonitoring(CameraController controller) async {
+    if (_pausedByRoute || _pausedByLifecycle || _releasedForLifecycle) return;
     try {
       _lastFrameAt = DateTime.now();
       await controller.startImageStream((image) {
@@ -1094,6 +1122,67 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route == null || route == _route) return;
+    if (_route != null) appRouteObserver.unsubscribe(this);
+    _route = route;
+    appRouteObserver.subscribe(this, route);
+  }
+
+  /// 相机页被新页面覆盖时暂停预览与分析，返回时恢复。
+  @override
+  void didPushNext() {
+    _enqueueLifecycle(_pauseForRoute);
+  }
+
+  @override
+  void didPopNext() {
+    _enqueueLifecycle(_resumeForRoute);
+  }
+
+  Future<void> _pauseForRoute() async {
+    if (!mounted || _pausedByRoute || _releasedForLifecycle) return;
+    _pausedByRoute = true;
+    _stopStreamWatchdog();
+    if (_capturing) return;
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) return;
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+    } catch (_) {
+      // 相机可能正在切换，恢复时再重新启动。
+    }
+  }
+
+  Future<void> _resumeForRoute() async {
+    if (!_pausedByRoute) return;
+    _pausedByRoute = false;
+    if (!mounted || _pausedByLifecycle) return;
+    if (_releasedForLifecycle) {
+      _releasedForLifecycle = false;
+      await _initializeCamera(_activeIndex);
+      return;
+    }
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
+      await _initializeCamera(_activeIndex);
+      return;
+    }
+    try {
+      await controller.resumePreview();
+    } catch (_) {
+      // 预览恢复失败时仍尝试重启分析流。
+    }
+    if (!_capturing && !_reviewing && !controller.value.isStreamingImages) {
+      await _startLightMonitoring(controller);
+    }
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // 生命周期事件可能连续到达，串行处理，避免 stop/resume 互相覆盖。
     switch (state) {
@@ -1166,6 +1255,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   Future<void> _restoreAfterLifecycle() async {
     if (!mounted || _cameras.isEmpty) return;
+    // 页面仍被其他路由覆盖时不要启动相机，等 didPopNext 再恢复。
+    if (_pausedByRoute) {
+      _pausedByLifecycle = false;
+      return;
+    }
     if (_releasedForLifecycle) {
       _releasedForLifecycle = false;
       await _initializeCamera(_activeIndex);
@@ -1293,7 +1387,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       final capturedContexts = <CaptureContext>[];
       Uint8List? firstOriginal;
       XFile? analysisFile;
-      final enhancement = !continuous && _burstCount == 1 && !_scanMode
+      final enhancement =
+          !continuous &&
+              _burstCount == 1 &&
+              !_scanMode &&
+              _manualSettings.mode == ManualCameraMode.auto
           ? _captureEnhancement
           : CaptureEnhancement.standard;
       if (enhancement != CaptureEnhancement.standard) {
@@ -1453,14 +1551,14 @@ class _CameraPageState extends ConsumerState<CameraPage>
       if (mounted) setState(() => _capturedImage = session.selected?.bytes);
     } on CameraException catch (error) {
       captureFailed = true;
-      if (mounted) _showMessage(_cameraError(error));
+      if (mounted) _showMessage(cameraErrorMessage(error));
     } on PlatformException catch (error) {
       captureFailed = true;
-      if (mounted) _showMessage(_cameraError(error));
+      if (mounted) _showMessage(cameraErrorMessage(error));
     } catch (error) {
       // MLKit 失败、文件 IO 失败等都兜到这里,不裸露异常。
       captureFailed = true;
-      if (mounted) _showMessage(_cameraError(error));
+      if (mounted) _showMessage(cameraErrorMessage(error));
     } finally {
       if (captureFailed) {
         // 异常可能发生在锁定 AE/AF 之后，恢复自动模式避免污染下一次拍摄。
@@ -1576,6 +1674,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
     BoxConstraints constraints, {
     bool lock = false,
   }) async {
+    if (_manualSettings.mode != ManualCameraMode.auto) {
+      _showMessage('手动模式下请用“对焦”滑杆调整焦点');
+      return;
+    }
     final controller = _controller;
     if (controller == null) return;
     final point = Offset(
@@ -1634,7 +1736,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   /// 从焦点环旁的 AE 手柄拖出独立测光点。
   void _dragMetering(DragUpdateDetails details, BoxConstraints constraints) {
-    if (!_meteringPointSupported) return;
+    if (!_meteringPointSupported ||
+        _manualSettings.mode != ManualCameraMode.auto) {
+      return;
+    }
     final controller = _controller;
     final base = _meteringPoint ?? _focusPoint;
     if (controller == null || base == null) return;
@@ -1698,6 +1803,10 @@ class _CameraPageState extends ConsumerState<CameraPage>
 
   /// 拍摄异常后恢复自动模式，避免下次进入时仍锁在错误的曝光值上。
   Future<void> _restoreAutoFocus() async {
+    if (_manualSettings.mode != ManualCameraMode.auto) {
+      if (mounted) setState(_clearFocusState);
+      return;
+    }
     final controller = _controller;
     if (controller != null && controller.value.isInitialized) {
       try {
@@ -1715,6 +1824,7 @@ class _CameraPageState extends ConsumerState<CameraPage>
       unawaited(_setZoom(details.scale));
       return;
     }
+    if (_manualSettings.mode != ManualCameraMode.auto) return;
     if (_focusPoint == null || details.focalPointDelta.dy == 0) return;
     final range = (_maxExposure - _minExposure).abs();
     final next = _exposure - details.focalPointDelta.dy / 240 * range;
@@ -1750,6 +1860,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   }
 
   Future<void> _setExposure(double value) async {
+    // 全手动模式下曝光由 ISO/快门决定，EV 补偿会被相机忽略。
+    if (_manualSettings.mode == ManualCameraMode.manual) return;
     final controller = _controller;
     if (controller == null) return;
     try {
@@ -1762,49 +1874,83 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
   }
 
+  ManualCameraRange? get _activeManualRange {
+    final lens = _activeNativeLens;
+    if (lens == null || !lens.supportsManualControls) return null;
+    final range = ManualCameraRange.fromLens(lens);
+    return range.isUsable ? range : null;
+  }
+
+  void _resetManualControlsForLens() {
+    _manualApplyTimer?.cancel();
+    _refreshManualRange();
+    _manualSettings = ManualCameraSettings.auto;
+  }
+
+  void _refreshManualRange() {
+    _manualRange = _activeManualRange;
+    final range = _manualRange;
+    _manualSettings = range == null
+        ? ManualCameraSettings.auto
+        : _manualSettings.clamped(range);
+  }
+
+  void _updateManualSettings(ManualCameraSettings next) {
+    final range = _manualRange;
+    if (range == null) return;
+    final settings = next.clamped(range);
+    setState(() {
+      _manualSettings = settings;
+      // 手动曝光与 HDR/夜景的多帧曝光会互相覆盖，手动模式下强制单拍。
+      if (settings.mode != ManualCameraMode.auto) {
+        _captureEnhancement = CaptureEnhancement.standard;
+      }
+    });
+    _scheduleManualApply();
+  }
+
+  void _scheduleManualApply() {
+    _manualApplyTimer?.cancel();
+    _manualApplyTimer = Timer(const Duration(milliseconds: 150), () {
+      unawaited(_applyManualSettings());
+    });
+  }
+
+  Future<void> _applyManualSettings() async {
+    final lens = _activeNativeLens;
+    final controller = _controller;
+    if (!mounted ||
+        lens == null ||
+        controller == null ||
+        !controller.value.isInitialized ||
+        !lens.supportsManualControls) {
+      return;
+    }
+    if (_manualApplying) {
+      _scheduleManualApply();
+      return;
+    }
+    _manualApplying = true;
+    try {
+      await _manualService.apply(lens.id, _manualSettings);
+    } on MissingPluginException {
+      if (mounted) _showMessage('当前平台暂不支持手动参数');
+    } on PlatformException catch (error) {
+      if (!mounted) return;
+      _showMessage(error.message ?? '手动参数应用失败');
+      setState(() {
+        _manualSettings = _manualSettings.copyWith(mode: ManualCameraMode.auto);
+      });
+    } finally {
+      _manualApplying = false;
+    }
+  }
+
   void _showMessage(String message) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
     );
-
-  String _cameraError(Object error) {
-    final details = error.toString();
-    if (details.contains('No supported surface combination') ||
-        details.contains('UseCaseAdapter') ||
-        details.contains('bind too many use cases')) {
-      return '当前设备无法同时启用实时分析与拍照，请重试；应用会自动使用兼容模式。';
-    }
-    if (error is CameraException) {
-      if (error.code == 'CameraAccessDenied' ||
-          error.code == 'CameraAccessDeniedWithoutPrompt') {
-        return '需要相机权限才能拍摄，请在系统设置中允许访问';
-      }
-      return error.description ?? '相机暂时不可用';
-    }
-    if (error is PlatformException) {
-      if (error.code == 'CameraAccessDenied' ||
-          error.code == 'camera_permission' ||
-          error.code == 'MissingPluginException') {
-        return '需要相机权限才能拍摄，请在系统设置中允许访问';
-      }
-      return error.message ?? '相机暂时不可用';
-    }
-    return error.toString();
-  }
-
-  bool _isPermissionError(Object error) {
-    if (error is CameraException) {
-      return error.code == 'CameraAccessDenied' ||
-          error.code == 'CameraAccessDeniedWithoutPrompt' ||
-          error.code == 'CameraAccessRestricted';
-    }
-    if (error is PlatformException) {
-      return error.code == 'CameraAccessDenied' ||
-          error.code == 'camera_permission';
-    }
-    return false;
-  }
 
   Future<void> _openSystemSettings() async {
     final opened = await CameraCapabilitiesService().openAppSettings();
@@ -2172,6 +2318,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
   @override
   void dispose() {
     _initializationToken++;
+    _manualApplyTimer?.cancel();
+    appRouteObserver.unsubscribe(this);
     _stopStreamWatchdog();
     WidgetsBinding.instance.removeObserver(this);
     _motionSubscription?.cancel();
@@ -2566,6 +2714,15 @@ class _CameraPageState extends ConsumerState<CameraPage>
               onExposureChanged: (value) => unawaited(_setExposure(value)),
             ),
             const SizedBox(height: 8),
+            CameraManualControls(
+              supported: _activeNativeLens?.supportsManualControls == true,
+              range: _activeManualRange ?? _fallbackManualRange,
+              settings: _manualSettings,
+              unavailableReason: _activeNativeLens?.manualUnavailableReason,
+              onChanged: _updateManualSettings,
+              onReset: () => _updateManualSettings(ManualCameraSettings.auto),
+            ),
+            const SizedBox(height: 8),
             _buildSettingList([
               CameraSettingRow(
                 icon: Icons.exposure_zero,
@@ -2794,38 +2951,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
     // 但反过来不应出现 _initializing==false 且 _controller==null 的窗口。
     // 这里兜底一次,避免任何遗漏路径触发 NPE。
     if (_error != null) {
-      return ColoredBox(
-        color: const Color(0xFF242220),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.no_photography_outlined,
-                  color: Colors.white70,
-                  size: 45,
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  _error!,
-                  textAlign: TextAlign.center,
-                  maxLines: 5,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70),
-                ),
-                const SizedBox(height: 18),
-                OutlinedButton(
-                  onPressed: _permissionPermanentlyDenied
-                      ? _openSystemSettings
-                      : _loadCameras,
-                  child: Text(_permissionPermanentlyDenied ? '前往系统设置' : '重试'),
-                ),
-              ],
-            ),
-          ),
-        ),
+      return CameraErrorView(
+        message: _error!,
+        permissionPermanentlyDenied: _permissionPermanentlyDenied,
+        onRetry: _loadCameras,
+        onOpenSettings: _openSystemSettings,
       );
     }
     if (_initializing || _controller == null) {
@@ -3488,6 +3618,11 @@ class _CameraPageState extends ConsumerState<CameraPage>
       return;
     }
     if (!controller.value.isStreamingImages) {
+      try {
+        await controller.resumePreview();
+      } catch (_) {
+        // 预览恢复失败时下一帧仍可尝试重启分析流。
+      }
       await _startLightMonitoring(controller);
     } else {
       _startStreamWatchdog(controller);

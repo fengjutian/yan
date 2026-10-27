@@ -115,6 +115,10 @@ class NativeCameraLens {
     required this.minimumFocusDistance,
     required this.nominalZoom,
     required this.supportsRaw,
+    this.supportsManualControls = false,
+    this.minKelvin = 2000,
+    this.maxKelvin = 8000,
+    this.manualUnavailableReason,
   });
 
   factory NativeCameraLens.fromMap(Map<String, Object?> value) =>
@@ -130,6 +134,11 @@ class NativeCameraLens {
         minimumFocusDistance: _number(value['minimumFocusDistance']),
         nominalZoom: _number(value['nominalZoom'], fallback: 1),
         supportsRaw: value['supportsRaw'] as bool? ?? false,
+        supportsManualControls:
+            value['supportsManualControls'] as bool? ?? false,
+        minKelvin: _number(value['minKelvin'], fallback: 2000),
+        maxKelvin: _number(value['maxKelvin'], fallback: 8000),
+        manualUnavailableReason: value['manualUnavailableReason'] as String?,
       );
 
   final String id;
@@ -143,6 +152,14 @@ class NativeCameraLens {
   final double minimumFocusDistance;
   final double nominalZoom;
   final bool supportsRaw;
+
+  /// 当前原生实现是否可以真正下发 ISO/快门/白平衡/对焦。
+  final bool supportsManualControls;
+  final double minKelvin;
+  final double maxKelvin;
+
+  /// 不支持时给用户看的原因。
+  final String? manualUnavailableReason;
 
   bool get isBack => facing == 'back';
   bool get supportsManualFocus => minimumFocusDistance > 0;

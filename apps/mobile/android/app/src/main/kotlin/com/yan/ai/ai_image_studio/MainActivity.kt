@@ -12,6 +12,7 @@ import android.os.StatFs
 import android.provider.Settings
 import android.net.Uri
 import android.view.KeyEvent
+import com.yan.ai.ai_image_studio.camera.ProCameraSession
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.plugin.common.MethodChannel
@@ -19,6 +20,7 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterActivity() {
     private var cameraControlsActive = false
     private var cameraControlsChannel: MethodChannel? = null
+    private var proCameraSession: ProCameraSession? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -58,6 +60,65 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "yan.camera/pro",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "open" -> {
+                    if (proCameraSession != null) {
+                        result.error("already-open", "专业模式已经打开", null)
+                        return@setMethodCallHandler
+                    }
+                    val session = ProCameraSession(this, this, flutterEngine.renderer)
+                    proCameraSession = session
+                    session.open(call.argument<String>("lensId")) { info, error ->
+                        if (error != null) {
+                            proCameraSession = null
+                            session.close()
+                            result.error(
+                                "pro-open",
+                                error.message ?: "打开专业模式失败",
+                                null,
+                            )
+                        } else {
+                            result.success(info)
+                        }
+                    }
+                }
+                "capture" -> {
+                    val session = proCameraSession
+                    if (session == null) {
+                        result.error("not-open", "专业模式未打开", null)
+                    } else {
+                        session.capture { path, error ->
+                            if (error != null) {
+                                result.error(
+                                    "capture-failed",
+                                    error.message ?: "专业模式拍照失败",
+                                    null,
+                                )
+                            } else {
+                                result.success(mapOf("path" to path))
+                            }
+                        }
+                    }
+                }
+                "close" -> {
+                    proCameraSession?.close()
+                    proCameraSession = null
+                    result.success(null)
+                }
+                "isSupported" -> result.success(true)
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        proCameraSession?.close()
+        proCameraSession = null
+        super.onDestroy()
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -166,6 +227,10 @@ class MainActivity : FlutterActivity() {
                 "supportsRaw" to capabilities.contains(
                     CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES_RAW,
                 ),
+                // camera_android_camerax 只暴露 EV/焦点/变焦，ISO、快门和白平衡
+                // 需要 Camera2Interop 的 CaptureRequest.Key，插件未开放。
+                "supportsManualControls" to false,
+                "manualUnavailableReason" to "当前 Android 相机实现未开放 ISO/快门手动控制",
             )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
                 capabilities.contains(
