@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:ai_image_studio/app/theme.dart';
+import 'package:ai_image_studio/core/compliance/privacy_consent.dart';
 import 'package:ai_image_studio/features/auth/presentation/auth_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,7 +63,12 @@ class _SplashPageState extends ConsumerState<SplashPage>
       // 即使动画抛错,也要把用户带离 splash,避免永久卡住。
     }
     if (!mounted) return;
-    context.go('/home');
+
+    // 商店合规：首次启动必须先确认《用户协议》《隐私政策》，
+    // 同意前不申请权限、不发起网络请求。
+    final consented = await PrivacyConsent.isAccepted();
+    if (!mounted) return;
+    context.go(consented ? '/home' : '/consent');
   }
 
   @override

@@ -13,6 +13,7 @@ import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/features/share/presentation/share_workshop_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/favorites_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/drafts_page.dart';
+import 'package:ai_image_studio/features/profile/presentation/privacy_consent_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/privacy_page.dart';
 import 'package:ai_image_studio/features/templates/presentation/templates_home_page.dart';
 import 'package:ai_image_studio/features/templates/presentation/template_detail_page.dart';
@@ -53,6 +54,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ),
     routes: [
       GoRoute(path: '/splash', builder: (context, state) => const SplashPage()),
+      GoRoute(
+        path: '/consent',
+        builder: (context, state) => const PrivacyConsentPage(),
+      ),
       GoRoute(
         path: '/login',
         builder: (context, state) => const AuthPage(mode: AuthMode.login),

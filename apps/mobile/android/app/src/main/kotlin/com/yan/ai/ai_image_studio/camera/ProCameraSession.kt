@@ -14,7 +14,6 @@ import android.view.Surface
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
-import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
@@ -212,7 +211,6 @@ class ProCameraSession(
     /**
      * 下发专业参数。手动模式关闭 AE，使用 ISO + 快门；半自动只锁 AWB/AF。
      */
-    @OptIn(ExperimentalCamera2Interop::class)
     fun setManual(settings: Map<String, Any?>, callback: (Throwable?) -> Unit) {
         val control = manualControl
         val cameraCharacteristics = characteristics

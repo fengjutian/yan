@@ -279,3 +279,17 @@ close() -> void
 - 切后台/锁屏/来电后的纹理恢复。
 
 P1 将在此基础上接入 `Camera2CameraControl` 的 ISO/快门/白平衡/对焦 key。
+
+## 12. P1 当前进展（手动参数已接入）
+
+- `ProCameraSession.setManual` 通过 `Camera2CameraControl.setCaptureRequestOptions` 下发：
+  - 全手动：`CONTROL_AE_MODE_OFF` + `SENSOR_SENSITIVITY` + `SENSOR_EXPOSURE_TIME`
+  - 半自动：AE 自动，锁定 AWB/AF
+  - 自动：`clearCaptureRequestOptions` 恢复默认
+  - 白平衡：`CONTROL_AWB_MODE_OFF` + `COLOR_CORRECTION_GAINS`，Kelvin 经 Tanner Helland 近似转 R/G/B 增益
+  - 对焦：`CONTROL_AF_MODE_OFF` + `LENS_FOCUS_DISTANCE`，0～1 映射到 0～最近对焦屈光度
+- `open` 返回当前镜头的 ISO、快门、最近对焦距离、手动支持标记。
+- `ProCameraPage` 复用 `CameraManualControls`，带 120ms 防抖和失败回退自动模式。
+- `:app:compileDebugKotlin` 构建通过；真机效果待验证。
+
+已知待验证：不同厂商对 `COLOR_CORRECTION_GAINS` 的接受范围、半自动模式的实际观感、手动参数是否被 CameraX 的 AE/AF 覆盖。

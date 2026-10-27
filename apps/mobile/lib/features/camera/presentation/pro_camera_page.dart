@@ -30,6 +30,7 @@ class _ProCameraPageState extends State<ProCameraPage> {
   ManualCameraSettings _manualSettings = ManualCameraSettings.auto;
   Timer? _manualTimer;
   bool _applyingManual = false;
+  ManualCameraSettings? _pendingManual;
 
   @override
   void initState() {
@@ -109,7 +110,10 @@ class _ProCameraPageState extends State<ProCameraPage> {
   }
 
   Future<void> _applyManual(ManualCameraSettings settings) async {
-    if (_applyingManual) return;
+    if (_applyingManual) {
+      _pendingManual = settings;
+      return;
+    }
     _applyingManual = true;
     try {
       await _service.setManual(settings);
@@ -123,6 +127,11 @@ class _ProCameraPageState extends State<ProCameraPage> {
       });
     } finally {
       _applyingManual = false;
+      final pending = _pendingManual;
+      _pendingManual = null;
+      if (pending != null && mounted) {
+        unawaited(_applyManual(pending));
+      }
     }
   }
 

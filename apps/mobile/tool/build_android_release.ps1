@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     构建可上架小米应用商店的 Android release APK，并校验签名、ABI 与版本。
 
@@ -9,12 +9,13 @@
     4. 把产物归档到 dist/android/ 并输出 SHA-256。
 
 .EXAMPLE
-    pwsh -File tool/build_android_release.ps1 -Beian "京ICP备2026xxxxxx号-2A" `
-        -PrivacyPolicyUrl "https://example.com/privacy" -SupportEmail "support@example.com"
+    powershell -ExecutionPolicy Bypass -File tool\build_android_release.ps1 `
+        -Beian "京ICP备2026xxxxxx号-2A" -PrivacyPolicyUrl "https://example.com/privacy" `
+        -SupportEmail "support@example.com" -DeveloperName "某某科技有限公司"
 #>
 [CmdletBinding()]
 param(
-    # 商店版本不连接后端；如需云端模式，显式传 -ApiBaseUrl 且加 -EnableBackend。
+    # 商店版本默认不连接后端；需要云端模式时同时传 -ApiBaseUrl 与 -EnableBackend。
     [string]$ApiBaseUrl = '',
     [switch]$EnableBackend,
     # 工信部 App 备案号，会显示在 App 的“隐私与协议”页。
@@ -28,7 +29,9 @@ param(
     [switch]$SkipVerify
 )
 
-$ErrorActionPreference = 'Stop'
+# 原生命令（keytool / gradle / flutter）会把正常信息写到 stderr，
+# 用 Stop 会被 PowerShell 误判成致命错误，这里统一用 Continue 并显式检查退出码。
+$ErrorActionPreference = 'Continue'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -57,10 +60,12 @@ if (-not $sdkRoot) {
     $localProps = Join-Path $androidDir 'local.properties'
     if (Test-Path $localProps) {
         $line = Get-Content $localProps | Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
-        if ($line) { $sdkRoot = ($line -replace '^sdk\.dir=', '') -replace '\\\\', '\' }
+        if ($line) { $sdkRoot = (($line -replace '^sdk\.dir=', '') -replace '\\\\', '\') }
     }
 }
-if (-not $sdkRoot -or -not (Test-Path $sdkRoot)) { Fail '找不到 Android SDK，请设置 ANDROID_HOME 或在 android/local.properties 里配置 sdk.dir。' }
+if (-not $sdkRoot -or -not (Test-Path $sdkRoot)) {
+    Fail '找不到 Android SDK，请设置 ANDROID_HOME 或在 android/local.properties 里配置 sdk.dir。'
+}
 
 $buildTools = Get-ChildItem (Join-Path $sdkRoot 'build-tools') -Directory -ErrorAction SilentlyContinue |
     Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
@@ -87,19 +92,31 @@ Get-Content $keyProperties | ForEach-Object {
 }
 $storeFile = $keyProps['storeFile']
 if (-not $storeFile) { Fail 'key.properties 缺少 storeFile。' }
-$keystorePath = if ([System.IO.Path]::IsPathRooted($storeFile)) { $storeFile } else { Join-Path (Join-Path $androidDir 'app') $storeFile }
-if (-not (Test-Path $keystorePath)) { Fail "找不到签名文件：$keystorePath。请确 key.properties 的 storeFile 指向正确的 .jks。" }
+$keystorePath = if ([System.IO.Path]::IsPathRooted($storeFile)) {
+    $storeFile
+} else {
+    Join-Path (Join-Path $androidDir 'app') $storeFile
+}
+if (-not (Test-Path $keystorePath)) {
+    Fail "找不到签名文件：$keystorePath。请检查 key.properties 的 storeFile 是否指向正确的 .jks。"
+}
 Write-Host "签名文件：$keystorePath"
 
 $expectedFingerprint = $null
 $keytool = Join-Path (Join-Path $env:JAVA_HOME 'bin') 'keytool.exe'
 if (Test-Path $keytool) {
-    $certInfo = & $keytool -list -v -keystore $keystorePath -alias $keyProps['keyAlias'] `
-        -storepass $keyProps['storePassword'] 2>&1 | Out-String
-    $match = [regex]::Match($certInfo, 'SHA256:\s*([0-9A-F:]{95})')
-    if ($match.Success) {
-        $expectedFingerprint = ($match.Groups[1].Value -replace ':', '').ToUpperInvariant()
-        Write-Host "签名证书 SHA-256：$($match.Groups[1].Value)"
+    $certInfo = (& $keytool -list -v -keystore $keystorePath -alias $keyProps['keyAlias'] `
+            -storepass $keyProps['storePassword'] 2>&1 | Out-String)
+    if ($LASTEXITCODE -eq 0) {
+        $match = [regex]::Match($certInfo, 'SHA256:\s*([0-9A-F:]{95})')
+        if ($match.Success) {
+            $expectedFingerprint = ($match.Groups[1].Value -replace ':', '').ToUpperInvariant()
+            Write-Host "签名证书 SHA-256：$($match.Groups[1].Value)"
+        } else {
+            Write-Host '[提醒] 未能从 keytool 输出里解析 SHA-256，跳过指纹比对。' -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host '[提醒] keytool 读取密钥失败（密码不对？），跳过指纹比对。' -ForegroundColor Yellow
     }
 }
 
@@ -120,11 +137,12 @@ $flutterArgs = @('build', 'apk', '--release', '--target-platform', $targetPlatfo
     ($defines | ForEach-Object { "--dart-define=$_" })
 Push-Location $mobileDir
 try {
-    & flutter @flutterArgs
-    if ($LASTEXITCODE -ne 0) { Fail "flutter build 失败（exit=$LASTEXITCODE）。" }
+    & flutter @flutterArgs 2>&1 | ForEach-Object { Write-Host $_ }
+    $buildCode = $LASTEXITCODE
 } finally {
     Pop-Location
 }
+if ($buildCode -ne 0) { Fail "flutter build 失败（exit=$buildCode）。" }
 
 $apkSource = Join-Path $mobileDir 'build\app\outputs\flutter-apk\app-release.apk'
 if (-not (Test-Path $apkSource)) { Fail "未找到构建产物：$apkSource" }
@@ -132,8 +150,9 @@ if (-not (Test-Path $apkSource)) { Fail "未找到构建产物：$apkSource" }
 # --- 3. 校验 ---------------------------------------------------------------
 if (-not $SkipVerify) {
     Write-Step '校验签名'
-    $signerOut = & $apksigner verify --print-certs $apkSource 2>&1 | Out-String
+    $signerOut = (& $apksigner verify --print-certs $apkSource 2>&1 | Out-String)
     if ($LASTEXITCODE -ne 0) { Fail "apksigner 校验失败：`n$signerOut" }
+    if ($signerOut -match 'Android Debug') { Fail '检测到 debug 签名，禁止上架。' }
     $apkFingerprint = [regex]::Match($signerOut, 'SHA-256 digest:\s*([0-9A-Fa-f:]+)')
     if ($apkFingerprint.Success) {
         $actual = ($apkFingerprint.Groups[1].Value -replace ':', '').ToUpperInvariant()
@@ -142,10 +161,9 @@ if (-not $SkipVerify) {
         }
         Write-Host "APK 签名 SHA-256：$($apkFingerprint.Groups[1].Value)" -ForegroundColor Green
     }
-    if ($signerOut -match 'Android Debug') { Fail '检测到 debug 签名，禁止上架。' }
 
     Write-Step '校验包名 / 版本 / ABI'
-    $badging = & $aapt2 dump badging $apkSource 2>&1 | Out-String
+    $badging = (& $aapt2 dump badging $apkSource 2>&1 | Out-String)
     $packageLine = [regex]::Match($badging, "package: name='([^']+)' versionCode='([^']+)' versionName='([^']+)'")
     if (-not $packageLine.Success) { Fail 'aapt2 无法解析 APK 的包信息。' }
     Write-Host "包名：$($packageLine.Groups[1].Value)"
@@ -154,10 +172,13 @@ if (-not $SkipVerify) {
     if ($packageLine.Groups[3].Value -ne $versionName) {
         Fail "APK versionName($($packageLine.Groups[3].Value)) 与 pubspec($versionName) 不一致。"
     }
-    $abis = [regex]::Matches($badging, "'([a-z0-9_\-]+)'") | ForEach-Object { $_.Groups[1].Value } | Where-Object { $_ -in @('arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64') } | Select-Object -Unique
+    $abis = [regex]::Matches($badging, "'([a-z0-9_\-]+)'") |
+        ForEach-Object { $_.Groups[1].Value } |
+        Where-Object { $_ -in @('arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64') } |
+        Select-Object -Unique
     Write-Host "native-code：$($abis -join ', ')"
     if ($abis -contains 'x86_64' -and -not $IncludeX64) {
-        Write-Host '[提醒] 包里带了 x86_64，商店包请保留 arm 架构并去掉 -IncludeX64。' -ForegroundColor Yellow
+        Write-Host '[提醒] 包里带了 x86_64，商店包请去掉 -IncludeX64。' -ForegroundColor Yellow
     }
 }
 
@@ -168,6 +189,7 @@ $archName = if ($IncludeX64) { 'yan-studio-x64-test' } else { 'yan-studio' }
 $apkName = "$archName-v$versionName-release.apk"
 $apkTarget = Join-Path $distDir $apkName
 Copy-Item $apkSource $apkTarget -Force
+if (-not (Test-Path $apkTarget)) { Fail '归档 APK 失败。' }
 
 $hash = (Get-FileHash -Algorithm SHA256 $apkTarget).Hash
 $sizeMb = [math]::Round((Get-Item $apkTarget).Length / 1MB, 2)
