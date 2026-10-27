@@ -195,6 +195,15 @@ $hash = (Get-FileHash -Algorithm SHA256 $apkTarget).Hash
 $sizeMb = [math]::Round((Get-Item $apkTarget).Length / 1MB, 2)
 "$hash  $apkName" | Set-Content (Join-Path $distDir "$archName-v$versionName-release.apk.sha256") -Encoding ASCII
 
+# R8 混淆映射表：线上崩溃栈还原必需，丢了就只能看混淆后的类名。
+$mapping = Join-Path $mobileDir 'build\app\outputs\mapping\release\mapping.txt'
+if (Test-Path $mapping) {
+    Copy-Item $mapping (Join-Path $distDir "mapping-v$versionName.txt") -Force
+    Write-Host "混淆映射：dist\android\mapping-v$versionName.txt"
+} else {
+    Write-Host '[提醒] 没找到 mapping.txt，线上崩溃将无法还原。' -ForegroundColor Yellow
+}
+
 Write-Host "`n产物：$apkTarget" -ForegroundColor Green
 Write-Host "大小：$sizeMb MB"
 Write-Host "SHA-256：$hash"

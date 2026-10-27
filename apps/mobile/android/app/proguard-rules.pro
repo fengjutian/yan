@@ -17,6 +17,11 @@
 -keep class com.google.android.gms.internal.mlkit_** { *; }
 -dontwarn com.google.mlkit.**
 
+# Flutter 引擎里的 Play Core 延迟组件（deferred components）在未集成
+# play-core 时会缺少这些类；本 App 不用延迟组件，直接忽略即可。
+# 规则来源：build/app/outputs/mapping/release/missing_rules.txt
+-dontwarn com.google.android.play.core.**
+
 # 保留行号信息，便于线上崩溃定位；不保留源文件名。
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile

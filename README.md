@@ -61,6 +61,21 @@ go build -o worker.exe ./cmd/worker
 docker compose -f deploy/compose.yaml up -d mysql redis minio minio-init
 ```
 
+## 打包上架（Android / 小米应用商店）
+
+签名密钥、构建脚本与提审清单已经就绪，详细步骤见 [小米应用商店上架清单](docs/xiaomi-release-checklist.md)。
+
+```powershell
+cd apps\mobile
+powershell -ExecutionPolicy Bypass -File tool\build_android_release.ps1 `
+  -Beian "京ICP备2026xxxxxx号-2A" `
+  -PrivacyPolicyUrl "https://你的域名/privacy.html" `
+  -SupportEmail "support@你的域名" `
+  -DeveloperName "你的公司全称"
+```
+
+产物输出到 `dist/android/`，脚本会校验签名指纹、包名、版本号与 ABI。
+
 ## 文档
 
 - [技术设计与开发计划](docs/technical-design-and-development-plan.md)
@@ -69,3 +84,8 @@ docker compose -f deploy/compose.yaml up -d mysql redis minio minio-init
 - [Android 原生专业相机模式技术方案](docs/android-camera2-pro-mode-plan.md)
 - [灵感与工作室模块优化](docs/inspiration-studio-optimization.md)
 - [OpenAPI 接口定义](docs/api.openapi.yaml)
+- [小米应用商店上架清单](docs/xiaomi-release-checklist.md)
+- [商店素材与文案](docs/xiaomi-store-listing.md)
+- [隐私政策（可发布稿）](docs/privacy-policy.md)
+- [用户协议（可发布稿）](docs/user-agreement.md)
+
