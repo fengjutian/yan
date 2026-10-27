@@ -73,8 +73,8 @@ powershell -ExecutionPolicy Bypass -File tool\build_android_release.ps1 `
 | 1 | 小米开发者账号 | 企业认证：营业执照、法人身份信息、对公账户；个人开发者无法上架部分类目 | ❌ 待注册 |
 | 2 | **APP 备案号** | 工信部 App 备案（通过接入商/云厂商提交），商店后台强校验；App 内也需可查 | ❌ 待办 |
 | 3 | **软件著作权** | 《计算机软件著作权登记证书》扫描件；代理上架还需授权书 | ❌ 待办 |
-| 4 | **在线《隐私政策》URL** | HTTPS 可公开访问，内容须与 App 实际行为一致。可直接托管 `docs/privacy-policy.md` 转成的 HTML | ❌ 待托管 |
-| 5 | 《用户协议》URL | 建议提供，商店页与 App 内都会展示 | ⚠️ 草稿见 `docs/user-agreement.md` |
+| 4 | **在线《隐私政策》URL** | HTTPS 可公开访问，内容须与 App 实际行为一致。已生成可直接托管的静态页 `docs/publish/privacy.html` | ⚠️ 待托管 |
+| 5 | 《用户协议》URL | 建议提供，商店页与 App 内都会展示。已生成 `docs/publish/terms.html` | ⚠️ 待托管 |
 | 6 | 生成式 AI 资质说明 | 见下方「AI 类目特别说明」 | ⚠️ 需决策 |
 | 7 | 应用图标 | 512×512 PNG | ✅ `dist/xiaomi/icon-512.png`（由品牌 logo 生成） |
 | 8 | 应用截图 | 3–5 张，竖屏建议 1080×1920，PNG/JPG | ❌ 待截图 |
