@@ -1971,6 +1971,8 @@ class _CameraPageState extends ConsumerState<CameraPage>
           : '?lensId=${Uri.encodeComponent(lensId)}';
       await context.push('/debug/pro-camera$query');
       if (!mounted) return;
+      // 返回相机页时确保路由暂停标记已清除，随后统一重新初始化。
+      _pausedByRoute = false;
       await _initializeCamera(_activeIndex);
     } finally {
       _openingProDebug = false;

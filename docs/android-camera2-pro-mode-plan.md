@@ -255,3 +255,27 @@ close() -> void
 - 用 **CameraX + `Camera2Interop` 自建独立专业会话**，是成本、风险和可控性最平衡的方案。
 - 先做 P0 技术验证；如果纹理预览和会话切换在目标机型上稳定，再投入 P1/P2。
 - 在 P0/P1 完成前，Android 保持当前“明确提示不支持”的行为，不影响普通拍摄。
+
+## 11. P0 当前进展（已完成代码骨架）
+
+本次已落地：
+
+- 原生 `ProCameraSession`：CameraX `Preview` + `ImageCapture`，通过 `TextureRegistry.SurfaceProducer` 输出纹理预览，`ImageCapture` 输出缓存 JPEG。
+- `yan.camera/pro` 通道：`open` / `capture` / `close` / `isSupported`。
+- Dart `ProCameraService` / `ProCameraSessionInfo`，以及调试页 `ProCameraPage`（`/debug/pro-camera`，仅 debug 构建从相机设置进入）。
+- 相机页进入专业模式前释放 `camera` 插件 controller，返回后重新初始化，并处理了 RouteAware 与调试页的重复初始化竞争。
+- `androidx.camera` 依赖固定为 `1.6.1`，与插件一致。
+
+已验证：
+
+- `:app:compileDebugKotlin` 构建通过。
+- Dart analyzer 0 issue；全量测试通过。
+
+待真机验证：
+
+- 纹理预览方向/镜像是否正确。
+- 进入/退出专业模式 20 次是否稳定，不出现 `camera-in-use`。
+- 自动模式拍照 EXIF、JPEG 方向、缓存文件清理。
+- 切后台/锁屏/来电后的纹理恢复。
+
+P1 将在此基础上接入 `Camera2CameraControl` 的 ISO/快门/白平衡/对焦 key。

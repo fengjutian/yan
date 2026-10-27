@@ -73,6 +73,10 @@ class ProCameraSession(
                 val producer = textureRegistry.createSurfaceProducer()
                 producer.setSize(DEFAULT_WIDTH, DEFAULT_HEIGHT)
                 previewUseCase.setSurfaceProvider(mainExecutor) { request ->
+                    if (closed) {
+                        request.willNotProvideSurface()
+                        return@setSurfaceProvider
+                    }
                     val resolution = request.resolution
                     producer.setSize(resolution.width, resolution.height)
                     request.provideSurface(
@@ -90,8 +94,8 @@ class ProCameraSession(
                     captureUseCase,
                 )
                 if (closed) {
-                    cameraProvider.unbindAll()
-                    producer.release()
+                    runCatching { cameraProvider.unbindAll() }
+                    runCatching { producer.release() }
                     callback(null, IllegalStateException("session closed while opening"))
                     return@addListener
                 }

@@ -224,7 +224,7 @@ class _ProCameraPageState extends State<ProCameraPage> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton(
-                    onPressed: () => Navigator.of(context).maybePop(),
+                    onPressed: () => unawaited(_closeAndPop()),
                     child: const Text('退出专业模式'),
                   ),
                 ),
