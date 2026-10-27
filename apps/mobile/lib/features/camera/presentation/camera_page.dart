@@ -1946,6 +1946,29 @@ class _CameraPageState extends ConsumerState<CameraPage>
     }
   }
 
+  Future<void> _openProDebug() async {
+    final lensId = _activeNativeLens?.id;
+    _stopStreamWatchdog();
+    final controller = _controller;
+    _controller = null;
+    if (mounted) {
+      setState(() {
+        _initializing = true;
+        _error = null;
+        _clearFocusState();
+        _clearPortraitHint();
+      });
+    }
+    await controller?.dispose();
+    if (!mounted) return;
+    final query = lensId == null || lensId.isEmpty
+        ? ''
+        : '?lensId=${Uri.encodeComponent(lensId)}';
+    await context.push('/debug/pro-camera$query');
+    if (!mounted) return;
+    await _initializeCamera(_activeIndex);
+  }
+
   void _showMessage(String message) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
@@ -2724,6 +2747,13 @@ class _CameraPageState extends ConsumerState<CameraPage>
             ),
             const SizedBox(height: 8),
             _buildSettingList([
+              if (kDebugMode && defaultTargetPlatform == TargetPlatform.android)
+                CameraSettingRow(
+                  icon: Icons.video_camera_back_outlined,
+                  label: '专业模式（P0 验证）',
+                  value: '进入',
+                  onTap: () => unawaited(_openProDebug()),
+                ),
               CameraSettingRow(
                 icon: Icons.exposure_zero,
                 label: '曝光归零',

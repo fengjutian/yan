@@ -8,6 +8,7 @@ import 'package:ai_image_studio/features/history/presentation/task_detail_page.d
 import 'package:ai_image_studio/features/reference/presentation/reference_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/profile_page.dart';
 import 'package:ai_image_studio/features/camera/presentation/camera_page.dart';
+import 'package:ai_image_studio/features/camera/presentation/pro_camera_page.dart';
 import 'package:ai_image_studio/features/studio/presentation/studio_page.dart';
 import 'package:ai_image_studio/features/share/presentation/share_workshop_page.dart';
 import 'package:ai_image_studio/features/profile/presentation/favorites_page.dart';
@@ -80,6 +81,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
               : const CameraPage();
           return page;
         },
+      ),
+      GoRoute(
+        path: '/debug/pro-camera',
+        builder: (context, state) =>
+            ProCameraPage(lensId: state.uri.queryParameters['lensId']),
       ),
       GoRoute(
         path: '/studio',
